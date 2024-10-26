@@ -1,3 +1,4 @@
 .aider*
 *.db
 *.md
+.env
