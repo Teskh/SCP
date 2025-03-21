@@ -1,4 +1,13 @@
 .aider*
 *.db
-*.md
+#*.md
 .env
+venv/
+__pycache__/
+*.pdf
+*db-journal
+*.bak
+*.svg
+*.png
+*.jpg
+node_modules/

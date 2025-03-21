@@ -1,4 +1,5 @@
 # Virtual environment
+*.bak
 venv/
 env/
 *.venv/
@@ -22,6 +23,9 @@ __pycache__/
 .aider
 *.db
 *.md
+*.svg
+*.png
+*.jpg
 
 # Jupyter Notebook
 .ipynb_checkpoints

@@ -1,0 +1,108 @@
+CREATE TABLE Workers (
+    worker_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    pin TEXT NOT NULL,
+    specialty_id INTEGER, -- Foreign Key to Specialties table
+    supervisor_id INTEGER, -- Foreign Key to Workers table (self-referencing), nullable
+    is_active INTEGER DEFAULT 1, -- Boolean (0=false, 1=true)
+    FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id),
+    FOREIGN KEY (supervisor_id) REFERENCES Workers(worker_id)
+);
+
+CREATE TABLE Specialties (
+    specialty_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Electrician', 'Plumber', 'Framer'
+    description TEXT
+);
+
+CREATE TABLE Stations (
+    station_id TEXT PRIMARY KEY, -- e.g., 'W1', 'W2', ..., 'W6', 'M1', 'A1', ..., 'A6', 'B1', ..., 'C6'
+    name TEXT NOT NULL, -- e.g., 'Panel Line 1: Framing', 'Buffer Magazine', 'Assembly Line A: Station 1'
+    line_type TEXT NOT NULL, -- 'W', 'M', 'A', 'B', 'C'
+    sequence_order INTEGER NOT NULL -- For sorting/determining flow (e.g., W1=1, W6=6, M1=7, A1=8, B1=8, C1=8, A2=9, B2=9, C2=9 ...)
+);
+
+CREATE TABLE Projects (
+    project_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Maple Street Development - Phase 1'
+    description TEXT,
+    status TEXT DEFAULT 'Planned' -- e.g., 'Planned', 'Active', 'Completed', 'On Hold'
+    module_type_id INTEGER NOT NULL, -- What module types are considered in this project 
+    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id),
+);
+
+CREATE TABLE ModuleTypes (
+    module_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Standard Bathroom Pod v2', 'Kitchenette Type A'
+    description TEXT
+);
+
+CREATE TABLE Modules (
+    module_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    module_type_id INTEGER NOT NULL,
+    planned_assembly_line TEXT, -- 'A', 'B', or 'C'. Relevant for modules leaving M1. Nullable initially.
+    current_station_id TEXT, -- Foreign Key to Stations table. Tracks the module's physical location. Nullable if not yet on the line.
+    status TEXT DEFAULT 'Planned', -- e.g., 'Planned', 'In Progress', 'Completed', 'On Hold'
+    last_moved_at TEXT, -- Timestamp of the last move, useful for tracking flow
+    FOREIGN KEY (project_id) REFERENCES Projects(project_id),
+    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id),
+    FOREIGN KEY (current_station_id) REFERENCES Stations(station_id) ON UPDATE CASCADE ON DELETE SET NULL -- Or RESTRICT? Decide policy.
+);
+
+-- ========= Task Definitions =========
+
+CREATE TABLE TaskDefinitions (
+    task_definition_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Install Window Frame', 'Run Hot Water Line', 'Attach Exterior Cladding'
+    description TEXT,
+    module_type_id INTEGER, -- Which type of module this task applies to (can be NULL if generic)
+    specialty_id INTEGER, -- Optional: Link task to a specific specialty
+    station_id TEXT, -- Optional: Link task to a specific station (e.g., 'W1', 'A3')
+    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id),
+    FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id) ON DELETE SET NULL, -- Allow specialty deletion without deleting task def
+    FOREIGN KEY (station_id) REFERENCES Stations(station_id) ON DELETE SET NULL -- Allow station deletion without deleting task def
+);
+
+-- ========= Task Execution Tracking =========
+
+CREATE TABLE TaskLogs (
+    task_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_id INTEGER NOT NULL, -- Which specific module instance
+    task_definition_id INTEGER NOT NULL, -- Which task definition was performed
+    worker_id INTEGER NOT NULL, -- Who performed it
+    status TEXT NOT NULL, -- 'Not Started', 'In Progress', 'Completed', 'Paused'
+    started_at TEXT, -- Timestamp (ISO8601 format)
+    completed_at TEXT, -- Timestamp (ISO8601 format)
+    station_id_when_completed TEXT NOT NULL, -- Record the actual station where it was marked complete
+    notes TEXT, -- Optional field for worker comments
+    FOREIGN KEY (module_id) REFERENCES Modules(module_id),
+    FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id),
+    FOREIGN KEY (worker_id) REFERENCES Workers(worker_id),
+    FOREIGN KEY (station_id_when_completed) REFERENCES Stations(station_id)
+);
+
+CREATE TABLE TaskPauses (
+    task_pause_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_log_id INTEGER NOT NULL, -- Links to the specific task instance being paused
+    paused_by_worker_id INTEGER NOT NULL,
+    paused_at TEXT NOT NULL, -- Timestamp (ISO8601 format)
+    resumed_at TEXT, -- Timestamp (ISO8601 format), Nullable if still paused
+    reason TEXT, -- e.g., 'Waiting for materials', 'Shift change', 'Equipment issue'
+    FOREIGN KEY (task_log_id) REFERENCES TaskLogs(task_log_id) ON DELETE CASCADE, -- If the task log entry is deleted, pauses are irrelevant
+    FOREIGN KEY (paused_by_worker_id) REFERENCES Workers(worker_id)
+);
+
+-- ========= Indexes for Performance =========
+-- Index frequently queried foreign keys and status columns
+CREATE INDEX idx_modules_current_station ON Modules (current_station_id);
+CREATE INDEX idx_modules_project ON Modules (project_id);
+CREATE INDEX idx_modules_status ON Modules (status);
+CREATE INDEX idx_taskdefinitions_specialty ON TaskDefinitions (specialty_id); -- New index
+CREATE INDEX idx_taskdefinitions_station ON TaskDefinitions (station_id); -- New index
+CREATE INDEX idx_tasklogs_module ON TaskLogs (module_id);
+CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id); -- New index
+CREATE INDEX idx_tasklogs_status ON TaskLogs (status);
+CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
+CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
