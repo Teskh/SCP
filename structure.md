@@ -82,7 +82,7 @@ production-tracker/
 │   └── jsconfig.json             # Or tsconfig.json if using TypeScript
 │
 ├── data/                         # Runtime data (add to .gitignore)
-│   └── production_tracker.db     # The SQLite database file
+│   └── database.db               # The SQLite database file
 │
 ├── scripts/                      # Helper scripts
 │   └── setup_database.py         # Script to initialize DB
