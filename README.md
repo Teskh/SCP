@@ -32,7 +32,7 @@ Module Identification: System determines the module_id currently at this station
 Task Presentation: Displays relevant pending tasks for the module, station, and worker's specialty.
 Task Completion: Worker selects and marks a task as done.
 Logging: System records the completion in TaskLogs.
-Admin Interface: A separate section/route accessible after admin login allows for managing Workers, Projects, Modules, Task Definitions, etc.
+Admin Interface: A separate section/route accessible after admin login allows for managing Workers, Projects, Modules, Task Definitions, etc. (New components will be added to manage House Types, House Parameters, and their relationships).
 Logout/Idle: Automatic logout after inactivity or manual logout.
 5. Login Mechanisms:
 Primary: PIN entry.

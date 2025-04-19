@@ -10,4 +10,7 @@ __pycache__/
 *.svg
 *.png
 *.jpg
+
 node_modules/
+frontend/public/
+frontend/build/
