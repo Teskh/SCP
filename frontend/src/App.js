@@ -1,8 +1,10 @@
 import React from 'react';
-import { Routes, Route, Link, Navigate } from 'react-router-dom'; // Import routing components
-import './App.css'; // Keep existing styles if needed, or replace/refine
+import { Routes, Route, Link, Navigate, Outlet } from 'react-router-dom'; // Import Outlet
+import './App.css';
 import AdminDashboard from './pages/AdminDashboard';
-// Import other pages like WorkerDashboard, LoginPage later
+import DefinitionsManager from './components/admin/DefinitionsManager'; // Import new component
+import WorkersManager from './components/admin/WorkersManager'; // Import new component
+// Import other pages/components as needed
 
 // Basic Nav styling
 const navStyle = {
@@ -40,10 +42,17 @@ function App() {
                 </div>
             } />
 
-            {/* Admin Route */}
-            <Route path="/admin" element={<AdminDashboard />} />
+            {/* Admin Route - Now uses nested routes */}
+            <Route path="/admin" element={<AdminDashboard />}>
+                 {/* Child routes rendered by Outlet in AdminDashboard */}
+                 <Route path="definitions" element={<DefinitionsManager />} />
+                 <Route path="workers" element={<WorkersManager />} />
+                 {/* Index route for /admin (optional, shows welcome message) */}
+                 {/* <Route index element={<div>Select an admin section</div>} /> */}
+                 {/* Add other admin sub-routes here */}
+            </Route>
 
-            {/* Define other routes here later */}
+            {/* Define other top-level routes here later */}
             {/* <Route path="/worker" element={<WorkerDashboard />} /> */}
             {/* <Route path="/login" element={<LoginPage />} /> */}
 

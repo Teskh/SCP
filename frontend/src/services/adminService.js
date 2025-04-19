@@ -21,6 +21,55 @@ export const getSpecialties = async () => {
     return handleResponse(response);
 };
 
+// === Workers ===
+
+export const getWorkers = async () => {
+    const response = await fetch(`${API_BASE_URL}/workers`);
+    return handleResponse(response);
+};
+
+export const addWorker = async (workerData) => {
+    // Ensure boolean is sent correctly if needed, or handle conversion server-side
+    const payload = {
+        ...workerData,
+        specialty_id: workerData.specialty_id || null,
+        supervisor_id: workerData.supervisor_id || null,
+        is_active: Boolean(workerData.is_active) // Ensure boolean
+    };
+    const response = await fetch(`${API_BASE_URL}/workers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const updateWorker = async (id, workerData) => {
+     const payload = {
+        ...workerData,
+        specialty_id: workerData.specialty_id || null,
+        supervisor_id: workerData.supervisor_id || null,
+        is_active: Boolean(workerData.is_active) // Ensure boolean
+    };
+    const response = await fetch(`${API_BASE_URL}/workers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const deleteWorker = async (id) => {
+    const response = await fetch(`${API_BASE_URL}/workers/${id}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
 export const addSpecialty = async (specialtyData) => {
     const response = await fetch(`${API_BASE_URL}/specialties`, {
         method: 'POST',

@@ -28,12 +28,11 @@ CREATE TABLE Projects (
     name TEXT NOT NULL UNIQUE, -- e.g., 'Maple Street Development - Phase 1'
     description TEXT,
     status TEXT DEFAULT 'Planned' -- e.g., 'Planned', 'Active', 'Completed', 'On Hold'
-    -- Removed module_type_id as projects can have multiple module types
 );
 
 CREATE TABLE ModuleTypes (
     module_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE, -- e.g., 'Standard Bathroom Pod v2', 'Kitchenette Type A'
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Single Family Townhouse A', 'Lakehouse type B'
     description TEXT
 );
 
