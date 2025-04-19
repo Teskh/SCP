@@ -28,7 +28,7 @@ def close_db(e=None):
     """Closes the database connection."""
     db = g.pop('db', None)
 
-    if db is not in None:
+    if db is not None:
         db.close()
 
 def init_db():
