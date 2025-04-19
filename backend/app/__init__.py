@@ -1,8 +1,8 @@
 import os
-import os
-from flask import Flask
+import sqlite3
+from flask import Flask, current_app
 from flask_cors import CORS
-from .database.connection import init_db_command
+from .database.connection import init_db, get_db # Import init_db and get_db directly
 # config.py is in the parent directory (backend/), so import it directly
 from config import AppConfig
 
@@ -15,20 +15,59 @@ def create_app(config_class=AppConfig):
     # TODO: Restrict CORS origins in production.
     CORS(app, resources={r"/api/*": {"origins": "*"}}) # Allow frontend dev server
 
-    # Initialize database
+    # Initialize database check and creation logic
     try:
         # Ensure the data directory exists
         data_dir = os.path.join(os.path.dirname(os.path.dirname(app.root_path)), 'data')
         os.makedirs(data_dir, exist_ok=True)
-        with app.app_context():
-            init_db_command() # Initialize DB if needed
-    except Exception as e:
-        app.logger.error(f"Database initialization failed: {e}")
 
+        # Perform DB initialization check directly here, within app context
+        with app.app_context():
+            db_path = current_app.config['DATABASE_URI'].replace('sqlite:///', '')
+            needs_init = False
+            if not os.path.exists(db_path):
+                app.logger.info(f"Database file not found at {db_path}. Will initialize.")
+                needs_init = True
+            else:
+                # Check if tables exist if DB file exists
+                try:
+                    db = get_db() # Get DB connection within context
+                    cursor = db.cursor()
+                    # Check for a key table (e.g., Workers)
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Workers';")
+                    if cursor.fetchone() is None:
+                        app.logger.info("Tables not found in existing database. Will initialize schema.")
+                        needs_init = True
+                    # else:
+                    #     app.logger.debug("Database schema appears initialized.")
+                except sqlite3.Error as e:
+                    app.logger.error(f"Error checking database schema: {e}. Will attempt to initialize.")
+                    needs_init = True
+                # Connection is managed by the app context (get_db/close_db)
+
+            if needs_init:
+                try:
+                    init_db() # Call the actual initialization function directly
+                    app.logger.info("Database initialized successfully.")
+                except Exception as init_e:
+                     app.logger.error(f"Database initialization failed during init_db call: {init_e}", exc_info=True)
+                     # Optionally re-raise to halt app creation if DB is critical
+                     # raise init_e
+
+    except Exception as e:
+        # Catch errors during path creation or app_context setup
+        app.logger.error(f"Database setup failed: {e}", exc_info=True)
+        # Optionally re-raise to halt app creation
+        # raise e
+
+    # Register database commands (like 'flask init-db') and teardown
+    from .database import connection
+    connection.init_app(app) # Registers init_db_command for CLI and close_db
 
     # Register blueprints
     from .api.admin import admin_bp
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    # Add other blueprints here later (auth, worker, etc.)
 
     # Serve React App
     @app.route('/', defaults={'path': ''})
