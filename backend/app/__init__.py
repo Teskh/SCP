@@ -1,8 +1,10 @@
 import os
+import os
 from flask import Flask
 from flask_cors import CORS
 from .database.connection import init_db_command
-from .config import AppConfig # Assuming config.py is one level up from app/
+# config.py is in the parent directory (backend/), so import it directly
+from config import AppConfig
 
 def create_app(config_class=AppConfig):
     """Creates and configures the Flask application."""
