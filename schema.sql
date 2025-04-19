@@ -28,14 +28,24 @@ CREATE TABLE Projects (
     name TEXT NOT NULL UNIQUE, -- e.g., 'Maple Street Development - Phase 1'
     description TEXT,
     status TEXT DEFAULT 'Planned' -- e.g., 'Planned', 'Active', 'Completed', 'On Hold'
-    module_type_id INTEGER NOT NULL, -- What module types are considered in this project 
-    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id),
+    -- Removed module_type_id as projects can have multiple module types
 );
 
 CREATE TABLE ModuleTypes (
     module_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE, -- e.g., 'Standard Bathroom Pod v2', 'Kitchenette Type A'
     description TEXT
+);
+
+CREATE TABLE ProjectModules (
+    project_module_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    module_type_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,  -- Number of this module type in the project
+    FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE,
+    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id) ON DELETE CASCADE
+    -- Unique constraint to prevent duplicates: one entry per project-module type pair
+    UNIQUE (project_id, module_type_id)
 );
 
 CREATE TABLE Modules (
@@ -106,3 +116,5 @@ CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id); -- N
 CREATE INDEX idx_tasklogs_status ON TaskLogs (status);
 CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
 CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
+CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id);  -- New index for the new table
+CREATE INDEX idx_projectmodules_module_type ON ProjectModules (module_type_id);  -- New index for the new table
