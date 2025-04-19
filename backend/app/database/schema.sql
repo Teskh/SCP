@@ -34,8 +34,8 @@ CREATE TABLE Projects (
 CREATE TABLE ProjectModules (
     project_module_id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
-    module_type_id INTEGER NOT NULL,
-    quantity INTEGER NOT NULL,  -- Number of this module type in the project
+    house_type_id INTEGER NOT NULL, -- Renamed from module_type_id
+    quantity INTEGER NOT NULL,  -- Number of this house type in the project
     FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE,
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE
     -- Unique constraint to prevent duplicates: one entry per project-house type pair
