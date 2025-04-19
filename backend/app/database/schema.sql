@@ -30,11 +30,6 @@ CREATE TABLE Projects (
     status TEXT DEFAULT 'Planned' -- e.g., 'Planned', 'Active', 'Completed', 'On Hold'
 );
 
-CREATE TABLE ModuleTypes (
-    module_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE, -- e.g., 'Single Family Townhouse A', 'Lakehouse type B'
-    description TEXT
-);
 
 CREATE TABLE ProjectModules (
     project_module_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,21 +37,22 @@ CREATE TABLE ProjectModules (
     module_type_id INTEGER NOT NULL,
     quantity INTEGER NOT NULL,  -- Number of this module type in the project
     FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE,
-    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id) ON DELETE CASCADE
-    -- Unique constraint to prevent duplicates: one entry per project-module type pair
-    UNIQUE (project_id, module_type_id)
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE
+    -- Unique constraint to prevent duplicates: one entry per project-house type pair
+    UNIQUE (project_id, house_type_id)
 );
 
 CREATE TABLE Modules (
     module_id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
-    module_type_id INTEGER NOT NULL,
+    house_type_id INTEGER NOT NULL, -- Which type of house this module belongs to
+    module_sequence_in_house INTEGER, -- e.g., 1 of 2, 2 of 2 for a 2-module house
     planned_assembly_line TEXT, -- 'A', 'B', or 'C'. Relevant for modules leaving M1. Nullable initially.
     current_station_id TEXT, -- Foreign Key to Stations table. Tracks the module's physical location. Nullable if not yet on the line.
     status TEXT DEFAULT 'Planned', -- e.g., 'Planned', 'In Progress', 'Completed', 'On Hold'
     last_moved_at TEXT, -- Timestamp of the last move, useful for tracking flow
     FOREIGN KEY (project_id) REFERENCES Projects(project_id),
-    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id),
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id),
     FOREIGN KEY (current_station_id) REFERENCES Stations(station_id) ON UPDATE CASCADE ON DELETE SET NULL -- Or RESTRICT? Decide policy.
 );
 
@@ -66,10 +62,10 @@ CREATE TABLE TaskDefinitions (
     task_definition_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE, -- e.g., 'Install Window Frame', 'Run Hot Water Line', 'Attach Exterior Cladding'
     description TEXT,
-    module_type_id INTEGER, -- Which type of module this task applies to (can be NULL if generic)
+    house_type_id INTEGER, -- Which type of house this task applies to (can be NULL if generic)
     specialty_id INTEGER, -- Optional: Link task to a specific specialty
     station_id TEXT, -- Optional: Link task to a specific station (e.g., 'W1', 'A3')
-    FOREIGN KEY (module_type_id) REFERENCES ModuleTypes(module_type_id),
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE SET NULL, -- Allow house type deletion without deleting task def
     FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id) ON DELETE SET NULL, -- Allow specialty deletion without deleting task def
     FOREIGN KEY (station_id) REFERENCES Stations(station_id) ON DELETE SET NULL -- Allow station deletion without deleting task def
 );
@@ -108,12 +104,43 @@ CREATE TABLE TaskPauses (
 CREATE INDEX idx_modules_current_station ON Modules (current_station_id);
 CREATE INDEX idx_modules_project ON Modules (project_id);
 CREATE INDEX idx_modules_status ON Modules (status);
-CREATE INDEX idx_taskdefinitions_specialty ON TaskDefinitions (specialty_id); -- New index
-CREATE INDEX idx_taskdefinitions_station ON TaskDefinitions (station_id); -- New index
+CREATE INDEX idx_modules_house_type ON Modules (house_type_id); -- New index
+CREATE INDEX idx_taskdefinitions_house_type ON TaskDefinitions (house_type_id); -- Renamed index
+CREATE INDEX idx_taskdefinitions_specialty ON TaskDefinitions (specialty_id);
+CREATE INDEX idx_taskdefinitions_station ON TaskDefinitions (station_id);
 CREATE INDEX idx_tasklogs_module ON TaskLogs (module_id);
-CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id); -- New index
+CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id);
 CREATE INDEX idx_tasklogs_status ON TaskLogs (status);
 CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
 CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
-CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id);  -- New index for the new table
-CREATE INDEX idx_projectmodules_module_type ON ProjectModules (module_type_id);  -- New index for the new table
+CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id);
+CREATE INDEX idx_projectmodules_house_type ON ProjectModules (house_type_id); -- Renamed index
+
+-- ========= House Types and Parameters =========
+
+CREATE TABLE HouseTypes (
+    house_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Single Family Townhouse A', 'Lakehouse type B'
+    description TEXT,
+    number_of_modules INTEGER NOT NULL DEFAULT 1 -- How many physical modules make up this house type
+);
+
+CREATE TABLE HouseParameters (
+    parameter_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Floor Area', 'Number of Windows', 'Exterior Wall Length'
+    unit TEXT -- e.g., 'Square Meters', 'Count', 'Linear Meters'
+);
+
+CREATE TABLE HouseTypeParameters (
+    house_type_parameter_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_type_id INTEGER NOT NULL,
+    parameter_id INTEGER NOT NULL,
+    value REAL NOT NULL, -- Using REAL to accommodate various numeric types (integers, decimals)
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    FOREIGN KEY (parameter_id) REFERENCES HouseParameters(parameter_id) ON DELETE CASCADE,
+    UNIQUE (house_type_id, parameter_id) -- Ensure only one value per parameter per house type
+);
+
+-- Indexes for new tables
+CREATE INDEX idx_housetypeparameters_house_type ON HouseTypeParameters (house_type_id);
+CREATE INDEX idx_housetypeparameters_parameter ON HouseTypeParameters (parameter_id);

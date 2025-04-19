@@ -50,12 +50,12 @@ def get_all_task_definitions():
     query = """
         SELECT
             td.task_definition_id, td.name, td.description,
-            mt.name as module_type_name,
+            ht.name as house_type_name,
             sp.name as specialty_name,
             st.name as station_name,
-            td.module_type_id, td.specialty_id, td.station_id
+            td.house_type_id, td.specialty_id, td.station_id
         FROM TaskDefinitions td
-        LEFT JOIN ModuleTypes mt ON td.module_type_id = mt.module_type_id
+        LEFT JOIN HouseTypes ht ON td.house_type_id = ht.house_type_id
         LEFT JOIN Specialties sp ON td.specialty_id = sp.specialty_id
         LEFT JOIN Stations st ON td.station_id = st.station_id
         ORDER BY td.name
@@ -64,29 +64,29 @@ def get_all_task_definitions():
     task_defs = cursor.fetchall()
     return [dict(row) for row in task_defs]
 
-def add_task_definition(name, description, module_type_id, specialty_id, station_id):
+def add_task_definition(name, description, house_type_id, specialty_id, station_id):
     """Adds a new task definition."""
     db = get_db()
     try:
         cursor = db.execute(
             """INSERT INTO TaskDefinitions
-               (name, description, module_type_id, specialty_id, station_id)
+               (name, description, house_type_id, specialty_id, station_id)
                VALUES (?, ?, ?, ?, ?)""",
-            (name, description, module_type_id, specialty_id, station_id)
+            (name, description, house_type_id, specialty_id, station_id)
         )
         db.commit()
         return cursor.lastrowid
     except sqlite3.IntegrityError:
         return None # Or raise
 
-def update_task_definition(task_definition_id, name, description, module_type_id, specialty_id, station_id):
+def update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_id):
     """Updates an existing task definition."""
     db = get_db()
     cursor = db.execute(
         """UPDATE TaskDefinitions SET
-           name = ?, description = ?, module_type_id = ?, specialty_id = ?, station_id = ?
+           name = ?, description = ?, house_type_id = ?, specialty_id = ?, station_id = ?
            WHERE task_definition_id = ?""",
-        (name, description, module_type_id, specialty_id, station_id, task_definition_id)
+        (name, description, house_type_id, specialty_id, station_id, task_definition_id)
     )
     db.commit()
     return cursor.rowcount > 0
@@ -100,10 +100,11 @@ def delete_task_definition(task_definition_id):
 
 # === Helper functions to get related data (for dropdowns etc.) ===
 
-def get_all_module_types():
-    """Fetches all module types for dropdowns."""
+def get_all_house_types():
+    """Fetches all house types for dropdowns."""
     db = get_db()
-    cursor = db.execute("SELECT module_type_id, name FROM ModuleTypes ORDER BY name")
+    # Include number_of_modules as it might be useful context
+    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes ORDER BY name")
     return [dict(row) for row in cursor.fetchall()]
 
 def get_all_stations():
@@ -198,3 +199,128 @@ def delete_worker(worker_id):
         # Handle potential foreign key issues if worker_id is used elsewhere (e.g., TaskLogs)
         print(f"Error deleting worker: {e}") # Replace with proper logging
         return False # Indicate failure
+
+
+# === House Types ===
+
+# get_all_house_types is defined above in the helpers section
+
+def add_house_type(name, description, number_of_modules):
+    """Adds a new house type."""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            "INSERT INTO HouseTypes (name, description, number_of_modules) VALUES (?, ?, ?)",
+            (name, description, number_of_modules)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return None # Duplicate name
+
+def update_house_type(house_type_id, name, description, number_of_modules):
+    """Updates an existing house type."""
+    db = get_db()
+    cursor = db.execute(
+        "UPDATE HouseTypes SET name = ?, description = ?, number_of_modules = ? WHERE house_type_id = ?",
+        (name, description, number_of_modules, house_type_id)
+    )
+    db.commit()
+    return cursor.rowcount > 0
+
+def delete_house_type(house_type_id):
+    """Deletes a house type."""
+    db = get_db()
+    # Cascading deletes should handle ProjectModules, HouseTypeParameters.
+    # TaskDefinitions.house_type_id will be set to NULL.
+    # Modules.house_type_id might cause issues if not handled (e.g., ON DELETE RESTRICT). Schema uses default behavior.
+    # Consider adding more robust checks or constraints if needed.
+    cursor = db.execute("DELETE FROM HouseTypes WHERE house_type_id = ?", (house_type_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+# === House Parameters ===
+
+def get_all_house_parameters():
+    """Fetches all house parameters."""
+    db = get_db()
+    cursor = db.execute("SELECT parameter_id, name, unit FROM HouseParameters ORDER BY name")
+    return [dict(row) for row in cursor.fetchall()]
+
+def add_house_parameter(name, unit):
+    """Adds a new house parameter definition."""
+    db = get_db()
+    try:
+        cursor = db.execute("INSERT INTO HouseParameters (name, unit) VALUES (?, ?)", (name, unit))
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return None # Duplicate name
+
+def update_house_parameter(parameter_id, name, unit):
+    """Updates an existing house parameter definition."""
+    db = get_db()
+    cursor = db.execute("UPDATE HouseParameters SET name = ?, unit = ? WHERE parameter_id = ?", (name, unit, parameter_id))
+    db.commit()
+    return cursor.rowcount > 0
+
+def delete_house_parameter(parameter_id):
+    """Deletes a house parameter definition."""
+    db = get_db()
+    # Cascading delete should handle HouseTypeParameters links.
+    cursor = db.execute("DELETE FROM HouseParameters WHERE parameter_id = ?", (parameter_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+# === House Type Parameters (Linking Table) ===
+
+def get_parameters_for_house_type(house_type_id):
+    """Fetches all parameters and their values for a specific house type."""
+    db = get_db()
+    query = """
+        SELECT
+            htp.house_type_parameter_id, htp.parameter_id, htp.value,
+            hp.name as parameter_name, hp.unit as parameter_unit
+        FROM HouseTypeParameters htp
+        JOIN HouseParameters hp ON htp.parameter_id = hp.parameter_id
+        WHERE htp.house_type_id = ?
+        ORDER BY hp.name
+    """
+    cursor = db.execute(query, (house_type_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+def add_or_update_house_type_parameter(house_type_id, parameter_id, value):
+    """Adds or updates the value for a parameter linked to a house type."""
+    db = get_db()
+    try:
+        # Use INSERT OR REPLACE (or UPSERT if SQLite version supports it)
+        cursor = db.execute(
+            """INSERT INTO HouseTypeParameters (house_type_id, parameter_id, value)
+               VALUES (?, ?, ?)
+               ON CONFLICT(house_type_id, parameter_id) DO UPDATE SET value = excluded.value""",
+            (house_type_id, parameter_id, value)
+        )
+        db.commit()
+        # Return the ID of the inserted/updated row if needed, though it might be complex with UPSERT
+        # For simplicity, return True on success
+        return True
+    except sqlite3.Error as e:
+        print(f"Error adding/updating house type parameter: {e}") # Replace with logging
+        return False
+
+def delete_house_type_parameter(house_type_parameter_id):
+    """Removes a specific parameter link from a house type."""
+    db = get_db()
+    cursor = db.execute("DELETE FROM HouseTypeParameters WHERE house_type_parameter_id = ?", (house_type_parameter_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+def delete_parameter_from_house_type(house_type_id, parameter_id):
+    """Removes a parameter link by house_type_id and parameter_id."""
+    db = get_db()
+    cursor = db.execute(
+        "DELETE FROM HouseTypeParameters WHERE house_type_id = ? AND parameter_id = ?",
+        (house_type_id, parameter_id)
+    )
+    db.commit()
+    return cursor.rowcount > 0

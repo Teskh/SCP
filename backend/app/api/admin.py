@@ -154,7 +154,139 @@ def add_specialty():
         else:
             return jsonify(error="Failed to add specialty, possibly duplicate name"), 409 # Conflict
     except Exception as e:
-        return jsonify(error=str(e)), 500
+        current_app.logger.error(f"Error in get_stations: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch stations"), 500
+
+
+# === House Parameters Routes ===
+
+@admin_bp.route('/house_parameters', methods=['GET'])
+def get_house_parameters():
+    """Get all house parameter definitions."""
+    try:
+        params = queries.get_all_house_parameters()
+        return jsonify(params)
+    except Exception as e:
+        current_app.logger.error(f"Error in get_house_parameters: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch house parameters"), 500
+
+@admin_bp.route('/house_parameters', methods=['POST'])
+def add_house_parameter():
+    """Add a new house parameter definition."""
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify(error="Missing required field 'name'"), 400
+    name = data['name']
+    unit = data.get('unit', '') # Unit is optional
+    try:
+        new_id = queries.add_house_parameter(name, unit)
+        if new_id:
+            new_param = {'parameter_id': new_id, 'name': name, 'unit': unit}
+            return jsonify(new_param), 201
+        else:
+            return jsonify(error="Failed to add house parameter, possibly duplicate name"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error in add_house_parameter: {e}", exc_info=True)
+        return jsonify(error="Failed to add house parameter"), 500
+
+@admin_bp.route('/house_parameters/<int:parameter_id>', methods=['PUT'])
+def update_house_parameter(parameter_id):
+    """Update an existing house parameter definition."""
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify(error="Missing required field 'name'"), 400
+    name = data['name']
+    unit = data.get('unit', '')
+    try:
+        success = queries.update_house_parameter(parameter_id, name, unit)
+        if success:
+            updated_param = {'parameter_id': parameter_id, 'name': name, 'unit': unit}
+            return jsonify(updated_param)
+        else:
+            return jsonify(error="House parameter not found or update failed"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in update_house_parameter: {e}", exc_info=True)
+        return jsonify(error="Failed to update house parameter"), 500
+
+@admin_bp.route('/house_parameters/<int:parameter_id>', methods=['DELETE'])
+def delete_house_parameter(parameter_id):
+    """Delete a house parameter definition."""
+    try:
+        success = queries.delete_house_parameter(parameter_id)
+        if success:
+            return jsonify(message="House parameter deleted successfully"), 200
+        else:
+            return jsonify(error="House parameter not found or delete failed (check dependencies)"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in delete_house_parameter: {e}", exc_info=True)
+        return jsonify(error="Failed to delete house parameter"), 500
+
+
+# === House Type Parameters (Linking) Routes ===
+
+@admin_bp.route('/house_types/<int:house_type_id>/parameters', methods=['GET'])
+def get_house_type_parameters(house_type_id):
+    """Get all parameters assigned to a specific house type."""
+    try:
+        params = queries.get_parameters_for_house_type(house_type_id)
+        return jsonify(params)
+    except Exception as e:
+        current_app.logger.error(f"Error getting parameters for house type {house_type_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch parameters for house type"), 500
+
+@admin_bp.route('/house_types/<int:house_type_id>/parameters', methods=['POST'])
+def add_or_update_house_type_parameter_route(house_type_id):
+    """Add or update a parameter value for a specific house type."""
+    data = request.get_json()
+    if not data or 'parameter_id' not in data or 'value' not in data:
+        return jsonify(error="Missing required fields (parameter_id, value)"), 400
+
+    parameter_id = data['parameter_id']
+    try:
+        # Validate value is numeric (float or int)
+        value = float(data['value'])
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid value, must be numeric"), 400
+
+    try:
+        success = queries.add_or_update_house_type_parameter(house_type_id, parameter_id, value)
+        if success:
+            # Ideally, return the updated/created resource representation
+            return jsonify(message="Parameter value set successfully"), 200 # Or 201 if always creates
+        else:
+            # This might indicate a DB error or constraint violation not caught by UPSERT logic
+            return jsonify(error="Failed to set parameter value for house type"), 500
+    except Exception as e:
+        current_app.logger.error(f"Error setting parameter for house type {house_type_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to set parameter value"), 500
+
+@admin_bp.route('/house_types/<int:house_type_id>/parameters/<int:parameter_id>', methods=['DELETE'])
+def delete_parameter_from_house_type_route(house_type_id, parameter_id):
+    """Remove a specific parameter link from a house type."""
+    try:
+        success = queries.delete_parameter_from_house_type(house_type_id, parameter_id)
+        if success:
+            return jsonify(message="Parameter link removed successfully"), 200
+        else:
+            # This implies the link didn't exist
+            return jsonify(error="Parameter link not found for this house type"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error deleting parameter link for house type {house_type_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to remove parameter link"), 500
+
+# Optional: Route to delete by house_type_parameter_id if needed
+# @admin_bp.route('/house_type_parameters/<int:house_type_parameter_id>', methods=['DELETE'])
+# def delete_house_type_parameter_route(house_type_parameter_id):
+#     """Remove a specific parameter link by its own ID."""
+#     try:
+#         success = queries.delete_house_type_parameter(house_type_parameter_id)
+#         if success:
+#             return jsonify(message="Parameter link removed successfully"), 200
+#         else:
+#             return jsonify(error="Parameter link not found"), 404
+#     except Exception as e:
+#         current_app.logger.error(f"Error deleting house type parameter {house_type_parameter_id}: {e}", exc_info=True)
+#         return jsonify(error="Failed to remove parameter link"), 500
 
 
 @admin_bp.route('/specialties/<int:specialty_id>', methods=['PUT'])
@@ -213,18 +345,18 @@ def add_task_definition():
     # Extract data, allowing nulls for foreign keys
     name = data.get('name')
     description = data.get('description', '')
-    module_type_id = data.get('module_type_id') # Can be None/null
+    house_type_id = data.get('house_type_id') # Can be None/null
     specialty_id = data.get('specialty_id')     # Can be None/null
     station_id = data.get('station_id')         # Can be None/null
 
     try:
-        new_id = queries.add_task_definition(name, description, module_type_id, specialty_id, station_id)
+        new_id = queries.add_task_definition(name, description, house_type_id, specialty_id, station_id)
         if new_id:
             # Fetch the newly created task def to return it
             # This is inefficient, ideally return input + ID or fetch selectively
             new_task_def = {
                 'task_definition_id': new_id, 'name': name, 'description': description,
-                'module_type_id': module_type_id, 'specialty_id': specialty_id, 'station_id': station_id
+                'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_id': station_id
                 # Note: Returning related names would require another query or joining in add_task_definition
             }
             return jsonify(new_task_def), 201
@@ -243,16 +375,16 @@ def update_task_definition(task_definition_id):
 
     name = data.get('name')
     description = data.get('description', '')
-    module_type_id = data.get('module_type_id')
+    house_type_id = data.get('house_type_id')
     specialty_id = data.get('specialty_id')
     station_id = data.get('station_id')
 
     try:
-        success = queries.update_task_definition(task_definition_id, name, description, module_type_id, specialty_id, station_id)
+        success = queries.update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_id)
         if success:
             updated_task_def = {
                 'task_definition_id': task_definition_id, 'name': name, 'description': description,
-                'module_type_id': module_type_id, 'specialty_id': specialty_id, 'station_id': station_id
+                'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_id': station_id
             }
             return jsonify(updated_task_def)
         else:
@@ -276,14 +408,84 @@ def delete_task_definition(task_definition_id):
 
 # === Routes to get related data for dropdowns ===
 
-@admin_bp.route('/module_types', methods=['GET'])
-def get_module_types():
-    """Get all module types for dropdowns."""
+@admin_bp.route('/house_types', methods=['GET'])
+def get_house_types():
+    """Get all house types for dropdowns."""
     try:
-        types = queries.get_all_module_types()
+        types = queries.get_all_house_types()
         return jsonify(types)
     except Exception as e:
-        return jsonify(error=str(e)), 500
+        current_app.logger.error(f"Error in get_house_types: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch house types"), 500
+
+# Add CRUD endpoints for HouseTypes
+@admin_bp.route('/house_types', methods=['POST'])
+def add_house_type():
+    """Add a new house type."""
+    data = request.get_json()
+    if not data or 'name' not in data or 'number_of_modules' not in data:
+        return jsonify(error="Missing required fields (name, number_of_modules)"), 400
+    try:
+        num_modules = int(data['number_of_modules'])
+        if num_modules <= 0:
+            return jsonify(error="Number of modules must be positive"), 400
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid number_of_modules"), 400
+
+    name = data['name']
+    description = data.get('description', '')
+
+    try:
+        new_id = queries.add_house_type(name, description, num_modules)
+        if new_id:
+            new_type = {'house_type_id': new_id, 'name': name, 'description': description, 'number_of_modules': num_modules}
+            return jsonify(new_type), 201
+        else:
+            return jsonify(error="Failed to add house type, possibly duplicate name"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error in add_house_type: {e}", exc_info=True)
+        return jsonify(error="Failed to add house type"), 500
+
+@admin_bp.route('/house_types/<int:house_type_id>', methods=['PUT'])
+def update_house_type(house_type_id):
+    """Update an existing house type."""
+    data = request.get_json()
+    if not data or 'name' not in data or 'number_of_modules' not in data:
+        return jsonify(error="Missing required fields (name, number_of_modules)"), 400
+    try:
+        num_modules = int(data['number_of_modules'])
+        if num_modules <= 0:
+            return jsonify(error="Number of modules must be positive"), 400
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid number_of_modules"), 400
+
+    name = data['name']
+    description = data.get('description', '')
+
+    try:
+        success = queries.update_house_type(house_type_id, name, description, num_modules)
+        if success:
+            updated_type = {'house_type_id': house_type_id, 'name': name, 'description': description, 'number_of_modules': num_modules}
+            return jsonify(updated_type)
+        else:
+            return jsonify(error="House type not found or update failed"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in update_house_type: {e}", exc_info=True)
+        return jsonify(error="Failed to update house type"), 500
+
+@admin_bp.route('/house_types/<int:house_type_id>', methods=['DELETE'])
+def delete_house_type(house_type_id):
+    """Delete a house type."""
+    try:
+        success = queries.delete_house_type(house_type_id)
+        if success:
+            return jsonify(message="House type deleted successfully"), 200
+        else:
+            return jsonify(error="House type not found or delete failed (check dependencies)"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in delete_house_type: {e}", exc_info=True)
+        return jsonify(error="Failed to delete house type"), 500
+
 
 @admin_bp.route('/stations', methods=['GET'])
 def get_stations():

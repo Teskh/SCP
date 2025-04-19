@@ -112,7 +112,7 @@ export const addTaskDefinition = async (taskDefData) => {
     // Ensure foreign keys are null if empty string or 0 (depending on backend expectation)
     const payload = {
         ...taskDefData,
-        module_type_id: taskDefData.module_type_id || null,
+        house_type_id: taskDefData.house_type_id || null, // Renamed field
         specialty_id: taskDefData.specialty_id || null,
         station_id: taskDefData.station_id || null,
     };
@@ -127,7 +127,7 @@ export const addTaskDefinition = async (taskDefData) => {
 export const updateTaskDefinition = async (id, taskDefData) => {
      const payload = {
         ...taskDefData,
-        module_type_id: taskDefData.module_type_id || null,
+        house_type_id: taskDefData.house_type_id || null, // Renamed field
         specialty_id: taskDefData.specialty_id || null,
         station_id: taskDefData.station_id || null,
     };
@@ -152,12 +152,106 @@ export const deleteTaskDefinition = async (id) => {
 
 // === Fetching related data for dropdowns ===
 
-export const getModuleTypes = async () => {
-    const response = await fetch(`${API_BASE_URL}/module_types`);
+export const getHouseTypes = async () => {
+    const response = await fetch(`${API_BASE_URL}/house_types`);
     return handleResponse(response);
 };
+
+// Add CRUD operations for HouseTypes
+export const addHouseType = async (houseTypeData) => {
+    const response = await fetch(`${API_BASE_URL}/house_types`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(houseTypeData),
+    });
+    return handleResponse(response);
+};
+
+export const updateHouseType = async (id, houseTypeData) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(houseTypeData),
+    });
+    return handleResponse(response);
+};
+
+export const deleteHouseType = async (id) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${id}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
 
 export const getStations = async () => {
     const response = await fetch(`${API_BASE_URL}/stations`);
     return handleResponse(response);
+};
+
+// === House Parameters ===
+
+export const getHouseParameters = async () => {
+    const response = await fetch(`${API_BASE_URL}/house_parameters`);
+    return handleResponse(response);
+};
+
+export const addHouseParameter = async (parameterData) => {
+    const response = await fetch(`${API_BASE_URL}/house_parameters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parameterData),
+    });
+    return handleResponse(response);
+};
+
+export const updateHouseParameter = async (id, parameterData) => {
+    const response = await fetch(`${API_BASE_URL}/house_parameters/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parameterData),
+    });
+    return handleResponse(response);
+};
+
+export const deleteHouseParameter = async (id) => {
+    const response = await fetch(`${API_BASE_URL}/house_parameters/${id}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
+// === House Type Parameters (Linking) ===
+
+export const getParametersForHouseType = async (houseTypeId) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters`);
+    return handleResponse(response);
+};
+
+export const setHouseTypeParameter = async (houseTypeId, parameterId, value) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters`, {
+        method: 'POST', // Using POST for add/update via backend UPSERT
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parameter_id: parameterId, value: value }),
+    });
+    return handleResponse(response);
+};
+
+export const deleteParameterFromHouseType = async (houseTypeId, parameterId) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters/${parameterId}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
 };

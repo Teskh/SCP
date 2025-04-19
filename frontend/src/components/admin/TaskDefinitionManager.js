@@ -21,14 +21,14 @@ const styles = {
 const initialFormState = {
     name: '',
     description: '',
-    module_type_id: '', // Use empty string for 'None' option
-    specialty_id: '',   // Use empty string for 'None' option
-    station_id: '',     // Use empty string for 'None' option
+    house_type_id: '', // Renamed from module_type_id
+    specialty_id: '',
+    station_id: '',
 };
 
 function TaskDefinitionManager() {
     const [taskDefs, setTaskDefs] = useState([]);
-    const [moduleTypes, setModuleTypes] = useState([]);
+    const [houseTypes, setHouseTypes] = useState([]); // Renamed from moduleTypes
     const [specialties, setSpecialties] = useState([]);
     const [stations, setStations] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -41,14 +41,14 @@ function TaskDefinitionManager() {
         setIsLoading(true);
         setError('');
         try {
-            const [defsData, typesData, specsData, stationsData] = await Promise.all([
+            const [defsData, houseTypesData, specsData, stationsData] = await Promise.all([
                 adminService.getTaskDefinitions(),
-                adminService.getModuleTypes(),
-                adminService.getSpecialties(), // Reuse specialty fetch
+                adminService.getHouseTypes(), // Use renamed service function
+                adminService.getSpecialties(),
                 adminService.getStations()
             ]);
             setTaskDefs(defsData);
-            setModuleTypes(typesData);
+            setHouseTypes(houseTypesData); // Use renamed state setter
             setSpecialties(specsData);
             setStations(stationsData);
         } catch (err) {
@@ -73,7 +73,7 @@ function TaskDefinitionManager() {
             name: taskDef.name || '',
             description: taskDef.description || '',
             // Ensure IDs are strings for select value matching, handle nulls
-            module_type_id: taskDef.module_type_id?.toString() || '',
+            house_type_id: taskDef.house_type_id?.toString() || '', // Renamed field
             specialty_id: taskDef.specialty_id?.toString() || '',
             station_id: taskDef.station_id || '', // station_id is TEXT
         });
@@ -94,7 +94,7 @@ function TaskDefinitionManager() {
         // Convert empty strings back to null for IDs if necessary, or handle in service
         const payload = {
             ...formData,
-            module_type_id: formData.module_type_id || null,
+            house_type_id: formData.house_type_id || null, // Renamed field
             specialty_id: formData.specialty_id || null,
             station_id: formData.station_id || null,
         };
@@ -161,18 +161,18 @@ function TaskDefinitionManager() {
                      />
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="moduleType">Module Type:</label>
+                     <label style={styles.label} htmlFor="houseType">House Type:</label> {/* Changed label */}
                      <select
-                         id="moduleType"
-                         name="module_type_id"
-                         value={formData.module_type_id}
+                         id="houseType"
+                         name="house_type_id" /* Changed name */
+                         value={formData.house_type_id} /* Changed value */
                          onChange={handleInputChange}
                          style={styles.select}
                      >
-                         <option value="">-- Optional: Select Module Type --</option>
-                         {moduleTypes.map(mt => (
-                             <option key={mt.module_type_id} value={mt.module_type_id}>
-                                 {mt.name}
+                         <option value="">-- Optional: Select House Type --</option> {/* Changed text */}
+                         {houseTypes.map(ht => ( /* Changed variable name */
+                             <option key={ht.house_type_id} value={ht.house_type_id}> {/* Changed key/value */}
+                                 {ht.name}
                              </option>
                          ))}
                      </select>
@@ -229,7 +229,7 @@ function TaskDefinitionManager() {
                         <tr>
                             <th style={styles.th}>Name</th>
                             <th style={styles.th}>Description</th>
-                            <th style={styles.th}>Module Type</th>
+                            <th style={styles.th}>House Type</th> {/* Changed header */}
                             <th style={styles.th}>Specialty</th>
                             <th style={styles.th}>Station</th>
                             <th style={styles.th}>Actions</th>
@@ -240,7 +240,7 @@ function TaskDefinitionManager() {
                             <tr key={td.task_definition_id}>
                                 <td style={styles.td}>{td.name}</td>
                                 <td style={styles.td}>{td.description}</td>
-                                <td style={styles.td}>{td.module_type_name || 'N/A'}</td>
+                                <td style={styles.td}>{td.house_type_name || 'N/A'}</td> {/* Changed field */}
                                 <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
                                 <td style={styles.td}>{td.station_name ? `${td.station_id} (${td.station_name})` : (td.station_id || 'N/A')}</td>
                                 <td style={styles.td}>
