@@ -2,8 +2,10 @@ import React from 'react';
 import { Routes, Route, Link, Navigate, Outlet } from 'react-router-dom'; // Import Outlet
 import './App.css';
 import AdminDashboard from './pages/AdminDashboard';
-import DefinitionsManager from './components/admin/DefinitionsManager'; // Import new component
-import WorkersManager from './components/admin/WorkersManager'; // Import new component
+import DefinitionsManager from './components/admin/DefinitionsManager';
+import WorkersManager from './components/admin/WorkersManager';
+import HouseTypesManager from './components/admin/HouseTypesManager'; // Import new component
+import HouseParametersManager from './components/admin/HouseParametersManager'; // Import new component
 // Import other pages/components as needed
 
 // Basic Nav styling

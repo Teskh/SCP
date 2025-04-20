@@ -275,33 +275,34 @@ def delete_house_parameter(parameter_id):
 # === House Type Parameters (Linking Table) ===
 
 def get_parameters_for_house_type(house_type_id):
-    """Fetches all parameters and their values for a specific house type."""
+    """Fetches all parameters and their values for a specific house type, including module sequence."""
     db = get_db()
     query = """
         SELECT
-            htp.house_type_parameter_id, htp.parameter_id, htp.value,
+            htp.house_type_parameter_id, htp.parameter_id, htp.module_sequence_number, htp.value,
             hp.name as parameter_name, hp.unit as parameter_unit
         FROM HouseTypeParameters htp
         JOIN HouseParameters hp ON htp.parameter_id = hp.parameter_id
         WHERE htp.house_type_id = ?
-        ORDER BY hp.name
+        ORDER BY htp.module_sequence_number, hp.name
     """
     cursor = db.execute(query, (house_type_id,))
     return [dict(row) for row in cursor.fetchall()]
 
-def add_or_update_house_type_parameter(house_type_id, parameter_id, value):
-    """Adds or updates the value for a parameter linked to a house type."""
+def add_or_update_house_type_parameter(house_type_id, parameter_id, module_sequence_number, value):
+    """Adds or updates the value for a parameter for a specific module within a house type."""
     db = get_db()
     try:
-        # Use INSERT OR REPLACE (or UPSERT if SQLite version supports it)
+        # Use UPSERT (requires SQLite 3.24.0+)
         cursor = db.execute(
-            """INSERT INTO HouseTypeParameters (house_type_id, parameter_id, value)
-               VALUES (?, ?, ?)
-               ON CONFLICT(house_type_id, parameter_id) DO UPDATE SET value = excluded.value""",
-            (house_type_id, parameter_id, value)
+            """INSERT INTO HouseTypeParameters (house_type_id, parameter_id, module_sequence_number, value)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(house_type_id, parameter_id, module_sequence_number)
+               DO UPDATE SET value = excluded.value""",
+            (house_type_id, parameter_id, module_sequence_number, value)
         )
         db.commit()
-        # Return the ID of the inserted/updated row if needed, though it might be complex with UPSERT
+        # Return the ID of the inserted/updated row if needed
         # For simplicity, return True on success
         return True
     except sqlite3.Error as e:
@@ -313,14 +314,27 @@ def delete_house_type_parameter(house_type_parameter_id):
     db = get_db()
     cursor = db.execute("DELETE FROM HouseTypeParameters WHERE house_type_parameter_id = ?", (house_type_parameter_id,))
     db.commit()
+    # This query doesn't easily return the ID with UPSERT without another query.
+    # We'll return True for success for now.
+    return True
+    except sqlite3.Error as e:
+        print(f"Error adding/updating house type parameter: {e}") # Replace with logging
+        return False
+
+# Keep the function to delete by the specific link ID
+def delete_house_type_parameter(house_type_parameter_id):
+    """Removes a specific parameter link from a house type by its own ID."""
+    db = get_db()
+    cursor = db.execute("DELETE FROM HouseTypeParameters WHERE house_type_parameter_id = ?", (house_type_parameter_id,))
+    db.commit()
     return cursor.rowcount > 0
 
-def delete_parameter_from_house_type(house_type_id, parameter_id):
-    """Removes a parameter link by house_type_id and parameter_id."""
+def delete_parameter_from_house_type_module(house_type_id, parameter_id, module_sequence_number):
+    """Removes a parameter link by house_type_id, parameter_id, and module sequence."""
     db = get_db()
     cursor = db.execute(
-        "DELETE FROM HouseTypeParameters WHERE house_type_id = ? AND parameter_id = ?",
-        (house_type_id, parameter_id)
+        "DELETE FROM HouseTypeParameters WHERE house_type_id = ? AND parameter_id = ? AND module_sequence_number = ?",
+        (house_type_id, parameter_id, module_sequence_number)
     )
     db.commit()
     return cursor.rowcount > 0

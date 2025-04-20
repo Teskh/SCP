@@ -67,6 +67,28 @@ function AdminDashboard() {
                             Workers
                         </Link>
                     </li>
+                     <li style={styles.navItem}>
+                        <Link
+                            to="/admin/house-types"
+                            style={{
+                                ...styles.navLink,
+                                ...(isActive('/admin/house-types') ? styles.navLinkActive : {})
+                            }}
+                        >
+                            House Types
+                        </Link>
+                    </li>
+                     <li style={styles.navItem}>
+                        <Link
+                            to="/admin/house-parameters"
+                            style={{
+                                ...styles.navLink,
+                                ...(isActive('/admin/house-parameters') ? styles.navLinkActive : {})
+                            }}
+                        >
+                            House Parameters
+                        </Link>
+                    </li>
                     {/* Add links for Projects, Production Planning etc. later */}
                 </ul>
             </nav>

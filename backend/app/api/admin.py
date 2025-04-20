@@ -236,23 +236,43 @@ def get_house_type_parameters(house_type_id):
 
 @admin_bp.route('/house_types/<int:house_type_id>/parameters', methods=['POST'])
 def add_or_update_house_type_parameter_route(house_type_id):
-    """Add or update a parameter value for a specific house type."""
+    """Add or update a parameter value for a specific module within a house type."""
     data = request.get_json()
-    if not data or 'parameter_id' not in data or 'value' not in data:
-        return jsonify(error="Missing required fields (parameter_id, value)"), 400
+    if not data or not all(k in data for k in ('parameter_id', 'module_sequence_number', 'value')):
+        return jsonify(error="Missing required fields (parameter_id, module_sequence_number, value)"), 400
 
     parameter_id = data['parameter_id']
+    module_sequence_number = data['module_sequence_number']
+    value_str = data['value']
+
+    # Validate value is numeric (float or int) and module sequence is positive integer
     try:
-        # Validate value is numeric (float or int)
-        value = float(data['value'])
+        value = float(value_str) if value_str is not None and value_str != '' else None # Allow clearing value? Or require non-empty? Let's require for now.
+        if value is None:
+             return jsonify(error="Value cannot be empty"), 400
+        module_seq_int = int(module_sequence_number)
+        if module_seq_int <= 0:
+            return jsonify(error="Invalid module_sequence_number, must be positive"), 400
     except (ValueError, TypeError):
-        return jsonify(error="Invalid value, must be numeric"), 400
+        return jsonify(error="Invalid value (must be numeric) or module_sequence_number (must be integer)"), 400
 
     try:
-        success = queries.add_or_update_house_type_parameter(house_type_id, parameter_id, value)
+        # Optional: Validate module_sequence_number against HouseType.number_of_modules
+        # house_type = queries.get_house_type_by_id(house_type_id) # Need to implement this query
+        # if not house_type or module_seq_int > house_type['number_of_modules']:
+        #    return jsonify(error="module_sequence_number exceeds the number of modules for this house type"), 400
+
+        success = queries.add_or_update_house_type_parameter(house_type_id, parameter_id, module_seq_int, value)
         if success:
-            # Ideally, return the updated/created resource representation
-            return jsonify(message="Parameter value set successfully"), 200 # Or 201 if always creates
+            # Return the data that was set
+            # Fetching the full object might be better if the query returned the ID
+            result = {
+                'house_type_id': house_type_id,
+                'parameter_id': parameter_id,
+                'module_sequence_number': module_seq_int,
+                'value': value
+            }
+            return jsonify(result), 200 # OK, as it's an UPSERT
         else:
             # This might indicate a DB error or constraint violation not caught by UPSERT logic
             return jsonify(error="Failed to set parameter value for house type"), 500
@@ -260,24 +280,34 @@ def add_or_update_house_type_parameter_route(house_type_id):
         current_app.logger.error(f"Error setting parameter for house type {house_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to set parameter value"), 500
 
-@admin_bp.route('/house_types/<int:house_type_id>/parameters/<int:parameter_id>', methods=['DELETE'])
-def delete_parameter_from_house_type_route(house_type_id, parameter_id):
-    """Remove a specific parameter link from a house type."""
+# New route to delete a specific parameter value for a specific module
+@admin_bp.route('/house_types/<int:house_type_id>/parameters/<int:parameter_id>/module/<int:module_sequence_number>', methods=['DELETE'])
+def delete_parameter_from_house_type_module_route(house_type_id, parameter_id, module_sequence_number):
+    """Remove a specific parameter value for a specific module within a house type."""
     try:
-        success = queries.delete_parameter_from_house_type(house_type_id, parameter_id)
-        if success:
-            return jsonify(message="Parameter link removed successfully"), 200
-        else:
-            # This implies the link didn't exist
-            return jsonify(error="Parameter link not found for this house type"), 404
-    except Exception as e:
-        current_app.logger.error(f"Error deleting parameter link for house type {house_type_id}: {e}", exc_info=True)
-        return jsonify(error="Failed to remove parameter link"), 500
+        # Validate module sequence is positive integer
+        module_seq_int = int(module_sequence_number)
+        if module_seq_int <= 0:
+             return jsonify(error="Invalid module_sequence_number, must be positive"), 400
+    except (ValueError, TypeError):
+         return jsonify(error="Invalid module_sequence_number, must be integer"), 400
 
-# Optional: Route to delete by house_type_parameter_id if needed
-# @admin_bp.route('/house_type_parameters/<int:house_type_parameter_id>', methods=['DELETE'])
-# def delete_house_type_parameter_route(house_type_parameter_id):
-#     """Remove a specific parameter link by its own ID."""
+    try:
+        success = queries.delete_parameter_from_house_type_module(house_type_id, parameter_id, module_seq_int)
+        if success:
+            return jsonify(message="Parameter value removed successfully for this module"), 200 # Or 204
+        else:
+            # This implies the link didn't exist for this specific module
+            return jsonify(error="Parameter value not found for this house type, parameter, and module sequence"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error deleting parameter value for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
+        return jsonify(error="Failed to remove parameter value"), 500
+
+
+# Route to delete by the specific HouseTypeParameter link ID (useful if frontend has it)
+@admin_bp.route('/house_type_parameters/<int:house_type_parameter_id>', methods=['DELETE'])
+def delete_house_type_parameter_route(house_type_parameter_id):
+    """Remove a specific parameter link by its own ID."""
 #     try:
 #         success = queries.delete_house_type_parameter(house_type_parameter_id)
 #         if success:

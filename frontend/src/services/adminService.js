@@ -236,17 +236,23 @@ export const getParametersForHouseType = async (houseTypeId) => {
     return handleResponse(response);
 };
 
-export const setHouseTypeParameter = async (houseTypeId, parameterId, value) => {
+// Updated to include module_sequence_number
+export const setHouseTypeParameter = async (houseTypeId, parameterId, moduleSequenceNumber, value) => {
     const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters`, {
         method: 'POST', // Using POST for add/update via backend UPSERT
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parameter_id: parameterId, value: value }),
+        body: JSON.stringify({
+            parameter_id: parameterId,
+            module_sequence_number: moduleSequenceNumber,
+            value: value
+        }),
     });
     return handleResponse(response);
 };
 
-export const deleteParameterFromHouseType = async (houseTypeId, parameterId) => {
-    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters/${parameterId}`, {
+// New function to delete a specific parameter value for a specific module
+export const deleteParameterFromHouseTypeModule = async (houseTypeId, parameterId, moduleSequenceNumber) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters/${parameterId}/module/${moduleSequenceNumber}`, {
         method: 'DELETE',
     });
     if (!response.ok && response.status !== 204) {

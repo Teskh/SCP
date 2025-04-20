@@ -137,10 +137,17 @@ CREATE TABLE HouseTypeParameters (
     parameter_id INTEGER NOT NULL,
     value REAL NOT NULL, -- Using REAL to accommodate various numeric types (integers, decimals)
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    parameter_id INTEGER NOT NULL,
+    module_sequence_number INTEGER NOT NULL, -- Which module within the house type this value applies to (1-based index)
+    value REAL NOT NULL, -- Using REAL to accommodate various numeric types (integers, decimals)
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
     FOREIGN KEY (parameter_id) REFERENCES HouseParameters(parameter_id) ON DELETE CASCADE,
-    UNIQUE (house_type_id, parameter_id) -- Ensure only one value per parameter per house type
+    -- Ensure only one value per parameter per module sequence within a house type
+    UNIQUE (house_type_id, parameter_id, module_sequence_number)
 );
 
 -- Indexes for new tables
 CREATE INDEX idx_housetypeparameters_house_type ON HouseTypeParameters (house_type_id);
 CREATE INDEX idx_housetypeparameters_parameter ON HouseTypeParameters (parameter_id);
+CREATE INDEX idx_housetypeparameters_module_seq ON HouseTypeParameters (module_sequence_number);
+CREATE INDEX idx_housetypeparameters_composite ON HouseTypeParameters (house_type_id, parameter_id, module_sequence_number); -- Index for the unique constraint
