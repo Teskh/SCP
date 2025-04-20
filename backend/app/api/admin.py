@@ -643,16 +643,6 @@ def add_house_type_module_panel(house_type_id, module_sequence_number):
     except Exception as e:
         current_app.logger.error(f"Error adding panel for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
         return jsonify(error="Failed to add panel"), 500
-                'house_type_id': house_type_id,
-                'module_sequence_number': module_seq_int,
-                'panel_group': panel_group,
-                'panel_code': panel_code,
-                'typology': typology if typology else None
-            }
-            return jsonify(new_panel), 201
-        else:
-            # This case might not be reached if exceptions are raised properly
-            return jsonify(error="Failed to add panel"), 500
     except (ValueError, sqlite3.IntegrityError) as e: # Catch validation or constraint errors
         current_app.logger.warning(f"Failed to add panel for house type {house_type_id}, module {module_seq_int}: {e}")
         # Provide more specific error messages based on the exception type if needed
