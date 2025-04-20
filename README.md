@@ -1,5 +1,6 @@
 1. Project Goal:
-To develop a simple, low-stakes internal web application for tracking task completion on a modular construction production line. The primary aim is to provide workers with an easy way to register tasks as completed for specific modules at their assigned stations, improving visibility into the production process across its distinct stages.
+To develop a simple, low-stakes internal web application in Spanish for tracking task completion on a modular construction production line. The primary aim is to provide workers with an easy way to register tasks as completed for specific modules at their assigned stations, improving visibility into the production process across its distinct stages. All user-facing text in the application will be developed in Spanish.
+
 2. Target Users & Environment:
 Users: Production line workers and supervisors (for module movement and admin tasks).
 Environment: Fixed tablets located at each production station within the facility. The application should run full-screen in a web browser on these tablets.
