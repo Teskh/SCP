@@ -1,6 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getProjects, addProject, updateProject, deleteProject, getHouseTypes } from '../../services/adminService';
-import styles from './AdminComponentStyles.js'; // Assuming .js extension for style object file
+// Removed incorrect import: import styles from './AdminComponentStyles.js';
+
+// Define styles directly, similar to other admin components
+const styles = {
+    container: { margin: '20px', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' },
+    header: { marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 },
+    subHeader: { marginTop: '20px', marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' },
+    table: { width: '100%', borderCollapse: 'collapse', marginTop: '15px' },
+    th: { border: '1px solid #ddd', padding: '8px', backgroundColor: '#f2f2f2', textAlign: 'left' },
+    td: { border: '1px solid #ddd', padding: '8px', verticalAlign: 'top' },
+    form: { marginBottom: '20px', padding: '15px', border: '1px solid #eee', borderRadius: '5px' },
+    formGroup: { marginBottom: '15px' },
+    formRow: { display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '10px', flexWrap: 'wrap' }, // Align items to bottom for button alignment
+    label: { display: 'block', marginBottom: '5px', fontWeight: 'bold' },
+    input: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' },
+    textarea: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', minHeight: '80px' },
+    select: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', height: '36px' }, // Ensure consistent height
+    button: { cursor: 'pointer', padding: '10px 15px', border: 'none', borderRadius: '4px', color: 'white', backgroundColor: '#007bff' },
+    buttonSecondary: { backgroundColor: '#6c757d' },
+    buttonDelete: { backgroundColor: '#dc3545', marginLeft: '5px' },
+    buttonEdit: { backgroundColor: '#ffc107', color: '#333', marginLeft: '5px' },
+    buttonGroup: { marginTop: '15px', display: 'flex', gap: '10px' },
+    error: { color: 'red', marginTop: '10px', marginBottom: '10px', padding: '10px', border: '1px solid red', borderRadius: '4px', backgroundColor: '#f8d7da' },
+    loading: { fontStyle: 'italic', color: '#666' }
+};
+
 
 const initialFormState = {
     name: '',
