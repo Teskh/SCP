@@ -43,7 +43,7 @@ function AdminDashboard() {
     return (
         <div style={styles.dashboard}>
             <nav style={styles.nav}>
-                <h2 style={{...styles.header, borderBottom: 'none', marginBottom: '20px'}}>Admin Menu</h2>
+                <h2 style={{...styles.header, borderBottom: 'none', marginBottom: '20px'}}>Menú Admin</h2>
                 <ul style={styles.navList}>
                     <li style={styles.navItem}>
                         <Link
@@ -53,7 +53,7 @@ function AdminDashboard() {
                                 ...(isActive('/admin/definitions') ? styles.navLinkActive : {})
                             }}
                         >
-                            Definitions
+                            Definiciones
                         </Link>
                     </li>
                     <li style={styles.navItem}>
@@ -64,7 +64,7 @@ function AdminDashboard() {
                                 ...(isActive('/admin/workers') ? styles.navLinkActive : {})
                             }}
                         >
-                            Workers
+                            Trabajadores
                         </Link>
                     </li>
                      <li style={styles.navItem}>
@@ -75,7 +75,7 @@ function AdminDashboard() {
                                 ...(isActive('/admin/house-types') ? styles.navLinkActive : {})
                             }}
                         >
-                            House Types
+                            Tipos de Vivienda
                         </Link>
                     </li>
                      <li style={styles.navItem}>
@@ -86,7 +86,7 @@ function AdminDashboard() {
                                 ...(isActive('/admin/house-parameters') ? styles.navLinkActive : {})
                             }}
                         >
-                            House Parameters
+                            Parámetros Vivienda
                         </Link>
                     </li>
                     {/* Add links for Projects, Production Planning etc. later */}
@@ -96,8 +96,8 @@ function AdminDashboard() {
                  {/* Render the matched child route component here */}
                  {location.pathname === '/admin' || location.pathname === '/admin/' ? (
                     <div>
-                        <h1 style={styles.header}>Admin Dashboard</h1>
-                        <p>Select an option from the menu to manage system settings.</p>
+                        <h1 style={styles.header}>Panel de Administración</h1>
+                        <p>Seleccione una opción del menú para gestionar la configuración del sistema.</p>
                     </div>
                  ) : (
                     <Outlet />

@@ -14,6 +14,7 @@ const styles = {
     loading: { fontStyle: 'italic' }
 };
 
+// NOTE: Keep initialFormState keys in English as they match backend/state variable names
 const initialFormState = { name: '', unit: '' };
 
 function HouseParametersManager() {
@@ -30,7 +31,7 @@ function HouseParametersManager() {
             const data = await adminService.getHouseParameters();
             setParameters(data);
         } catch (err) {
-            setError(err.message || 'Failed to fetch house parameters');
+            setError(err.message || 'Error al obtener los parámetros de vivienda');
         } finally {
             setIsLoading(false);
         }
@@ -60,7 +61,7 @@ function HouseParametersManager() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.name) {
-            setError('Parameter Name is required.');
+            setError('El Nombre del Parámetro es obligatorio.');
             return;
         }
         setError('');
@@ -75,21 +76,22 @@ function HouseParametersManager() {
             handleCancelEdit();
             await fetchData(); // Refresh list
         } catch (err) {
-            setError(err.message || `Failed to ${editMode ? 'update' : 'add'} house parameter`);
+            setError(err.message || `Error al ${editMode ? 'actualizar' : 'añadir'} el parámetro de vivienda`);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm('Are you sure you want to delete this parameter? This will remove it from all house types.')) {
+        // Confirmation dialog in Spanish
+        if (window.confirm('¿Está seguro de que desea eliminar este parámetro? Se eliminará de todos los tipos de vivienda.')) {
             setError('');
             setIsLoading(true);
             try {
                 await adminService.deleteHouseParameter(id);
                 await fetchData(); // Refresh list
             } catch (err) {
-                setError(err.message || 'Failed to delete house parameter');
+                setError(err.message || 'Error al eliminar el parámetro de vivienda');
             } finally {
                 setIsLoading(false);
             }
@@ -98,15 +100,15 @@ function HouseParametersManager() {
 
     return (
         <div style={styles.container}>
-            <h2>Manage House Parameters</h2>
+            <h2>Gestionar Parámetros de Vivienda</h2>
             {error && <p style={styles.error}>{error}</p>}
 
             <form onSubmit={handleSubmit} style={styles.form}>
-                <h3>{editMode ? 'Edit Parameter' : 'Add New Parameter'}</h3>
+                <h3>{editMode ? 'Editar Parámetro' : 'Añadir Nuevo Parámetro'}</h3>
                 <input
                     type="text"
                     name="name"
-                    placeholder="Parameter Name (e.g., Floor Area)"
+                    placeholder="Nombre del Parámetro (ej: Área de Piso)"
                     value={formData.name}
                     onChange={handleInputChange}
                     required
@@ -115,28 +117,28 @@ function HouseParametersManager() {
                 <input
                     type="text"
                     name="unit"
-                    placeholder="Unit (e.g., m², count, meters)"
+                    placeholder="Unidad (ej: m², uds, metros)"
                     value={formData.unit}
                     onChange={handleInputChange}
                     style={styles.input}
                 />
                 <button type="submit" disabled={isLoading} style={styles.button}>
-                    {isLoading ? 'Saving...' : (editMode ? 'Update Parameter' : 'Add Parameter')}
+                    {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Parámetro' : 'Añadir Parámetro')}
                 </button>
                 {editMode && (
                     <button type="button" onClick={handleCancelEdit} style={styles.button} disabled={isLoading}>
-                        Cancel
+                        Cancelar
                     </button>
                 )}
             </form>
 
-            {isLoading && !parameters.length ? <p style={styles.loading}>Loading parameters...</p> : (
+            {isLoading && !parameters.length ? <p style={styles.loading}>Cargando parámetros...</p> : (
                 <table style={styles.table}>
                     <thead>
                         <tr>
-                            <th style={styles.th}>Name</th>
-                            <th style={styles.th}>Unit</th>
-                            <th style={styles.th}>Actions</th>
+                            <th style={styles.th}>Nombre</th>
+                            <th style={styles.th}>Unidad</th>
+                            <th style={styles.th}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -145,15 +147,15 @@ function HouseParametersManager() {
                                 <td style={styles.td}>{param.name}</td>
                                 <td style={styles.td}>{param.unit || 'N/A'}</td>
                                 <td style={styles.td}>
-                                    <button onClick={() => handleEdit(param)} style={styles.button} disabled={isLoading}>Edit</button>
-                                    <button onClick={() => handleDelete(param.parameter_id)} style={styles.button} disabled={isLoading}>Delete</button>
+                                    <button onClick={() => handleEdit(param)} style={styles.button} disabled={isLoading}>Editar</button>
+                                    <button onClick={() => handleDelete(param.parameter_id)} style={styles.button} disabled={isLoading}>Eliminar</button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             )}
-            {!isLoading && parameters.length === 0 && <p>No house parameters defined yet.</p>}
+            {!isLoading && parameters.length === 0 && <p>Aún no se han definido parámetros de vivienda.</p>}
         </div>
     );
 }

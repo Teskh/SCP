@@ -18,6 +18,7 @@ const styles = {
     loading: { fontStyle: 'italic' }
 };
 
+// NOTE: Keep initialFormState keys in English
 const initialFormState = {
     first_name: '',
     last_name: '',
@@ -100,8 +101,9 @@ function WorkersManager() {
         setIsLoading(true);
 
         // Basic PIN validation (e.g., length) - enhance as needed
+        // Keep error messages related to validation logic potentially in English or use codes for i18n later
         if (formData.pin.length < 4) {
-             setError('PIN must be at least 4 digits.');
+             setError('El PIN debe tener al menos 4 dígitos.');
              setIsLoading(false);
              return;
         }
@@ -121,21 +123,22 @@ function WorkersManager() {
             handleCancelEdit();
             await fetchData(); // Refresh list
         } catch (err) {
-            setError(err.message || `Failed to ${editMode ? 'update' : 'add'} worker`);
+            setError(err.message || `Error al ${editMode ? 'actualizar' : 'añadir'} el trabajador`);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm('Are you sure you want to delete this worker? This might affect task logs and supervision.')) {
+        // Confirmation dialog in Spanish
+        if (window.confirm('¿Está seguro de que desea eliminar a este trabajador? Esto podría afectar los registros de tareas y la supervisión.')) {
             setError('');
             setIsLoading(true);
             try {
                 await adminService.deleteWorker(id);
                 await fetchData(); // Refresh list
             } catch (err) {
-                setError(err.message || 'Failed to delete worker');
+                setError(err.message || 'Error al eliminar el trabajador');
             } finally {
                 setIsLoading(false);
             }
@@ -144,26 +147,26 @@ function WorkersManager() {
 
     return (
         <div style={styles.container}>
-            <h2>Manage Workers</h2>
+            <h2>Gestionar Trabajadores</h2>
             {error && <p style={styles.error}>{error}</p>}
 
             <form onSubmit={handleSubmit} style={styles.form}>
-                <h3>{editMode ? 'Edit Worker' : 'Add New Worker'}</h3>
+                <h3>{editMode ? 'Editar Trabajador' : 'Añadir Nuevo Trabajador'}</h3>
                 <div style={styles.formRow}>
-                    <label style={styles.label} htmlFor="firstName">First Name:</label>
+                    <label style={styles.label} htmlFor="firstName">Nombre:</label>
                     <input id="firstName" type="text" name="first_name" value={formData.first_name} onChange={handleInputChange} required style={styles.input} />
-                    <label style={styles.label} htmlFor="lastName">Last Name:</label>
+                    <label style={styles.label} htmlFor="lastName">Apellido:</label>
                     <input id="lastName" type="text" name="last_name" value={formData.last_name} onChange={handleInputChange} required style={styles.input} />
                 </div>
                  <div style={styles.formRow}>
                     <label style={styles.label} htmlFor="pin">PIN:</label>
-                    <input id="pin" type="password" name="pin" placeholder={editMode ? "Enter new PIN to change" : "Min 4 digits"} value={formData.pin} onChange={handleInputChange} required={!editMode} minLength="4" style={styles.input} />
+                    <input id="pin" type="password" name="pin" placeholder={editMode ? "Nuevo PIN si cambia" : "Mín 4 dígitos"} value={formData.pin} onChange={handleInputChange} required={!editMode} minLength="4" style={styles.input} />
                      {/* Add PIN confirmation if desired */}
                  </div>
                 <div style={styles.formRow}>
-                    <label style={styles.label} htmlFor="specialty">Specialty:</label>
+                    <label style={styles.label} htmlFor="specialty">Especialidad:</label>
                     <select id="specialty" name="specialty_id" value={formData.specialty_id} onChange={handleInputChange} style={styles.select}>
-                        <option value="">-- Optional: Select Specialty --</option>
+                        <option value="">-- Opcional: Seleccionar Especialidad --</option>
                         {specialties.map(spec => (
                             <option key={spec.specialty_id} value={spec.specialty_id}>{spec.name}</option>
                         ))}
@@ -172,7 +175,7 @@ function WorkersManager() {
                 <div style={styles.formRow}>
                     <label style={styles.label} htmlFor="supervisor">Supervisor:</label>
                     <select id="supervisor" name="supervisor_id" value={formData.supervisor_id} onChange={handleInputChange} style={styles.select}>
-                        <option value="">-- Optional: Select Supervisor --</option>
+                        <option value="">-- Opcional: Seleccionar Supervisor --</option>
                         {supervisors.map(sup => (
                             <option key={sup.id} value={sup.id}>{sup.name}</option>
                         ))}
@@ -181,28 +184,28 @@ function WorkersManager() {
                  <div style={styles.formRow}>
                      <label style={styles.checkboxLabel} htmlFor="isActive">
                          <input id="isActive" type="checkbox" name="is_active" checked={formData.is_active} onChange={handleInputChange} />
-                         Active
+                         Activo
                      </label>
                  </div>
                 <div>
                     <button type="submit" disabled={isLoading} style={styles.button}>
-                        {isLoading ? 'Saving...' : (editMode ? 'Update Worker' : 'Add Worker')}
+                        {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Trabajador' : 'Añadir Trabajador')}
                     </button>
                     {editMode && (
-                        <button type="button" onClick={handleCancelEdit} style={styles.button} disabled={isLoading}>Cancel</button>
+                        <button type="button" onClick={handleCancelEdit} style={styles.button} disabled={isLoading}>Cancelar</button>
                     )}
                 </div>
             </form>
 
-            {isLoading && !workers.length ? <p style={styles.loading}>Loading workers...</p> : (
+            {isLoading && !workers.length ? <p style={styles.loading}>Cargando trabajadores...</p> : (
                 <table style={styles.table}>
                     <thead>
                         <tr>
-                            <th style={styles.th}>Name</th>
-                            <th style={styles.th}>Specialty</th>
+                            <th style={styles.th}>Nombre</th>
+                            <th style={styles.th}>Especialidad</th>
                             <th style={styles.th}>Supervisor</th>
-                            <th style={styles.th}>Active</th>
-                            <th style={styles.th}>Actions</th>
+                            <th style={styles.th}>Activo</th>
+                            <th style={styles.th}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -211,17 +214,17 @@ function WorkersManager() {
                                 <td style={styles.td}>{w.first_name} {w.last_name}</td>
                                 <td style={styles.td}>{w.specialty_name || 'N/A'}</td>
                                 <td style={styles.td}>{w.supervisor_name || 'N/A'}</td>
-                                <td style={styles.td}>{w.is_active ? 'Yes' : 'No'}</td>
+                                <td style={styles.td}>{w.is_active ? 'Sí' : 'No'}</td>
                                 <td style={styles.td}>
-                                    <button onClick={() => handleEdit(w)} style={styles.button} disabled={isLoading}>Edit</button>
-                                    <button onClick={() => handleDelete(w.worker_id)} style={styles.button} disabled={isLoading}>Delete</button>
+                                    <button onClick={() => handleEdit(w)} style={styles.button} disabled={isLoading}>Editar</button>
+                                    <button onClick={() => handleDelete(w.worker_id)} style={styles.button} disabled={isLoading}>Eliminar</button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             )}
-            {!isLoading && workers.length === 0 && <p>No workers found.</p>}
+            {!isLoading && workers.length === 0 && <p>No se encontraron trabajadores.</p>}
         </div>
     );
 }

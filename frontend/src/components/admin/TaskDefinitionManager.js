@@ -18,6 +18,7 @@ const styles = {
     loading: { fontStyle: 'italic' }
 };
 
+// NOTE: Keep initialFormState keys in English
 const initialFormState = {
     name: '',
     description: '',
@@ -108,21 +109,22 @@ function TaskDefinitionManager() {
             handleCancelEdit();
             await fetchData(); // Refresh list and related data
         } catch (err) {
-            setError(err.message || `Failed to ${editMode ? 'update' : 'add'} task definition`);
+            setError(err.message || `Error al ${editMode ? 'actualizar' : 'añadir'} la definición de tarea`);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm('Are you sure you want to delete this task definition?')) {
+        // Confirmation dialog in Spanish
+        if (window.confirm('¿Está seguro de que desea eliminar esta definición de tarea?')) {
             setError('');
             setIsLoading(true); // Prevent other actions during delete
             try {
                 await adminService.deleteTaskDefinition(id);
                 await fetchData(); // Refresh list
             } catch (err) {
-                setError(err.message || 'Failed to delete task definition');
+                setError(err.message || 'Error al eliminar la definición de tarea');
             } finally {
                  setIsLoading(false);
             }
@@ -131,18 +133,18 @@ function TaskDefinitionManager() {
 
     return (
         <div style={styles.container}>
-            <h2>Manage Task Definitions</h2>
+            <h2>Gestionar Definiciones de Tareas</h2>
             {error && <p style={styles.error}>{error}</p>}
 
             <form onSubmit={handleSubmit} style={styles.form}>
-                 <h3>{editMode ? 'Edit Task Definition' : 'Add New Task Definition'}</h3>
+                 <h3>{editMode ? 'Editar Definición de Tarea' : 'Añadir Nueva Definición de Tarea'}</h3>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="taskName">Name:</label>
+                     <label style={styles.label} htmlFor="taskName">Nombre:</label>
                      <input
                          id="taskName"
                          type="text"
                          name="name"
-                         placeholder="Task Name (e.g., Install Window Frame)"
+                         placeholder="Nombre Tarea (ej: Instalar Marco Ventana)"
                          value={formData.name}
                          onChange={handleInputChange}
                          required
@@ -150,18 +152,18 @@ function TaskDefinitionManager() {
                      />
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="taskDesc">Description:</label>
+                     <label style={styles.label} htmlFor="taskDesc">Descripción:</label>
                      <textarea
                          id="taskDesc"
                          name="description"
-                         placeholder="Detailed description (Optional)"
+                         placeholder="Descripción detallada (Opcional)"
                          value={formData.description}
                          onChange={handleInputChange}
                          style={styles.textarea}
                      />
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="houseType">House Type:</label> {/* Changed label */}
+                     <label style={styles.label} htmlFor="houseType">Tipo Vivienda:</label> {/* Changed label */}
                      <select
                          id="houseType"
                          name="house_type_id" /* Changed name */
@@ -169,7 +171,7 @@ function TaskDefinitionManager() {
                          onChange={handleInputChange}
                          style={styles.select}
                      >
-                         <option value="">-- Optional: Select House Type --</option> {/* Changed text */}
+                         <option value="">-- Opcional: Seleccionar Tipo Vivienda --</option> {/* Changed text */}
                          {houseTypes.map(ht => ( /* Changed variable name */
                              <option key={ht.house_type_id} value={ht.house_type_id}> {/* Changed key/value */}
                                  {ht.name}
@@ -178,7 +180,7 @@ function TaskDefinitionManager() {
                      </select>
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="specialty">Specialty:</label>
+                     <label style={styles.label} htmlFor="specialty">Especialidad:</label>
                      <select
                          id="specialty"
                          name="specialty_id"
@@ -186,7 +188,7 @@ function TaskDefinitionManager() {
                          onChange={handleInputChange}
                          style={styles.select}
                      >
-                         <option value="">-- Optional: Select Specialty --</option>
+                         <option value="">-- Opcional: Seleccionar Especialidad --</option>
                          {specialties.map(spec => (
                              <option key={spec.specialty_id} value={spec.specialty_id}>
                                  {spec.name}
@@ -195,7 +197,7 @@ function TaskDefinitionManager() {
                      </select>
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="station">Station:</label>
+                     <label style={styles.label} htmlFor="station">Estación:</label>
                      <select
                          id="station"
                          name="station_id"
@@ -203,7 +205,7 @@ function TaskDefinitionManager() {
                          onChange={handleInputChange}
                          style={styles.select}
                      >
-                         <option value="">-- Optional: Select Station --</option>
+                         <option value="">-- Opcional: Seleccionar Estación --</option>
                          {stations.map(st => (
                              <option key={st.station_id} value={st.station_id}>
                                  {st.station_id} - {st.name}
@@ -213,26 +215,26 @@ function TaskDefinitionManager() {
                  </div>
                  <div>
                      <button type="submit" disabled={isLoading} style={styles.button}>
-                         {isLoading ? 'Saving...' : (editMode ? 'Update Task Definition' : 'Add Task Definition')}
+                         {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Definición' : 'Añadir Definición')}
                      </button>
                      {editMode && (
                          <button type="button" onClick={handleCancelEdit} style={styles.button} disabled={isLoading}>
-                             Cancel
+                             Cancelar
                          </button>
                      )}
                  </div>
             </form>
 
-            {isLoading && !taskDefs.length ? <p style={styles.loading}>Loading task definitions...</p> : (
+            {isLoading && !taskDefs.length ? <p style={styles.loading}>Cargando definiciones de tareas...</p> : (
                 <table style={styles.table}>
                     <thead>
                         <tr>
-                            <th style={styles.th}>Name</th>
-                            <th style={styles.th}>Description</th>
-                            <th style={styles.th}>House Type</th> {/* Changed header */}
-                            <th style={styles.th}>Specialty</th>
-                            <th style={styles.th}>Station</th>
-                            <th style={styles.th}>Actions</th>
+                            <th style={styles.th}>Nombre</th>
+                            <th style={styles.th}>Descripción</th>
+                            <th style={styles.th}>Tipo Vivienda</th> {/* Changed header */}
+                            <th style={styles.th}>Especialidad</th>
+                            <th style={styles.th}>Estación</th>
+                            <th style={styles.th}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -244,15 +246,15 @@ function TaskDefinitionManager() {
                                 <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
                                 <td style={styles.td}>{td.station_name ? `${td.station_id} (${td.station_name})` : (td.station_id || 'N/A')}</td>
                                 <td style={styles.td}>
-                                    <button onClick={() => handleEdit(td)} style={styles.button} disabled={isLoading}>Edit</button>
-                                    <button onClick={() => handleDelete(td.task_definition_id)} style={styles.button} disabled={isLoading}>Delete</button>
+                                    <button onClick={() => handleEdit(td)} style={styles.button} disabled={isLoading}>Editar</button>
+                                    <button onClick={() => handleDelete(td.task_definition_id)} style={styles.button} disabled={isLoading}>Eliminar</button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             )}
-            { !isLoading && taskDefs.length === 0 && <p>No task definitions found.</p>}
+            { !isLoading && taskDefs.length === 0 && <p>No se encontraron definiciones de tareas.</p>}
         </div>
     );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import * as adminService from '../../services/adminService';
 
 // --- Sub-component for Editing Parameters per Module ---
+// NOTE: Component names and props remain in English for code consistency
 const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCancel, isLoading, error }) => {
     const [values, setValues] = useState({}); // Store { 'paramId_moduleSeq': value }
 
@@ -41,6 +42,7 @@ const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCanc
                         });
                      } else {
                          // Optionally show an error message for this specific input
+                         // Keep console warnings in English for developers
                          console.warn(`Invalid number format for ${param.name} - Module ${i}: ${currentValue}`);
                      }
                 }
@@ -65,13 +67,13 @@ const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCanc
 
     return (
         <div style={editorStyles.container}>
-            <h4>Edit Parameters for: {houseType.name}</h4>
+            <h4>Editar Parámetros para: {houseType.name}</h4>
             {error && <p style={editorStyles.error}>{error}</p>}
-            {parameters.length === 0 && <p>No parameters defined yet. Add parameters in the 'House Parameters' section first.</p>}
+            {parameters.length === 0 && <p>Aún no se han definido parámetros. Añada parámetros en la sección 'Parámetros de Vivienda' primero.</p>}
 
             {Array.from({ length: houseType.number_of_modules }, (_, i) => i + 1).map(moduleSeq => (
                 <div key={moduleSeq} style={editorStyles.moduleSection}>
-                    <h5>Module {moduleSeq}</h5>
+                    <h5>Módulo {moduleSeq}</h5>
                     {parameters.map(param => {
                         const key = `${param.parameter_id}_${moduleSeq}`;
                         return (
@@ -84,7 +86,7 @@ const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCanc
                                     style={editorStyles.input}
                                     value={values[key] || ''}
                                     onChange={(e) => handleValueChange(param.parameter_id, moduleSeq, e.target.value)}
-                                    placeholder="Value"
+                                    placeholder="Valor"
                                 />
                                 <span style={editorStyles.paramUnit}>({param.unit || 'N/A'})</span>
                             </div>
@@ -94,10 +96,10 @@ const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCanc
             ))}
             <div style={editorStyles.actions}>
                 <button onClick={handleSave} disabled={isLoading} style={styles.button}>
-                    {isLoading ? 'Saving...' : 'Save Parameter Values'}
+                    {isLoading ? 'Guardando...' : 'Guardar Valores de Parámetros'}
                 </button>
                 <button onClick={onCancel} disabled={isLoading} style={styles.button}>
-                    Cancel
+                    Cancelar
                 </button>
             </div>
         </div>
@@ -121,6 +123,7 @@ const styles = { // Reusing styles from other managers
     loading: { fontStyle: 'italic' }
 };
 
+// NOTE: Keep initialFormState keys in English
 const initialFormState = { name: '', description: '', number_of_modules: 1 };
 
 function HouseTypesManager() {
@@ -187,7 +190,7 @@ function HouseTypesManager() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.name || formData.number_of_modules < 1) {
-            setError('House Type Name is required and Number of Modules must be at least 1.');
+            setError('El Nombre del Tipo de Vivienda es obligatorio y el Número de Módulos debe ser al menos 1.');
             return;
         }
         setError('');
@@ -202,14 +205,15 @@ function HouseTypesManager() {
             handleCancelEdit();
             await fetchData(); // Refresh list
         } catch (err) {
-            setError(err.message || `Failed to ${editMode ? 'save' : 'add'} house type`);
+            setError(err.message || `Error al ${editMode ? 'guardar' : 'añadir'} el tipo de vivienda`);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm('Are you sure you want to delete this house type? This will remove associated modules, parameters, and potentially affect task definitions.')) {
+        // Confirmation dialog in Spanish
+        if (window.confirm('¿Está seguro de que desea eliminar este tipo de vivienda? Esto eliminará los módulos asociados, parámetros y podría afectar las definiciones de tareas.')) {
             setError('');
             setIsLoading(true);
             try {
@@ -217,7 +221,7 @@ function HouseTypesManager() {
                 await fetchData(); // Refresh list
                 setEditingParamsFor(null); // Close editor if deleting the edited type
             } catch (err) {
-                setError(err.message || 'Failed to delete house type');
+                setError(err.message || 'Error al eliminar el tipo de vivienda');
             } finally {
                 setIsLoading(false);
             }
@@ -236,7 +240,7 @@ function HouseTypesManager() {
             const values = await adminService.getParametersForHouseType(houseType.house_type_id);
             setExistingParamValues(values);
         } catch (err) {
-            setParamEditorError(err.message || 'Failed to load existing parameter values.');
+            setParamEditorError(err.message || 'Error al cargar los valores de parámetros existentes.');
         } finally {
             setParamEditorLoading(false);
         }
@@ -270,7 +274,7 @@ function HouseTypesManager() {
             }
         } catch (err) {
             success = false;
-            setParamEditorError(err.message || 'Failed to save one or more parameter values.');
+            setParamEditorError(err.message || 'Error al guardar uno o más valores de parámetros.');
         } finally {
             setParamEditorLoading(false);
             if (success) {
@@ -283,31 +287,31 @@ function HouseTypesManager() {
 
     return (
         <div style={styles.container}>
-            <h2>Manage House Types</h2>
+            <h2>Gestionar Tipos de Vivienda</h2>
             {error && <p style={styles.error}>{error}</p>}
 
             {/* Form for Adding/Editing House Type basic info */}
             {!editingParamsFor && ( // Only show form if not editing parameters
                 <form onSubmit={handleSubmit} style={styles.form}>
-                    <h3>{editMode ? 'Edit House Type' : 'Add New House Type'}</h3>
+                    <h3>{editMode ? 'Editar Tipo de Vivienda' : 'Añadir Nuevo Tipo de Vivienda'}</h3>
                     <div style={styles.formRow}>
-                        <label style={styles.label} htmlFor="htName">Name:</label>
-                        <input id="htName" type="text" name="name" placeholder="e.g., Single Family Townhouse A" value={formData.name} onChange={handleInputChange} required style={styles.input} />
+                        <label style={styles.label} htmlFor="htName">Nombre:</label>
+                        <input id="htName" type="text" name="name" placeholder="ej: Casa Unifamiliar Adosada A" value={formData.name} onChange={handleInputChange} required style={styles.input} />
                     </div>
                     <div style={styles.formRow}>
-                        <label style={styles.label} htmlFor="htDesc">Description:</label>
-                        <textarea id="htDesc" name="description" placeholder="Optional description" value={formData.description} onChange={handleInputChange} style={styles.textarea} />
+                        <label style={styles.label} htmlFor="htDesc">Descripción:</label>
+                        <textarea id="htDesc" name="description" placeholder="Descripción opcional" value={formData.description} onChange={handleInputChange} style={styles.textarea} />
                     </div>
                     <div style={styles.formRow}>
-                        <label style={styles.label} htmlFor="htModules">Number of Modules:</label>
+                        <label style={styles.label} htmlFor="htModules">Número de Módulos:</label>
                         <input id="htModules" type="number" name="number_of_modules" value={formData.number_of_modules} onChange={handleInputChange} required min="1" style={{...styles.input, flexGrow: 0, width: '80px'}} />
                     </div>
                     <div>
                         <button type="submit" disabled={isLoading} style={styles.button}>
-                            {isLoading ? 'Saving...' : (editMode ? 'Update House Type' : 'Add House Type')}
+                            {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Tipo Vivienda' : 'Añadir Tipo Vivienda')}
                         </button>
                         {editMode && (
-                            <button type="button" onClick={handleCancelEdit} style={styles.button} disabled={isLoading}>Cancel</button>
+                            <button type="button" onClick={handleCancelEdit} style={styles.button} disabled={isLoading}>Cancelar</button>
                         )}
                     </div>
                 </form>
@@ -328,15 +332,15 @@ function HouseTypesManager() {
 
 
             {/* Table of House Types */}
-            {isLoading && !houseTypes.length ? <p style={styles.loading}>Loading house types...</p> : (
+            {isLoading && !houseTypes.length ? <p style={styles.loading}>Cargando tipos de vivienda...</p> : (
                 <table style={styles.table}>
                     <thead>
                         <tr>
-                            <th style={styles.th}>Name</th>
-                            <th style={styles.th}>Description</th>
-                            <th style={styles.th}>Modules</th>
-                            <th style={styles.th}>Parameters</th> {/* Added Parameters column */}
-                            <th style={styles.th}>Actions</th>
+                            <th style={styles.th}>Nombre</th>
+                            <th style={styles.th}>Descripción</th>
+                            <th style={styles.th}>Módulos</th>
+                            <th style={styles.th}>Parámetros</th> {/* Added Parameters column */}
+                            <th style={styles.th}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -359,7 +363,7 @@ function HouseTypesManager() {
                                     <td style={styles.td}> {/* Parameters Cell */}
                                         {Object.entries(paramsByModule).sort(([a], [b]) => a - b).map(([moduleNum, params]) => (
                                             <div key={moduleNum} style={{ marginBottom: '5px', borderBottom: Object.keys(paramsByModule).length > 1 ? '1px dashed #eee' : 'none', paddingBottom: '3px' }}>
-                                                <strong>Module {moduleNum}:</strong>
+                                                <strong>Módulo {moduleNum}:</strong>
                                                 {params.length > 0 ? (
                                                     <ul style={{ margin: '2px 0 2px 15px', padding: 0, listStyleType: 'disc' }}>
                                                         {params.map(p => (
@@ -369,16 +373,16 @@ function HouseTypesManager() {
                                                         ))}
                                                     </ul>
                                                 ) : (
-                                                    <span style={{ fontStyle: 'italic', marginLeft: '5px' }}>No parameters set</span>
+                                                    <span style={{ fontStyle: 'italic', marginLeft: '5px' }}>Sin parámetros definidos</span>
                                                 )}
                                             </div>
                                         ))}
-                                        {(!ht.parameters || ht.parameters.length === 0) && <span style={{ fontStyle: 'italic', color: '#888' }}>None</span>}
+                                        {(!ht.parameters || ht.parameters.length === 0) && <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>}
                                     </td>
                                     <td style={styles.td}>
-                                        <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Edit Info</button>
-                                        <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Edit Parameters</button>
-                                        <button onClick={() => handleDelete(ht.house_type_id)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Delete</button>
+                                        <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Editar Info</button>
+                                        <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Editar Parámetros</button>
+                                        <button onClick={() => handleDelete(ht.house_type_id)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Eliminar</button>
                                     </td>
                                 </tr>
                             );
@@ -386,7 +390,7 @@ function HouseTypesManager() {
                     </tbody>
                 </table>
             )}
-            {!isLoading && houseTypes.length === 0 && <p>No house types defined yet.</p>}
+            {!isLoading && houseTypes.length === 0 && <p>Aún no se han definido tipos de vivienda.</p>}
         </div>
     );
 }

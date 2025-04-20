@@ -12,6 +12,7 @@ const styles = {
 function DefinitionsManager() {
     return (
         <div style={styles.container}>
+            {/* Optionally add a title if needed, e.g., <h2 style={styles.header}>Gestionar Definiciones</h2> */}
             <h2 style={styles.header}></h2>
 
             <div style={styles.section}>

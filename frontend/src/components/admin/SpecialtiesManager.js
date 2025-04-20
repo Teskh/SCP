@@ -14,12 +14,15 @@ const styles = {
     loading: { fontStyle: 'italic' }
 };
 
+// NOTE: Keep formData keys in English
+const initialFormData = { name: '', description: '' };
+
 function SpecialtiesManager() {
     const [specialties, setSpecialties] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [editMode, setEditMode] = useState(null); // null or specialty_id
-    const [formData, setFormData] = useState({ name: '', description: '' });
+    const [formData, setFormData] = useState(initialFormData);
 
     const fetchSpecialties = useCallback(async () => {
         setIsLoading(true);
@@ -28,7 +31,7 @@ function SpecialtiesManager() {
             const data = await adminService.getSpecialties();
             setSpecialties(data);
         } catch (err) {
-            setError(err.message || 'Failed to fetch specialties');
+            setError(err.message || 'Error al obtener las especialidades');
         } finally {
             setIsLoading(false);
         }
@@ -50,7 +53,7 @@ function SpecialtiesManager() {
 
     const handleCancelEdit = () => {
         setEditMode(null);
-        setFormData({ name: '', description: '' });
+        setFormData(initialFormData); // Reset using initial state object
         setError('');
     };
 
@@ -68,34 +71,35 @@ function SpecialtiesManager() {
             handleCancelEdit(); // Reset form
             await fetchSpecialties(); // Refresh list
         } catch (err) {
-            setError(err.message || `Failed to ${editMode ? 'update' : 'add'} specialty`);
+            setError(err.message || `Error al ${editMode ? 'actualizar' : 'añadir'} la especialidad`);
         } finally {
              setIsLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm('Are you sure you want to delete this specialty?')) {
+        // Confirmation dialog in Spanish
+        if (window.confirm('¿Está seguro de que desea eliminar esta especialidad?')) {
             setError('');
             try {
                 await adminService.deleteSpecialty(id);
                 await fetchSpecialties(); // Refresh list
             } catch (err) {
-                setError(err.message || 'Failed to delete specialty');
+                setError(err.message || 'Error al eliminar la especialidad');
             }
         }
     };
 
     return (
         <div style={styles.container}>
-            <h2>Manage Specialties</h2>
+            <h2>Gestionar Especialidades</h2>
             {error && <p style={styles.error}>{error}</p>}
 
             <form onSubmit={handleSubmit} style={styles.form}>
                 <input
                     type="text"
                     name="name"
-                    placeholder="Specialty Name"
+                    placeholder="Nombre Especialidad"
                     value={formData.name}
                     onChange={handleInputChange}
                     required
@@ -104,28 +108,28 @@ function SpecialtiesManager() {
                 <input
                     type="text"
                     name="description"
-                    placeholder="Description (Optional)"
+                    placeholder="Descripción (Opcional)"
                     value={formData.description}
                     onChange={handleInputChange}
                     style={styles.input}
                 />
                 <button type="submit" disabled={isLoading} style={styles.button}>
-                    {isLoading ? 'Saving...' : (editMode ? 'Update Specialty' : 'Add Specialty')}
+                    {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Especialidad' : 'Añadir Especialidad')}
                 </button>
                 {editMode && (
                     <button type="button" onClick={handleCancelEdit} style={styles.button}>
-                        Cancel
+                        Cancelar
                     </button>
                 )}
             </form>
 
-            {isLoading && !specialties.length ? <p style={styles.loading}>Loading specialties...</p> : (
+            {isLoading && !specialties.length ? <p style={styles.loading}>Cargando especialidades...</p> : (
                 <table style={styles.table}>
                     <thead>
                         <tr>
-                            <th style={styles.th}>Name</th>
-                            <th style={styles.th}>Description</th>
-                            <th style={styles.th}>Actions</th>
+                            <th style={styles.th}>Nombre</th>
+                            <th style={styles.th}>Descripción</th>
+                            <th style={styles.th}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -134,15 +138,15 @@ function SpecialtiesManager() {
                                 <td style={styles.td}>{spec.name}</td>
                                 <td style={styles.td}>{spec.description}</td>
                                 <td style={styles.td}>
-                                    <button onClick={() => handleEdit(spec)} style={styles.button} disabled={isLoading}>Edit</button>
-                                    <button onClick={() => handleDelete(spec.specialty_id)} style={styles.button} disabled={isLoading}>Delete</button>
+                                    <button onClick={() => handleEdit(spec)} style={styles.button} disabled={isLoading}>Editar</button>
+                                    <button onClick={() => handleDelete(spec.specialty_id)} style={styles.button} disabled={isLoading}>Eliminar</button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             )}
-             { !isLoading && specialties.length === 0 && <p>No specialties found.</p>}
+             { !isLoading && specialties.length === 0 && <p>No se encontraron especialidades.</p>}
         </div>
     );
 }

@@ -29,8 +29,8 @@ function App() {
     <div className="App">
         {/* Simple Navigation - Replace with a proper NavBar component later */}
         <nav style={navStyle}>
-            <Link to="/" style={linkStyle}>Home (Placeholder)</Link>
-            <Link to="/admin" style={linkStyle}>Admin Dashboard</Link>
+            <Link to="/" style={linkStyle}>Inicio (Temporal)</Link>
+            <Link to="/admin" style={linkStyle}>Panel de Administración</Link>
             {/* Add links for Worker View, Login/Logout later */}
         </nav>
 
@@ -38,8 +38,8 @@ function App() {
              {/* Default route could redirect or show a landing page */}
             <Route path="/" element={
                 <div>
-                    <h2>Welcome to Production Tracker</h2>
-                    <p>Select an area from the navigation above.</p>
+                    <h2>Bienvenido al Seguimiento de Producción</h2>
+                    <p>Seleccione un área de la navegación superior.</p>
                     {/* Or redirect immediately: <Navigate replace to="/admin" /> */}
                 </div>
             } />
@@ -52,7 +52,7 @@ function App() {
                  <Route path="house-types" element={<HouseTypesManager />} />
                  <Route path="house-parameters" element={<HouseParametersManager />} />
                  {/* Index route for /admin (optional, shows welcome message) */}
-                 {/* <Route index element={<div>Select an admin section</div>} /> */}
+                 {/* <Route index element={<div>Seleccione una sección de administración</div>} /> */}
                  {/* Add other admin sub-routes (e.g., projects) here */}
             </Route>
 
@@ -61,7 +61,7 @@ function App() {
             {/* <Route path="/login" element={<LoginPage />} /> */}
 
             {/* Catch-all for not found routes */}
-            <Route path="*" element={<div><h2>Page Not Found</h2><Link to="/">Go Home</Link></div>} />
+            <Route path="*" element={<div><h2>Página No Encontrada</h2><Link to="/">Ir a Inicio</Link></div>} />
         </Routes>
     </div>
   );
