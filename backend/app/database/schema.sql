@@ -135,9 +135,6 @@ CREATE TABLE HouseTypeParameters (
     house_type_parameter_id INTEGER PRIMARY KEY AUTOINCREMENT,
     house_type_id INTEGER NOT NULL,
     parameter_id INTEGER NOT NULL,
-    value REAL NOT NULL, -- Using REAL to accommodate various numeric types (integers, decimals)
-    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
-    parameter_id INTEGER NOT NULL,
     module_sequence_number INTEGER NOT NULL, -- Which module within the house type this value applies to (1-based index)
     value REAL NOT NULL, -- Using REAL to accommodate various numeric types (integers, decimals)
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,

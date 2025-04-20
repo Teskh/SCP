@@ -313,10 +313,6 @@ def delete_house_type_parameter(house_type_parameter_id):
     """Removes a specific parameter link from a house type."""
     db = get_db()
     cursor = db.execute("DELETE FROM HouseTypeParameters WHERE house_type_parameter_id = ?", (house_type_parameter_id,))
-    db.commit()
-    # This query doesn't easily return the ID with UPSERT without another query.
-    # We'll return True for success for now.
-    return True
     except sqlite3.Error as e:
         print(f"Error adding/updating house type parameter: {e}") # Replace with logging
         return False
