@@ -174,7 +174,7 @@ INSERT INTO Stations (station_id, name, line_type, sequence_order) VALUES
 ('W3', 'Línea de Paneles 3: Estación de Revestimiento PLI 2', 'W', 3),
 ('W4', 'Línea de Paneles 4: Estación de Revestimiento PLA 1', 'W', 4),
 ('W5', 'Línea de Paneles 5: Estación de Revestimiento PLA 2', 'W', 5),
-('M1', 'Almacén Intermedio', 'M', 6), -- M1 follows W5
+('M1', 'Magazine', 'M', 6), -- M1 follows W5
 ('A1', 'Línea de Ensamblaje A: Estación 1', 'A', 7), -- A1, B1, C1 are parallel
 ('A2', 'Línea de Ensamblaje A: Estación 2', 'A', 8),
 ('A3', 'Línea de Ensamblaje A: Estación 3', 'A', 9),
