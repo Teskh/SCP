@@ -12,7 +12,7 @@ const styles = {
 function DefinitionsManager() {
     return (
         <div style={styles.container}>
-            <h2 style={styles.header}>Manage Definitions</h2>
+            <h2 style={styles.header}></h2>
 
             <div style={styles.section}>
                 <TaskDefinitionManager />
