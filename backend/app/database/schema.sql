@@ -43,25 +43,6 @@ CREATE TABLE Stations (
     sequence_order INTEGER NOT NULL -- For sorting/determining flow (e.g., W1=1, W5=5, M1=6, A1=7, B1=7, C1=7, A2=8, B2=8, C2=8 ...)
 );
 
-CREATE TABLE Projects (
-    project_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE, -- e.g., 'Maple Street Development - Phase 1'
-    description TEXT,
-    status TEXT DEFAULT 'Planned' -- e.g., 'Planned', 'Active', 'Completed', 'On Hold'
-);
-
-
-CREATE TABLE ProjectModules (
-    project_module_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER NOT NULL,
-    house_type_id INTEGER NOT NULL, -- Renamed from module_type_id
-    quantity INTEGER NOT NULL,  -- Number of this house type in the project
-    FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE,
-    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE
-    -- Unique constraint to prevent duplicates: one entry per project-house type pair
-    UNIQUE (project_id, house_type_id)
-);
-
 CREATE TABLE Modules (
     module_id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
