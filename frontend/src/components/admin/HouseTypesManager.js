@@ -347,6 +347,13 @@ function HouseTypesManager() {
                 />
             )}
 
+            {/* Panels Modal */}
+            {editingPanelsFor && (
+                <HouseTypePanelsModal
+                    houseType={editingPanelsFor}
+                    onClose={handleClosePanelsModal}
+                />
+            )}
 
             {/* Table of House Types */}
             {isLoading && !houseTypes.length ? <p style={styles.loading}>Cargando tipos de vivienda...</p> : (
