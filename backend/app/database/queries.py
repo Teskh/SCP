@@ -91,6 +91,75 @@ def update_task_definition(task_definition_id, name, description, house_type_id,
     db.commit()
     return cursor.rowcount > 0
 
+# === Admin Team ===
+
+def get_all_admin_team():
+    """Fetches all members from the AdminTeam table."""
+    db = get_db()
+    cursor = db.execute(
+        "SELECT admin_team_id, first_name, last_name, role, pin, is_active FROM AdminTeam ORDER BY last_name, first_name"
+    )
+    members = cursor.fetchall()
+    return [dict(row) for row in members]
+
+def add_admin_team_member(first_name, last_name, role, pin, is_active):
+    """Adds a new member to the AdminTeam table."""
+    db = get_db()
+    # Validate role before inserting
+    allowed_roles = ['Supervisor', 'Gestión de producción', 'Admin']
+    if role not in allowed_roles:
+        raise ValueError(f"Invalid role specified: {role}. Must be one of {allowed_roles}")
+
+    try:
+        cursor = db.execute(
+            "INSERT INTO AdminTeam (first_name, last_name, role, pin, is_active) VALUES (?, ?, ?, ?, ?)",
+            (first_name, last_name, role, pin, is_active)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        # Handle potential unique constraint violation (e.g., duplicate PIN)
+        print(f"Error adding admin team member (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise to be caught by the API layer
+    except sqlite3.Error as e:
+        print(f"Error adding admin team member: {e}") # Replace with logging
+        return None
+
+def update_admin_team_member(admin_team_id, first_name, last_name, role, pin, is_active):
+    """Updates an existing member in the AdminTeam table."""
+    db = get_db()
+    # Validate role before updating
+    allowed_roles = ['Supervisor', 'Gestión de producción', 'Admin']
+    if role not in allowed_roles:
+        raise ValueError(f"Invalid role specified: {role}. Must be one of {allowed_roles}")
+
+    try:
+        cursor = db.execute(
+            """UPDATE AdminTeam SET
+               first_name = ?, last_name = ?, role = ?, pin = ?, is_active = ?
+               WHERE admin_team_id = ?""",
+            (first_name, last_name, role, pin, is_active, admin_team_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.IntegrityError as e:
+        print(f"Error updating admin team member (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise
+    except sqlite3.Error as e:
+        print(f"Error updating admin team member: {e}") # Replace with logging
+        return False
+
+def delete_admin_team_member(admin_team_id):
+    """Deletes a member from the AdminTeam table."""
+    db = get_db()
+    try:
+        cursor = db.execute("DELETE FROM AdminTeam WHERE admin_team_id = ?", (admin_team_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting admin team member: {e}") # Replace with logging
+        return False
+
 def delete_task_definition(task_definition_id):
     """Deletes a task definition."""
     db = get_db()

@@ -4,9 +4,10 @@ import './App.css';
 import AdminDashboard from './pages/AdminDashboard';
 import DefinitionsManager from './components/admin/DefinitionsManager';
 import WorkersManager from './components/admin/WorkersManager';
-import HouseTypesManager from './components/admin/HouseTypesManager'; // Import new component
-import HouseParametersManager from './components/admin/HouseParametersManager'; // Import new component
-import SpecialtiesManager from './components/admin/SpecialtiesManager'; // Import SpecialtiesManager
+import HouseTypesManager from './components/admin/HouseTypesManager';
+import HouseParametersManager from './components/admin/HouseParametersManager';
+import SpecialtiesManager from './components/admin/SpecialtiesManager';
+import AdminTeamManager from './components/admin/AdminTeamManager'; // Import new component
 // Import other pages/components as needed
 
 // Basic Nav styling
@@ -52,7 +53,8 @@ function App() {
                  <Route path="workers" element={<WorkersManager />} />
                  <Route path="house-types" element={<HouseTypesManager />} />
                  <Route path="house-parameters" element={<HouseParametersManager />} />
-                 <Route path="specialties" element={<SpecialtiesManager />} /> {/* Added route for Specialties */}
+                 <Route path="specialties" element={<SpecialtiesManager />} />
+                 <Route path="admin-team" element={<AdminTeamManager />} /> {/* Added route for Admin Team */}
                  {/* Index route for /admin (optional, shows welcome message) */}
                  {/* <Route index element={<div>Seleccione una sección de administración</div>} /> */}
                  {/* Add other admin sub-routes (e.g., projects) here */}

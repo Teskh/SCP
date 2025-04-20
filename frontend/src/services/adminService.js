@@ -70,6 +70,50 @@ export const deleteWorker = async (id) => {
     return true; // Indicate success
 };
 
+// === Admin Team ===
+
+export const getAdminTeam = async () => {
+    const response = await fetch(`${API_BASE_URL}/admin_team`);
+    return handleResponse(response);
+};
+
+export const addAdminTeamMember = async (memberData) => {
+    const payload = {
+        ...memberData,
+        is_active: Boolean(memberData.is_active) // Ensure boolean
+    };
+    const response = await fetch(`${API_BASE_URL}/admin_team`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const updateAdminTeamMember = async (id, memberData) => {
+     const payload = {
+        ...memberData,
+        is_active: Boolean(memberData.is_active) // Ensure boolean
+    };
+    const response = await fetch(`${API_BASE_URL}/admin_team/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const deleteAdminTeamMember = async (id) => {
+    const response = await fetch(`${API_BASE_URL}/admin_team/${id}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
 export const addSpecialty = async (specialtyData) => {
     const response = await fetch(`${API_BASE_URL}/specialties`, {
         method: 'POST',

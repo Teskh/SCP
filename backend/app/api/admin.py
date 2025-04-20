@@ -337,7 +337,123 @@ def update_specialty(specialty_id):
         else:
             return jsonify(error="Specialty not found or update failed"), 404
     except Exception as e:
-        return jsonify(error=str(e)), 500
+        current_app.logger.error(f"Error in get_stations: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch stations"), 500
+
+# === Admin Team Routes ===
+
+@admin_bp.route('/admin_team', methods=['GET'])
+def get_admin_team():
+    """Get all admin team members."""
+    try:
+        members = queries.get_all_admin_team()
+        return jsonify(members)
+    except Exception as e:
+        current_app.logger.error(f"Error in get_admin_team: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch admin team members"), 500
+
+@admin_bp.route('/admin_team', methods=['POST'])
+def add_admin_team_member():
+    """Add a new admin team member."""
+    data = request.get_json()
+    required_fields = ['first_name', 'last_name', 'role', 'pin']
+    if not data or not all(k in data for k in required_fields):
+        return jsonify(error=f"Missing required fields: {', '.join(required_fields)}"), 400
+
+    first_name = data['first_name']
+    last_name = data['last_name']
+    role = data['role']
+    pin = data['pin'] # Add validation/hashing if needed
+    is_active = data.get('is_active', True)
+
+    if not isinstance(is_active, bool):
+        is_active = bool(is_active)
+
+    # Basic PIN validation (e.g., length)
+    if len(str(pin)) < 4:
+         return jsonify(error="PIN must be at least 4 digits"), 400
+
+    try:
+        new_id = queries.add_admin_team_member(first_name, last_name, role, pin, is_active)
+        if new_id:
+            new_member = {
+                'admin_team_id': new_id, 'first_name': first_name, 'last_name': last_name,
+                'role': role, 'pin': pin, 'is_active': is_active
+            }
+            return jsonify(new_member), 201
+        else:
+            # This case might not be reached if exceptions are raised properly in queries
+            return jsonify(error="Failed to add admin team member"), 500
+    except ValueError as ve: # Catch role validation error from query
+        return jsonify(error=str(ve)), 400
+    except sqlite3.IntegrityError as ie: # Catch unique constraint errors (e.g., PIN)
+         # Check if the error message indicates a PIN conflict
+         if 'UNIQUE constraint failed: AdminTeam.pin' in str(ie):
+             return jsonify(error="PIN already exists"), 409 # Conflict
+         else:
+             current_app.logger.error(f"Integrity error adding admin team member: {ie}", exc_info=True)
+             return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error in add_admin_team_member: {e}", exc_info=True)
+        return jsonify(error="Failed to add admin team member"), 500
+
+
+@admin_bp.route('/admin_team/<int:admin_team_id>', methods=['PUT'])
+def update_admin_team_member(admin_team_id):
+    """Update an existing admin team member."""
+    data = request.get_json()
+    required_fields = ['first_name', 'last_name', 'role', 'pin', 'is_active']
+    if not data or not all(k in data for k in required_fields):
+        return jsonify(error=f"Missing required fields for update: {', '.join(required_fields)}"), 400
+
+    first_name = data['first_name']
+    last_name = data['last_name']
+    role = data['role']
+    pin = data['pin']
+    is_active = data['is_active']
+
+    if not isinstance(is_active, bool):
+        is_active = bool(is_active)
+
+    # Basic PIN validation
+    if len(str(pin)) < 4:
+         return jsonify(error="PIN must be at least 4 digits"), 400
+
+    try:
+        success = queries.update_admin_team_member(admin_team_id, first_name, last_name, role, pin, is_active)
+        if success:
+            updated_member = {
+                'admin_team_id': admin_team_id, 'first_name': first_name, 'last_name': last_name,
+                'role': role, 'pin': pin, 'is_active': is_active
+            }
+            return jsonify(updated_member)
+        else:
+            return jsonify(error="Admin team member not found or update failed"), 404
+    except ValueError as ve: # Catch role validation error
+        return jsonify(error=str(ve)), 400
+    except sqlite3.IntegrityError as ie: # Catch unique constraint errors (e.g., PIN)
+         if 'UNIQUE constraint failed: AdminTeam.pin' in str(ie):
+             return jsonify(error="PIN already exists"), 409 # Conflict
+         else:
+             current_app.logger.error(f"Integrity error updating admin team member: {ie}", exc_info=True)
+             return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error in update_admin_team_member: {e}", exc_info=True)
+        return jsonify(error="Failed to update admin team member"), 500
+
+
+@admin_bp.route('/admin_team/<int:admin_team_id>', methods=['DELETE'])
+def delete_admin_team_member(admin_team_id):
+    """Delete an admin team member."""
+    try:
+        success = queries.delete_admin_team_member(admin_team_id)
+        if success:
+            return jsonify(message="Admin team member deleted successfully"), 200 # Or 204
+        else:
+            return jsonify(error="Admin team member not found"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in delete_admin_team_member: {e}", exc_info=True)
+        return jsonify(error="Failed to delete admin team member"), 500
 
 
 @admin_bp.route('/specialties/<int:specialty_id>', methods=['DELETE'])

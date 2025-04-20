@@ -148,3 +148,18 @@ CREATE INDEX idx_housetypeparameters_house_type ON HouseTypeParameters (house_ty
 CREATE INDEX idx_housetypeparameters_parameter ON HouseTypeParameters (parameter_id);
 CREATE INDEX idx_housetypeparameters_module_seq ON HouseTypeParameters (module_sequence_number);
 CREATE INDEX idx_housetypeparameters_composite ON HouseTypeParameters (house_type_id, parameter_id, module_sequence_number); -- Index for the unique constraint
+
+-- ========= Admin Team =========
+
+CREATE TABLE AdminTeam (
+    admin_team_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('Supervisor', 'Gestión de producción', 'Admin')), -- Define allowed roles
+    pin TEXT NOT NULL UNIQUE, -- Assuming PIN should be unique for admin team members too
+    is_active INTEGER DEFAULT 1 -- Boolean (0=false, 1=true)
+);
+
+-- Indexes for AdminTeam
+CREATE INDEX idx_adminteam_role ON AdminTeam (role);
+CREATE INDEX idx_adminteam_is_active ON AdminTeam (is_active);
