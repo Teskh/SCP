@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Fragment } from 'react'; // Added Fragment
 import * as adminService from '../../services/adminService';
+import HouseTypePanelsModal from './HouseTypePanelsModal'; // Import the panels modal
 
 // --- Sub-component for Editing Parameters per Module ---
 // NOTE: Component names and props remain in English for code consistency
@@ -140,6 +141,9 @@ function HouseTypesManager() {
     const [paramEditorLoading, setParamEditorLoading] = useState(false);
     const [paramEditorError, setParamEditorError] = useState('');
 
+    // State for the panels modal
+    const [editingPanelsFor, setEditingPanelsFor] = useState(null); // null or houseType object
+
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         setError('');
@@ -226,6 +230,19 @@ function HouseTypesManager() {
                 setIsLoading(false);
             }
         }
+    };
+
+    // --- Panel Modal Handlers ---
+    const handleOpenPanelsModal = (houseType) => {
+        setEditingPanelsFor(houseType);
+        setEditMode(null); // Close main edit form if open
+        setEditingParamsFor(null); // Close parameter editor if open
+    };
+
+    const handleClosePanelsModal = () => {
+        setEditingPanelsFor(null);
+        // Optionally refetch data if panels might affect other parts, though unlikely here
+        // fetchData();
     };
 
     // --- Parameter Editor Logic ---
@@ -374,9 +391,10 @@ function HouseTypesManager() {
                                         {(!ht.parameters || ht.parameters.length === 0) && <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>}
                                     </td>
                                     <td style={styles.td}>
-                                        <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Editar Info</button>
-                                        <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Editar Parámetros</button>
-                                        <button onClick={() => handleDelete(ht.house_type_id)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Eliminar</button>
+                                        <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Editar Info</button>
+                                        <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Editar Parámetros</button>
+                                        <button onClick={() => handleOpenPanelsModal(ht)} style={{...styles.button, backgroundColor: '#17a2b8', color: 'white'}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Paneles</button> {/* Added Panels Button */}
+                                        <button onClick={() => handleDelete(ht.house_type_id)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Eliminar</button>
                                     </td>
                                 </tr>
                             );
