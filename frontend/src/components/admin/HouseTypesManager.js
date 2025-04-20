@@ -387,13 +387,6 @@ function HouseTypesManager() {
                 </table>
             )}
             {!isLoading && houseTypes.length === 0 && <p>No house types defined yet.</p>}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
-            {!isLoading && houseTypes.length === 0 && <p>No house types defined yet.</p>}
         </div>
     );
 }
