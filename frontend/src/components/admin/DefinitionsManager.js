@@ -1,5 +1,5 @@
 import React from 'react';
-import SpecialtiesManager from './SpecialtiesManager';
+// Removed SpecialtiesManager import
 import TaskDefinitionManager from './TaskDefinitionManager';
 
 // Basic styling for layout within this section
@@ -19,9 +19,7 @@ function DefinitionsManager() {
                 <TaskDefinitionManager />
             </div>
 
-            <div style={styles.section}>
-                <SpecialtiesManager />
-            </div>
+            {/* Removed SpecialtiesManager section */}
         </div>
     );
 }

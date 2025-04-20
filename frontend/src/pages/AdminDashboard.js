@@ -89,6 +89,17 @@ function AdminDashboard() {
                             Parámetros Vivienda
                         </Link>
                     </li>
+                    <li style={styles.navItem}>
+                        <Link
+                            to="/admin/specialties"
+                            style={{
+                                ...styles.navLink,
+                                ...(isActive('/admin/specialties') ? styles.navLinkActive : {})
+                            }}
+                        >
+                            Especialidades
+                        </Link>
+                    </li>
                     {/* Add links for Projects, Production Planning etc. later */}
                 </ul>
             </nav>

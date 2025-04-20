@@ -51,6 +51,7 @@ function App() {
                  <Route path="workers" element={<WorkersManager />} />
                  <Route path="house-types" element={<HouseTypesManager />} />
                  <Route path="house-parameters" element={<HouseParametersManager />} />
+                 <Route path="specialties" element={<SpecialtiesManager />} /> {/* Added route for Specialties */}
                  {/* Index route for /admin (optional, shows welcome message) */}
                  {/* <Route index element={<div>Seleccione una sección de administración</div>} /> */}
                  {/* Add other admin sub-routes (e.g., projects) here */}
