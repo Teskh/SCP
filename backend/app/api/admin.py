@@ -710,14 +710,6 @@ def update_house_type_module_panel(house_type_panel_id):
     except Exception as e:
         current_app.logger.error(f"Error updating panel {house_type_panel_id}: {e}", exc_info=True)
         return jsonify(error="Failed to update panel"), 500
-                'panel_group': panel_group,
-                'panel_code': panel_code,
-                'typology': typology if typology else None
-                # Note: house_type_id and module_sequence_number are not updated here
-            }
-            return jsonify(updated_panel), 200
-        else:
-            return jsonify(error="Panel not found or update failed"), 404
     except (ValueError, sqlite3.IntegrityError) as e: # Catch validation or constraint errors
         current_app.logger.warning(f"Failed to update panel {house_type_panel_id}: {e}")
         if 'UNIQUE constraint failed' in str(e):
