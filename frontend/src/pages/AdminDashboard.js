@@ -111,7 +111,18 @@ function AdminDashboard() {
                             Equipo Admin
                         </Link>
                     </li>
-                    {/* Add links for Projects, Production Planning etc. later */}
+                     <li style={styles.navItem}>
+                        <Link
+                            to="/admin/projects"
+                            style={{
+                                ...styles.navLink,
+                                ...(isActive('/admin/projects') ? styles.navLinkActive : {})
+                            }}
+                        >
+                            Proyectos
+                        </Link>
+                    </li>
+                    {/* Add links for Production Planning etc. later */}
                 </ul>
             </nav>
             <main style={styles.content}>

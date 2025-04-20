@@ -155,7 +155,139 @@ def add_specialty():
             return jsonify(error="Failed to add specialty, possibly duplicate name"), 409 # Conflict
     except Exception as e:
         current_app.logger.error(f"Error in get_stations: {e}", exc_info=True)
-        return jsonify(error="Failed to fetch stations"), 500
+        current_app.logger.error(f"Error in get_specialties: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch specialties"), 500
+
+# === Projects Routes ===
+
+@admin_bp.route('/projects', methods=['GET'])
+def get_projects():
+    """Get all projects with their associated house types."""
+    try:
+        projects = queries.get_all_projects()
+        return jsonify(projects)
+    except Exception as e:
+        current_app.logger.error(f"Error in get_projects: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch projects"), 500
+
+@admin_bp.route('/projects', methods=['POST'])
+def add_project():
+    """Add a new project."""
+    data = request.get_json()
+    if not data or 'name' not in data or 'house_types' not in data:
+        return jsonify(error="Missing required fields (name, house_types)"), 400
+    if not isinstance(data['house_types'], list) or not data['house_types']:
+        return jsonify(error="'house_types' must be a non-empty list"), 400
+
+    name = data['name']
+    description = data.get('description', '')
+    status = data.get('status', 'Planned') # Default status
+    house_types_data = data['house_types']
+
+    # Basic validation for house_types data
+    for ht in house_types_data:
+        if not isinstance(ht, dict) or 'house_type_id' not in ht or 'quantity' not in ht:
+            return jsonify(error="Each item in 'house_types' must be an object with 'house_type_id' and 'quantity'"), 400
+        try:
+            int(ht['house_type_id'])
+            quantity = int(ht['quantity'])
+            if quantity <= 0:
+                 return jsonify(error="Quantity must be a positive integer"), 400
+        except (ValueError, TypeError):
+            return jsonify(error="Invalid house_type_id or quantity (must be integers)"), 400
+
+    try:
+        new_id = queries.add_project(name, description, status, house_types_data)
+        if new_id:
+            # Fetch the newly created project to return it
+            new_project = queries.get_project_by_id(new_id)
+            return jsonify(new_project), 201
+        else:
+            # This might happen if the query function returns None without raising an exception
+            return jsonify(error="Failed to add project"), 500
+    except sqlite3.IntegrityError as ie:
+         if 'UNIQUE constraint failed: Projects.name' in str(ie):
+             return jsonify(error="Project name already exists"), 409 # Conflict
+         else:
+             current_app.logger.error(f"Integrity error adding project: {ie}", exc_info=True)
+             return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error in add_project: {e}", exc_info=True)
+        return jsonify(error="Failed to add project"), 500
+
+
+@admin_bp.route('/projects/<int:project_id>', methods=['GET'])
+def get_project(project_id):
+    """Get a single project by ID."""
+    try:
+        project = queries.get_project_by_id(project_id)
+        if project:
+            return jsonify(project)
+        else:
+            return jsonify(error="Project not found"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in get_project {project_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch project"), 500
+
+
+@admin_bp.route('/projects/<int:project_id>', methods=['PUT'])
+def update_project(project_id):
+    """Update an existing project."""
+    data = request.get_json()
+    if not data or 'name' not in data or 'house_types' not in data:
+        return jsonify(error="Missing required fields (name, house_types)"), 400
+    if not isinstance(data['house_types'], list): # Allow empty list for update? Yes.
+        return jsonify(error="'house_types' must be a list"), 400
+
+    name = data['name']
+    description = data.get('description', '')
+    status = data.get('status', 'Planned')
+    house_types_data = data['house_types']
+
+    # Basic validation for house_types data
+    for ht in house_types_data:
+        if not isinstance(ht, dict) or 'house_type_id' not in ht or 'quantity' not in ht:
+            return jsonify(error="Each item in 'house_types' must be an object with 'house_type_id' and 'quantity'"), 400
+        try:
+            int(ht['house_type_id'])
+            quantity = int(ht['quantity'])
+            if quantity <= 0:
+                 return jsonify(error="Quantity must be a positive integer"), 400
+        except (ValueError, TypeError):
+            return jsonify(error="Invalid house_type_id or quantity (must be integers)"), 400
+
+    try:
+        success = queries.update_project(project_id, name, description, status, house_types_data)
+        if success:
+            updated_project = queries.get_project_by_id(project_id) # Fetch updated data
+            return jsonify(updated_project)
+        else:
+            # Could be not found or DB error during update
+            return jsonify(error="Project not found or update failed"), 404
+    except sqlite3.IntegrityError as ie:
+         if 'UNIQUE constraint failed: Projects.name' in str(ie):
+             return jsonify(error="Project name already exists"), 409 # Conflict
+         else:
+             current_app.logger.error(f"Integrity error updating project: {ie}", exc_info=True)
+             return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error in update_project {project_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update project"), 500
+
+
+@admin_bp.route('/projects/<int:project_id>', methods=['DELETE'])
+def delete_project(project_id):
+    """Delete a project."""
+    try:
+        success = queries.delete_project(project_id)
+        if success:
+            return jsonify(message="Project deleted successfully"), 200 # Or 204 No Content
+        else:
+            return jsonify(error="Project not found"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in delete_project {project_id}: {e}", exc_info=True)
+        # Check for specific constraint errors if CASCADE delete isn't sufficient
+        return jsonify(error="Failed to delete project"), 500
 
 
 # === House Parameters Routes ===

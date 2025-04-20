@@ -1,5 +1,154 @@
 import sqlite3
+import sqlite3
 from .connection import get_db
+
+# === Projects ===
+
+def get_all_projects():
+    """Fetches all projects with their associated house types and quantities."""
+    db = get_db()
+    projects_cursor = db.execute(
+        "SELECT project_id, name, description, status FROM Projects ORDER BY name"
+    )
+    projects_list = [dict(row) for row in projects_cursor.fetchall()]
+    projects_dict = {p['project_id']: p for p in projects_list}
+
+    # Fetch associated house types (ProjectModules)
+    modules_query = """
+        SELECT
+            pm.project_id, pm.house_type_id, pm.quantity,
+            ht.name as house_type_name
+        FROM ProjectModules pm
+        JOIN HouseTypes ht ON pm.house_type_id = ht.house_type_id
+        ORDER BY pm.project_id, ht.name
+    """
+    modules_cursor = db.execute(modules_query)
+    project_modules = modules_cursor.fetchall()
+
+    # Group modules by project_id
+    for p_id in projects_dict:
+        projects_dict[p_id]['house_types'] = [] # Initialize list
+
+    for module_row in project_modules:
+        module_dict = dict(module_row)
+        p_id = module_dict['project_id']
+        if p_id in projects_dict:
+            # Remove redundant project_id before appending
+            del module_dict['project_id']
+            projects_dict[p_id]['house_types'].append(module_dict)
+
+    return list(projects_dict.values())
+
+def get_project_by_id(project_id):
+    """Fetches a single project by its ID, including house types."""
+    db = get_db()
+    project_cursor = db.execute(
+        "SELECT project_id, name, description, status FROM Projects WHERE project_id = ?",
+        (project_id,)
+    )
+    project = project_cursor.fetchone()
+    if not project:
+        return None
+
+    project_dict = dict(project)
+
+    # Fetch associated house types
+    modules_query = """
+        SELECT
+            pm.house_type_id, pm.quantity,
+            ht.name as house_type_name
+        FROM ProjectModules pm
+        JOIN HouseTypes ht ON pm.house_type_id = ht.house_type_id
+        WHERE pm.project_id = ?
+        ORDER BY ht.name
+    """
+    modules_cursor = db.execute(modules_query, (project_id,))
+    project_dict['house_types'] = [dict(row) for row in modules_cursor.fetchall()]
+
+    return project_dict
+
+def add_project(name, description, status, house_types_data):
+    """Adds a new project and its associated house types."""
+    db = get_db()
+    try:
+        # Start transaction
+        with db:
+            # Insert project
+            project_cursor = db.execute(
+                "INSERT INTO Projects (name, description, status) VALUES (?, ?, ?)",
+                (name, description, status)
+            )
+            project_id = project_cursor.lastrowid
+
+            # Insert associated house types (ProjectModules)
+            if house_types_data:
+                project_modules_data = [
+                    (project_id, ht['house_type_id'], ht['quantity'])
+                    for ht in house_types_data if ht.get('house_type_id') and ht.get('quantity')
+                ]
+                if project_modules_data:
+                    db.executemany(
+                        "INSERT INTO ProjectModules (project_id, house_type_id, quantity) VALUES (?, ?, ?)",
+                        project_modules_data
+                    )
+        return project_id # Return the ID of the newly created project
+    except sqlite3.IntegrityError as e:
+        # Handle potential unique constraint violation (e.g., duplicate name)
+        print(f"Error adding project (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise to be caught by API layer
+    except sqlite3.Error as e:
+        print(f"Error adding project: {e}") # Replace with logging
+        return None
+
+def update_project(project_id, name, description, status, house_types_data):
+    """Updates an existing project and its associated house types."""
+    db = get_db()
+    try:
+        with db: # Use transaction
+            # Update project details
+            update_cursor = db.execute(
+                "UPDATE Projects SET name = ?, description = ?, status = ? WHERE project_id = ?",
+                (name, description, status, project_id)
+            )
+            if update_cursor.rowcount == 0:
+                return False # Project not found
+
+            # --- Update ProjectModules ---
+            # 1. Delete existing ProjectModules for this project
+            db.execute("DELETE FROM ProjectModules WHERE project_id = ?", (project_id,))
+
+            # 2. Insert new ProjectModules based on house_types_data
+            if house_types_data:
+                project_modules_data = [
+                    (project_id, ht['house_type_id'], ht['quantity'])
+                    for ht in house_types_data if ht.get('house_type_id') and ht.get('quantity')
+                ]
+                if project_modules_data:
+                    db.executemany(
+                        "INSERT INTO ProjectModules (project_id, house_type_id, quantity) VALUES (?, ?, ?)",
+                        project_modules_data
+                    )
+        return True # Success
+    except sqlite3.IntegrityError as e:
+        print(f"Error updating project (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise
+    except sqlite3.Error as e:
+        print(f"Error updating project: {e}") # Replace with logging
+        return False
+
+def delete_project(project_id):
+    """Deletes a project. Cascading delete handles ProjectModules."""
+    db = get_db()
+    try:
+        # Cascading delete in schema handles ProjectModules
+        cursor = db.execute("DELETE FROM Projects WHERE project_id = ?", (project_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        # Handle potential foreign key issues if project_id is used elsewhere without CASCADE
+        print(f"Error deleting project: {e}") # Replace with logging
+        return False
+
 
 # === Specialties ===
 

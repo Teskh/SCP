@@ -10,6 +10,26 @@ CREATE TABLE Workers (
     FOREIGN KEY (supervisor_id) REFERENCES Workers(worker_id)
 );
 
+-- ========= Projects =========
+
+CREATE TABLE Projects (
+    project_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Maple Street Development - Phase 1'
+    description TEXT,
+    status TEXT DEFAULT 'Planned' -- e.g., 'Planned', 'Active', 'Completed', 'On Hold'
+);
+
+CREATE TABLE ProjectModules (
+    project_module_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    house_type_id INTEGER NOT NULL, -- Renamed from module_type_id
+    quantity INTEGER NOT NULL,  -- Number of this house type in the project
+    FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE,
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    -- Unique constraint to prevent duplicates: one entry per project-house type pair
+    UNIQUE (project_id, house_type_id)
+);
+
 CREATE TABLE Specialties (
     specialty_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE, -- e.g., 'Electrician', 'Plumber', 'Framer'
@@ -115,6 +135,8 @@ CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
 CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
 CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id);
 CREATE INDEX idx_projectmodules_house_type ON ProjectModules (house_type_id); -- Renamed index
+CREATE INDEX idx_projects_name ON Projects (name);
+CREATE INDEX idx_projects_status ON Projects (status);
 
 -- ========= House Types and Parameters =========
 

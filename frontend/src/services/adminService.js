@@ -282,6 +282,46 @@ export const deleteHouseParameter = async (id) => {
     return true; // Indicate success
 };
 
+
+// === Projects ===
+
+export const getProjects = async () => {
+    const response = await fetch(`${API_BASE_URL}/projects`);
+    return handleResponse(response);
+};
+
+export const addProject = async (projectData) => {
+    // projectData should include name, description, status, and house_types array
+    // e.g., { name: 'Proj A', description: 'Desc', status: 'Planned', house_types: [{ house_type_id: 1, quantity: 5 }, ...] }
+    const response = await fetch(`${API_BASE_URL}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projectData),
+    });
+    return handleResponse(response);
+};
+
+export const updateProject = async (id, projectData) => {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projectData),
+    });
+    return handleResponse(response);
+};
+
+export const deleteProject = async (id) => {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
+
 // === House Type Parameters (Linking) ===
 
 export const getParametersForHouseType = async (houseTypeId) => {

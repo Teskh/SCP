@@ -7,7 +7,8 @@ import WorkersManager from './components/admin/WorkersManager';
 import HouseTypesManager from './components/admin/HouseTypesManager';
 import HouseParametersManager from './components/admin/HouseParametersManager';
 import SpecialtiesManager from './components/admin/SpecialtiesManager';
-import AdminTeamManager from './components/admin/AdminTeamManager'; // Import new component
+import AdminTeamManager from './components/admin/AdminTeamManager';
+import ProjectsManager from './components/admin/ProjectsManager'; // Import ProjectsManager
 // Import other pages/components as needed
 
 // Basic Nav styling
@@ -54,10 +55,10 @@ function App() {
                  <Route path="house-types" element={<HouseTypesManager />} />
                  <Route path="house-parameters" element={<HouseParametersManager />} />
                  <Route path="specialties" element={<SpecialtiesManager />} />
-                 <Route path="admin-team" element={<AdminTeamManager />} /> {/* Added route for Admin Team */}
+                 <Route path="admin-team" element={<AdminTeamManager />} />
+                 <Route path="projects" element={<ProjectsManager />} /> {/* Added route for Projects */}
                  {/* Index route for /admin (optional, shows welcome message) */}
                  {/* <Route index element={<div>Seleccione una sección de administración</div>} /> */}
-                 {/* Add other admin sub-routes (e.g., projects) here */}
             </Route>
 
             {/* Define other top-level routes here later */}
