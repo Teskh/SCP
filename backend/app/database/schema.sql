@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS TaskLogs;
 DROP TABLE IF EXISTS TaskDefinitions;
 DROP TABLE IF EXISTS Modules;
 DROP TABLE IF EXISTS ProjectModules;
+DROP TABLE IF EXISTS HouseTypePanels; -- Added
 DROP TABLE IF EXISTS HouseTypeParameters;
 DROP TABLE IF EXISTS HouseParameters;
 DROP TABLE IF EXISTS HouseTypes;
@@ -171,6 +172,25 @@ CREATE INDEX idx_housetypeparameters_house_type ON HouseTypeParameters (house_ty
 CREATE INDEX idx_housetypeparameters_parameter ON HouseTypeParameters (parameter_id);
 CREATE INDEX idx_housetypeparameters_module_seq ON HouseTypeParameters (module_sequence_number);
 CREATE INDEX idx_housetypeparameters_composite ON HouseTypeParameters (house_type_id, parameter_id, module_sequence_number); -- Index for the unique constraint
+
+-- ========= House Type Panels =========
+
+CREATE TABLE HouseTypePanels (
+    house_type_panel_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_type_id INTEGER NOT NULL,
+    module_sequence_number INTEGER NOT NULL, -- Which module within the house type this panel belongs to (1-based index)
+    panel_group TEXT NOT NULL CHECK(panel_group IN ('Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros')), -- Category of the panel
+    panel_code TEXT NOT NULL, -- Identifier/name of the panel
+    typology TEXT, -- Optional: Specific typology this panel applies to (NULL means applies to all)
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    -- Ensure panel code is unique within the same house type, module, and group (allowing same code in different groups/modules)
+    UNIQUE (house_type_id, module_sequence_number, panel_group, panel_code)
+);
+
+-- Indexes for HouseTypePanels
+CREATE INDEX idx_housetypepanels_house_type_module ON HouseTypePanels (house_type_id, module_sequence_number);
+CREATE INDEX idx_housetypepanels_group ON HouseTypePanels (panel_group);
+
 
 -- ========= Admin Team =========
 

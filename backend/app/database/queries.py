@@ -240,6 +240,81 @@ def update_task_definition(task_definition_id, name, description, house_type_id,
     db.commit()
     return cursor.rowcount > 0
 
+# === House Type Panels ===
+
+def get_panels_for_house_type_module(house_type_id, module_sequence_number):
+    """Fetches all panels for a specific module within a house type."""
+    db = get_db()
+    query = """
+        SELECT
+            house_type_panel_id, panel_group, panel_code, typology
+        FROM HouseTypePanels
+        WHERE house_type_id = ? AND module_sequence_number = ?
+        ORDER BY panel_group, panel_code
+    """
+    cursor = db.execute(query, (house_type_id, module_sequence_number))
+    return [dict(row) for row in cursor.fetchall()]
+
+def add_panel_to_house_type_module(house_type_id, module_sequence_number, panel_group, panel_code, typology):
+    """Adds a new panel to a specific module within a house type."""
+    db = get_db()
+    # Validate panel_group
+    allowed_groups = ['Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros']
+    if panel_group not in allowed_groups:
+        raise ValueError(f"Invalid panel_group: {panel_group}")
+
+    try:
+        cursor = db.execute(
+            """INSERT INTO HouseTypePanels
+               (house_type_id, module_sequence_number, panel_group, panel_code, typology)
+               VALUES (?, ?, ?, ?, ?)""",
+            (house_type_id, module_sequence_number, panel_group, panel_code, typology if typology else None) # Store empty string as NULL
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        # Could be UNIQUE constraint violation or CHECK constraint
+        print(f"Error adding panel (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise
+    except sqlite3.Error as e:
+        print(f"Error adding panel: {e}") # Replace with logging
+        return None
+
+def update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_code, typology):
+    """Updates an existing panel."""
+    db = get_db()
+    # Validate panel_group
+    allowed_groups = ['Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros']
+    if panel_group not in allowed_groups:
+        raise ValueError(f"Invalid panel_group: {panel_group}")
+
+    try:
+        cursor = db.execute(
+            """UPDATE HouseTypePanels SET
+               panel_group = ?, panel_code = ?, typology = ?
+               WHERE house_type_panel_id = ?""",
+            (panel_group, panel_code, typology if typology else None, house_type_panel_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.IntegrityError as e:
+        print(f"Error updating panel (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise
+    except sqlite3.Error as e:
+        print(f"Error updating panel: {e}") # Replace with logging
+        return False
+
+def delete_panel_from_house_type_module(house_type_panel_id):
+    """Deletes a panel by its ID."""
+    db = get_db()
+    try:
+        cursor = db.execute("DELETE FROM HouseTypePanels WHERE house_type_panel_id = ?", (house_type_panel_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting panel: {e}") # Replace with logging
+        return False
+
 # === Admin Team ===
 
 def get_all_admin_team():

@@ -70,6 +70,45 @@ export const deleteWorker = async (id) => {
     return true; // Indicate success
 };
 
+// === House Type Panels ===
+
+export const getHouseTypePanels = async (houseTypeId, moduleSequenceNumber) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/modules/${moduleSequenceNumber}/panels`);
+    return handleResponse(response);
+};
+
+export const addHouseTypePanel = async (houseTypeId, moduleSequenceNumber, panelData) => {
+    // panelData should include panel_group, panel_code, typology (optional)
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/modules/${moduleSequenceNumber}/panels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(panelData),
+    });
+    return handleResponse(response);
+};
+
+// Update uses the specific panel ID
+export const updateHouseTypePanel = async (houseTypePanelId, panelData) => {
+    const response = await fetch(`${API_BASE_URL}/house_type_panels/${houseTypePanelId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(panelData), // Should contain panel_group, panel_code, typology
+    });
+    return handleResponse(response);
+};
+
+// Delete uses the specific panel ID
+export const deleteHouseTypePanel = async (houseTypePanelId) => {
+    const response = await fetch(`${API_BASE_URL}/house_type_panels/${houseTypePanelId}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
 
 // === Supervisors (Subset of Admin Team) ===
 

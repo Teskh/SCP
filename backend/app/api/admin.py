@@ -440,10 +440,139 @@ def delete_parameter_from_house_type_module_route(house_type_id, parameter_id, m
         current_app.logger.error(f"Error deleting parameter value for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
         return jsonify(error="Failed to remove parameter value"), 500
 
+# === House Type Panels Routes ===
+
+@admin_bp.route('/house_types/<int:house_type_id>/modules/<int:module_sequence_number>/panels', methods=['GET'])
+def get_house_type_module_panels(house_type_id, module_sequence_number):
+    """Get all panels for a specific module within a house type."""
+    try:
+        # Validate module sequence is positive integer
+        module_seq_int = int(module_sequence_number)
+        if module_seq_int <= 0:
+             return jsonify(error="Invalid module_sequence_number, must be positive"), 400
+    except (ValueError, TypeError):
+         return jsonify(error="Invalid module_sequence_number, must be integer"), 400
+
+    try:
+        # Optional: Validate module_sequence_number against HouseType.number_of_modules
+        # house_type = queries.get_house_type_by_id(house_type_id) # Need to implement this query
+        # if not house_type or module_seq_int > house_type['number_of_modules']:
+        #    return jsonify(error="module_sequence_number exceeds the number of modules for this house type"), 400
+
+        panels = queries.get_panels_for_house_type_module(house_type_id, module_seq_int)
+        return jsonify(panels)
+    except Exception as e:
+        current_app.logger.error(f"Error getting panels for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch panels"), 500
+
+@admin_bp.route('/house_types/<int:house_type_id>/modules/<int:module_sequence_number>/panels', methods=['POST'])
+def add_house_type_module_panel(house_type_id, module_sequence_number):
+    """Add a new panel to a specific module within a house type."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ('panel_group', 'panel_code')):
+        return jsonify(error="Missing required fields (panel_group, panel_code)"), 400
+
+    panel_group = data['panel_group']
+    panel_code = data['panel_code']
+    typology = data.get('typology') # Optional
+
+    try:
+        # Validate module sequence is positive integer
+        module_seq_int = int(module_sequence_number)
+        if module_seq_int <= 0:
+             return jsonify(error="Invalid module_sequence_number, must be positive"), 400
+    except (ValueError, TypeError):
+         return jsonify(error="Invalid module_sequence_number, must be integer"), 400
+
+    try:
+        # Optional: Validate module_sequence_number against HouseType.number_of_modules
+        # house_type = queries.get_house_type_by_id(house_type_id) # Need to implement this query
+        # if not house_type or module_seq_int > house_type['number_of_modules']:
+        #    return jsonify(error="module_sequence_number exceeds the number of modules for this house type"), 400
+
+        new_id = queries.add_panel_to_house_type_module(house_type_id, module_seq_int, panel_group, panel_code, typology)
+        if new_id:
+            new_panel = {
+                'house_type_panel_id': new_id,
+                'house_type_id': house_type_id,
+                'module_sequence_number': module_seq_int,
+                'panel_group': panel_group,
+                'panel_code': panel_code,
+                'typology': typology if typology else None
+            }
+            return jsonify(new_panel), 201
+        else:
+            # This case might not be reached if exceptions are raised properly
+            return jsonify(error="Failed to add panel"), 500
+    except (ValueError, sqlite3.IntegrityError) as e: # Catch validation or constraint errors
+        current_app.logger.warning(f"Failed to add panel for house type {house_type_id}, module {module_seq_int}: {e}")
+        # Provide more specific error messages based on the exception type if needed
+        if 'UNIQUE constraint failed' in str(e):
+             return jsonify(error="Panel code already exists for this group and module"), 409 # Conflict
+        elif 'CHECK constraint failed' in str(e):
+             return jsonify(error="Invalid panel group specified"), 400 # Bad Request
+        else:
+             return jsonify(error=str(e)), 400 # Bad Request for other ValueErrors
+    except Exception as e:
+        current_app.logger.error(f"Error adding panel for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
+        return jsonify(error="Failed to add panel"), 500
+
+# Use house_type_panel_id for PUT and DELETE as it's the primary key
+@admin_bp.route('/house_type_panels/<int:house_type_panel_id>', methods=['PUT'])
+def update_house_type_module_panel(house_type_panel_id):
+    """Update an existing panel by its ID."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ('panel_group', 'panel_code')):
+        return jsonify(error="Missing required fields (panel_group, panel_code)"), 400
+
+    panel_group = data['panel_group']
+    panel_code = data['panel_code']
+    typology = data.get('typology') # Optional
+
+    try:
+        success = queries.update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_code, typology)
+        if success:
+            # Fetch the updated panel to return it? Or just return the input data?
+            # Returning input data + ID is simpler
+            updated_panel = {
+                'house_type_panel_id': house_type_panel_id,
+                'panel_group': panel_group,
+                'panel_code': panel_code,
+                'typology': typology if typology else None
+                # Note: house_type_id and module_sequence_number are not updated here
+            }
+            return jsonify(updated_panel), 200
+        else:
+            return jsonify(error="Panel not found or update failed"), 404
+    except (ValueError, sqlite3.IntegrityError) as e: # Catch validation or constraint errors
+        current_app.logger.warning(f"Failed to update panel {house_type_panel_id}: {e}")
+        if 'UNIQUE constraint failed' in str(e):
+             return jsonify(error="Panel code already exists for this group and module"), 409 # Conflict
+        elif 'CHECK constraint failed' in str(e):
+             return jsonify(error="Invalid panel group specified"), 400 # Bad Request
+        else:
+             return jsonify(error=str(e)), 400 # Bad Request
+    except Exception as e:
+        current_app.logger.error(f"Error updating panel {house_type_panel_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update panel"), 500
+
+@admin_bp.route('/house_type_panels/<int:house_type_panel_id>', methods=['DELETE'])
+def delete_house_type_module_panel(house_type_panel_id):
+    """Delete a panel by its ID."""
+    try:
+        success = queries.delete_panel_from_house_type_module(house_type_panel_id)
+        if success:
+            return jsonify(message="Panel deleted successfully"), 200 # Or 204 No Content
+        else:
+            return jsonify(error="Panel not found"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error deleting panel {house_type_panel_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to delete panel"), 500
+
 
 # Route to delete by the specific HouseTypeParameter link ID (useful if frontend has it)
-@admin_bp.route('/house_type_parameters/<int:house_type_parameter_id>', methods=['DELETE'])
-def delete_house_type_parameter_route(house_type_parameter_id):
+# @admin_bp.route('/house_type_parameters/<int:house_type_parameter_id>', methods=['DELETE']) # Commented out as per original code
+# def delete_house_type_parameter_route(house_type_parameter_id):
     """Remove a specific parameter link by its own ID."""
 #     try:
 #         success = queries.delete_house_type_parameter(house_type_parameter_id)

@@ -30,7 +30,7 @@ interact with the database, process QR code data (if received from the frontend)
 Database:
 Technology: SQLite3.
 Reasoning: Simplicity, file-based, sufficient for the low-concurrency, low-stakes nature of this internal application.
-Schema Outline: Contains tables for Projects, Modules (tracking current_station_id), Stations (defining W1-C6 layout), ModuleTypes, TaskDefinitions, Workers (with PIN), Specialties, TaskLogs (execution records), and TaskPauses. (Detailed schema defined separately).
+Schema Outline: Contains tables for Projects, Modules (tracking current_station_id), Stations (defining W1-C6 layout), HouseTypes, HouseParameters, HouseTypeParameters (linking parameters to specific modules within a type), HouseTypePanels (defining panels per module within a type), TaskDefinitions, Workers (with PIN), Specialties, TaskLogs (execution records), and TaskPauses. (Detailed schema defined separately).
 4. Core User Workflow:
 Login: Worker approaches the tablet, logs in via PIN (primary) or potentially QR code (secondary, experimental).
 Context Awareness: Application identifies the station_id based on tablet configuration. Should ask user to identify if Line A, B, or C if at that station (since there's only one tablet for each station, for each of the three parallel lines)
@@ -38,7 +38,7 @@ Module Identification: System determines the module_id currently at this station
 Task Presentation: Displays relevant pending tasks for the module, station, and worker's specialty.
 Task Completion: Worker selects and marks a task as done.
 Logging: System records the completion in TaskLogs.
-Admin Interface: A separate section/route accessible after admin login allows for managing Workers, Projects, Modules, Task Definitions, etc. (New components will be added to manage House Types, House Parameters, and their relationships).
+Admin Interface: A separate section/route accessible after admin login allows for managing Workers, Projects, Modules, Task Definitions, House Types (including defining parameters and panels per module), Specialties, etc.
 Logout/Idle: Automatic logout after inactivity or manual logout.
 5. Login Mechanisms:
 Primary: PIN entry.
@@ -55,4 +55,4 @@ Full-Screen SPA (React): Essential for tablet kiosk experience.
 Defined Production Flow: Logic tied to the specific station layout.
 No Task Dependencies (Initial): Workflow managed by users.
 Station-Context Driven: Core logic relies on fixed tablet location.
-Separate Admin Interface: For data management (List of tasks, List of workers/specialties, Production planning)
+Separate Admin Interface: For data management (List of tasks, List of workers/specialties, Production planning, House Types including Parameters and Panels per module)
