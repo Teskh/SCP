@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getProjects, addProject, updateProject, deleteProject, getHouseTypes } from '../../services/adminService';
-import styles from './AdminComponentStyles'; // Assuming shared styles
+import styles from './AdminComponentStyles.js'; // Assuming .js extension for style object file
 
 const initialFormState = {
     name: '',
