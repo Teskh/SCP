@@ -310,15 +310,6 @@ def add_or_update_house_type_parameter(house_type_id, parameter_id, module_seque
         return False
 
 def delete_house_type_parameter(house_type_parameter_id):
-    """Removes a specific parameter link from a house type."""
-    db = get_db()
-    cursor = db.execute("DELETE FROM HouseTypeParameters WHERE house_type_parameter_id = ?", (house_type_parameter_id,))
-    except sqlite3.Error as e:
-        print(f"Error adding/updating house type parameter: {e}") # Replace with logging
-        return False
-
-# Keep the function to delete by the specific link ID
-def delete_house_type_parameter(house_type_parameter_id):
     """Removes a specific parameter link from a house type by its own ID."""
     db = get_db()
     cursor = db.execute("DELETE FROM HouseTypeParameters WHERE house_type_parameter_id = ?", (house_type_parameter_id,))
