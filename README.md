@@ -56,3 +56,4 @@ Defined Production Flow: Logic tied to the specific station layout.
 No Task Dependencies (Initial): Workflow managed by users.
 Station-Context Driven: Core logic relies on fixed tablet location.
 Separate Admin Interface: For data management (List of tasks, List of workers/specialties, Production planning, House Types including Parameters and Panels per module)
+Ensure keeping this document in context when making any change, as well as our schema and App.js.

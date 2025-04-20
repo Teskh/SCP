@@ -1,6 +1,7 @@
 import logging # Import logging
+import sqlite3 # Import sqlite3
 from flask import Blueprint, request, jsonify, current_app
-from ..database import queries
+from ..database import queries, connection # Import connection to use get_db
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -586,7 +587,6 @@ def add_house_type_module_panel(house_type_id, module_sequence_number):
     panel_code = data['panel_code']
     typology = data.get('typology') # Optional
     multiwall_id = data.get('multiwall_id') # Optional
-    multiwall_id = data.get('multiwall_id') # Optional
 
     try:
         # Validate module sequence is positive integer
@@ -607,7 +607,8 @@ def add_house_type_module_panel(house_type_id, module_sequence_number):
             # Fetch the newly added panel to get potentially joined multiwall_code
             # This is slightly less efficient but ensures consistency
             # Alternatively, construct manually if multiwall_code isn't needed immediately
-            panel_cursor = current_app.db.execute(
+            db = connection.get_db() # Get DB connection
+            panel_cursor = db.execute(
                  """SELECT htp.house_type_panel_id, htp.panel_group, htp.panel_code, htp.typology,
                            htp.multiwall_id, mw.multiwall_code
                     FROM HouseTypePanels htp
@@ -667,12 +668,14 @@ def update_house_type_module_panel(house_type_panel_id):
     panel_group = data['panel_group']
     panel_code = data['panel_code']
     typology = data.get('typology') # Optional
+    multiwall_id = data.get('multiwall_id') # Optional
 
     try:
         success = queries.update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_code, typology, multiwall_id)
         if success:
             # Fetch the updated panel to return potentially updated multiwall_code
-            panel_cursor = current_app.db.execute(
+            db = connection.get_db() # Get DB connection
+            panel_cursor = db.execute(
                  """SELECT htp.house_type_panel_id, htp.panel_group, htp.panel_code, htp.typology,
                            htp.multiwall_id, mw.multiwall_code
                     FROM HouseTypePanels htp
