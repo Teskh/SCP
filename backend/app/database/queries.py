@@ -101,11 +101,41 @@ def delete_task_definition(task_definition_id):
 # === Helper functions to get related data (for dropdowns etc.) ===
 
 def get_all_house_types():
-    """Fetches all house types for dropdowns."""
+    """
+    Fetches all house types, including their associated parameters grouped by house type.
+    """
     db = get_db()
-    # Include number_of_modules as it might be useful context
+    # Fetch basic house type info
     cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes ORDER BY name")
-    return [dict(row) for row in cursor.fetchall()]
+    house_types_list = [dict(row) for row in cursor.fetchall()]
+    house_types_dict = {ht['house_type_id']: ht for ht in house_types_list}
+
+    # Fetch all parameters linked to house types
+    param_query = """
+        SELECT
+            htp.house_type_id, htp.parameter_id, htp.module_sequence_number, htp.value,
+            hp.name as parameter_name, hp.unit as parameter_unit
+        FROM HouseTypeParameters htp
+        JOIN HouseParameters hp ON htp.parameter_id = hp.parameter_id
+        ORDER BY htp.house_type_id, htp.module_sequence_number, hp.name
+    """
+    cursor = db.execute(param_query)
+    parameters = cursor.fetchall()
+
+    # Group parameters by house_type_id
+    for ht_id in house_types_dict:
+        house_types_dict[ht_id]['parameters'] = [] # Initialize parameters list
+
+    for param_row in parameters:
+        param_dict = dict(param_row)
+        ht_id = param_dict['house_type_id']
+        if ht_id in house_types_dict:
+            # Remove redundant house_type_id from the parameter dict before appending
+            del param_dict['house_type_id']
+            house_types_dict[ht_id]['parameters'].append(param_dict)
+
+    # Return the list of house type dictionaries, now including parameters
+    return list(house_types_dict.values())
 
 def get_all_stations():
     """Fetches all stations for dropdowns."""

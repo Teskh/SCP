@@ -335,19 +335,58 @@ function HouseTypesManager() {
                             <th style={styles.th}>Name</th>
                             <th style={styles.th}>Description</th>
                             <th style={styles.th}>Modules</th>
+                            <th style={styles.th}>Parameters</th> {/* Added Parameters column */}
                             <th style={styles.th}>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {houseTypes.map((ht) => (
-                            <tr key={ht.house_type_id}>
-                                <td style={styles.td}>{ht.name}</td>
-                                <td style={styles.td}>{ht.description}</td>
-                                <td style={styles.td}>{ht.number_of_modules}</td>
-                                <td style={styles.td}>
-                                    <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Edit Info</button>
-                                    <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Edit Parameters</button>
-                                    <button onClick={() => handleDelete(ht.house_type_id)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Delete</button>
+                        {houseTypes.map((ht) => {
+                            // Group parameters by module sequence number for display
+                            const paramsByModule = (ht.parameters || []).reduce((acc, param) => {
+                                const moduleNum = param.module_sequence_number;
+                                if (!acc[moduleNum]) {
+                                    acc[moduleNum] = [];
+                                }
+                                acc[moduleNum].push(param);
+                                return acc;
+                            }, {});
+
+                            return (
+                                <tr key={ht.house_type_id}>
+                                    <td style={styles.td}>{ht.name}</td>
+                                    <td style={styles.td}>{ht.description}</td>
+                                    <td style={styles.td}>{ht.number_of_modules}</td>
+                                    <td style={styles.td}> {/* Parameters Cell */}
+                                        {Object.entries(paramsByModule).sort(([a], [b]) => a - b).map(([moduleNum, params]) => (
+                                            <div key={moduleNum} style={{ marginBottom: '5px', borderBottom: Object.keys(paramsByModule).length > 1 ? '1px dashed #eee' : 'none', paddingBottom: '3px' }}>
+                                                <strong>Module {moduleNum}:</strong>
+                                                {params.length > 0 ? (
+                                                    <ul style={{ margin: '2px 0 2px 15px', padding: 0, listStyleType: 'disc' }}>
+                                                        {params.map(p => (
+                                                            <li key={p.parameter_id} style={{ fontSize: '0.9em' }}>
+                                                                {p.parameter_name} ({p.parameter_unit || 'N/A'}): {p.value}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <span style={{ fontStyle: 'italic', marginLeft: '5px' }}>No parameters set</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {(!ht.parameters || ht.parameters.length === 0) && <span style={{ fontStyle: 'italic', color: '#888' }}>None</span>}
+                                    </td>
+                                    <td style={styles.td}>
+                                        <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Edit Info</button>
+                                        <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Edit Parameters</button>
+                                        <button onClick={() => handleDelete(ht.house_type_id)} style={styles.button} disabled={isLoading || !!editingParamsFor}>Delete</button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            )}
+            {!isLoading && houseTypes.length === 0 && <p>No house types defined yet.</p>}
                                 </td>
                             </tr>
                         ))}
