@@ -49,9 +49,11 @@ function App() {
                  {/* Child routes rendered by Outlet in AdminDashboard */}
                  <Route path="definitions" element={<DefinitionsManager />} />
                  <Route path="workers" element={<WorkersManager />} />
+                 <Route path="house-types" element={<HouseTypesManager />} />
+                 <Route path="house-parameters" element={<HouseParametersManager />} />
                  {/* Index route for /admin (optional, shows welcome message) */}
                  {/* <Route index element={<div>Select an admin section</div>} /> */}
-                 {/* Add other admin sub-routes here */}
+                 {/* Add other admin sub-routes (e.g., projects) here */}
             </Route>
 
             {/* Define other top-level routes here later */}
