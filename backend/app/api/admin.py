@@ -1,5 +1,10 @@
+import logging # Import logging
 from flask import Blueprint, request, jsonify, current_app
 from ..database import queries
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint('admin', __name__)
 
