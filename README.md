@@ -30,7 +30,7 @@ interact with the database, process QR code data (if received from the frontend)
 Database:
 Technology: SQLite3.
 Reasoning: Simplicity, file-based, sufficient for the low-concurrency, low-stakes nature of this internal application.
-Schema Outline: Contains tables for Projects, Modules (tracking current_station_id), Stations (defining W1-C6 layout), HouseTypes, HouseParameters, HouseTypeParameters (linking parameters to specific modules within a type), HouseTypePanels (defining panels per module within a type), TaskDefinitions, Workers (with PIN), Specialties, TaskLogs (execution records), and TaskPauses. (Detailed schema defined separately).
+Schema Outline: Contains tables for Projects, Modules (tracking current_station_id), Stations (defining W1-C6 layout), HouseTypes, HouseParameters, HouseTypeParameters (linking parameters to specific modules within a type), Multiwalls (defining groups of panels), HouseTypePanels (defining panels per module within a type, optionally linked to a Multiwall), TaskDefinitions, Workers (with PIN), Specialties, TaskLogs (execution records), and TaskPauses. (Detailed schema defined separately).
 4. Core User Workflow:
 Login: Worker approaches the tablet, logs in via PIN (primary) or potentially QR code (secondary, experimental).
 Context Awareness: Application identifies the station_id based on tablet configuration. Should ask user to identify if Line A, B, or C if at that station (since there's only one tablet for each station, for each of the three parallel lines)

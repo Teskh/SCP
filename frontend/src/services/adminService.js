@@ -78,21 +78,30 @@ export const getHouseTypePanels = async (houseTypeId, moduleSequenceNumber) => {
 };
 
 export const addHouseTypePanel = async (houseTypeId, moduleSequenceNumber, panelData) => {
-    // panelData should include panel_group, panel_code, typology (optional)
+    // panelData should include panel_group, panel_code, typology (optional), multiwall_id (optional)
+    const payload = {
+        ...panelData,
+        multiwall_id: panelData.multiwall_id || null // Ensure null is sent if empty/undefined
+    };
     const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/modules/${moduleSequenceNumber}/panels`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(panelData),
+        body: JSON.stringify(payload),
     });
     return handleResponse(response);
 };
 
 // Update uses the specific panel ID
 export const updateHouseTypePanel = async (houseTypePanelId, panelData) => {
+    // panelData should include panel_group, panel_code, typology (optional), multiwall_id (optional)
+     const payload = {
+        ...panelData,
+        multiwall_id: panelData.multiwall_id || null // Ensure null is sent if empty/undefined
+    };
     const response = await fetch(`${API_BASE_URL}/house_type_panels/${houseTypePanelId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(panelData), // Should contain panel_group, panel_code, typology
+        body: JSON.stringify(payload),
     });
     return handleResponse(response);
 };
@@ -100,6 +109,44 @@ export const updateHouseTypePanel = async (houseTypePanelId, panelData) => {
 // Delete uses the specific panel ID
 export const deleteHouseTypePanel = async (houseTypePanelId) => {
     const response = await fetch(`${API_BASE_URL}/house_type_panels/${houseTypePanelId}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
+// === Multiwalls ===
+
+export const getMultiwalls = async (houseTypeId, moduleSequenceNumber) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/modules/${moduleSequenceNumber}/multiwalls`);
+    return handleResponse(response);
+};
+
+export const addMultiwall = async (houseTypeId, moduleSequenceNumber, multiwallData) => {
+    // multiwallData should include panel_group, multiwall_code
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/modules/${moduleSequenceNumber}/multiwalls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(multiwallData),
+    });
+    return handleResponse(response);
+};
+
+export const updateMultiwall = async (multiwallId, multiwallData) => {
+    // multiwallData should include panel_group, multiwall_code
+    const response = await fetch(`${API_BASE_URL}/multiwalls/${multiwallId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(multiwallData),
+    });
+    return handleResponse(response);
+};
+
+export const deleteMultiwall = async (multiwallId) => {
+    const response = await fetch(`${API_BASE_URL}/multiwalls/${multiwallId}`, {
         method: 'DELETE',
     });
     if (!response.ok && response.status !== 204) {

@@ -243,19 +243,21 @@ def update_task_definition(task_definition_id, name, description, house_type_id,
 # === House Type Panels ===
 
 def get_panels_for_house_type_module(house_type_id, module_sequence_number):
-    """Fetches all panels for a specific module within a house type."""
+    """Fetches all panels for a specific module within a house type, including multiwall info."""
     db = get_db()
     query = """
         SELECT
-            house_type_panel_id, panel_group, panel_code, typology
-        FROM HouseTypePanels
-        WHERE house_type_id = ? AND module_sequence_number = ?
-        ORDER BY panel_group, panel_code
+            htp.house_type_panel_id, htp.panel_group, htp.panel_code, htp.typology,
+            htp.multiwall_id, mw.multiwall_code
+        FROM HouseTypePanels htp
+        LEFT JOIN Multiwalls mw ON htp.multiwall_id = mw.multiwall_id
+        WHERE htp.house_type_id = ? AND htp.module_sequence_number = ?
+        ORDER BY htp.panel_group, mw.multiwall_code, htp.panel_code -- Order by group, then multiwall, then panel
     """
     cursor = db.execute(query, (house_type_id, module_sequence_number))
     return [dict(row) for row in cursor.fetchall()]
 
-def add_panel_to_house_type_module(house_type_id, module_sequence_number, panel_group, panel_code, typology):
+def add_panel_to_house_type_module(house_type_id, module_sequence_number, panel_group, panel_code, typology, multiwall_id=None):
     """Adds a new panel to a specific module within a house type."""
     db = get_db()
     # Validate panel_group
@@ -263,12 +265,19 @@ def add_panel_to_house_type_module(house_type_id, module_sequence_number, panel_
     if panel_group not in allowed_groups:
         raise ValueError(f"Invalid panel_group: {panel_group}")
 
+    # Optional: Validate that if multiwall_id is provided, its panel_group matches the panel's panel_group
+    if multiwall_id:
+        mw_cursor = db.execute("SELECT panel_group FROM Multiwalls WHERE multiwall_id = ?", (multiwall_id,))
+        mw_row = mw_cursor.fetchone()
+        if not mw_row or mw_row['panel_group'] != panel_group:
+             raise ValueError("Panel group must match the assigned multiwall's group.")
+
     try:
         cursor = db.execute(
             """INSERT INTO HouseTypePanels
-               (house_type_id, module_sequence_number, panel_group, panel_code, typology)
-               VALUES (?, ?, ?, ?, ?)""",
-            (house_type_id, module_sequence_number, panel_group, panel_code, typology if typology else None) # Store empty string as NULL
+               (house_type_id, module_sequence_number, panel_group, panel_code, typology, multiwall_id)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (house_type_id, module_sequence_number, panel_group, panel_code, typology if typology else None, multiwall_id)
         )
         db.commit()
         return cursor.lastrowid
@@ -280,7 +289,7 @@ def add_panel_to_house_type_module(house_type_id, module_sequence_number, panel_
         print(f"Error adding panel: {e}") # Replace with logging
         return None
 
-def update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_code, typology):
+def update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_code, typology, multiwall_id=None):
     """Updates an existing panel."""
     db = get_db()
     # Validate panel_group
@@ -288,12 +297,24 @@ def update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_c
     if panel_group not in allowed_groups:
         raise ValueError(f"Invalid panel_group: {panel_group}")
 
+    # Optional: Validate that if multiwall_id is provided, its panel_group matches the panel's panel_group
+    if multiwall_id:
+        mw_cursor = db.execute("SELECT panel_group FROM Multiwalls WHERE multiwall_id = ?", (multiwall_id,))
+        mw_row = mw_cursor.fetchone()
+        # If multiwall exists, its group must match the new panel group
+        if mw_row and mw_row['panel_group'] != panel_group:
+             raise ValueError("Panel group must match the assigned multiwall's group.")
+        # If multiwall_id is provided but doesn't exist, should we error or just set NULL? Let's error for now.
+        elif not mw_row:
+             raise ValueError(f"Assigned multiwall_id {multiwall_id} does not exist.")
+
+
     try:
         cursor = db.execute(
             """UPDATE HouseTypePanels SET
-               panel_group = ?, panel_code = ?, typology = ?
+               panel_group = ?, panel_code = ?, typology = ?, multiwall_id = ?
                WHERE house_type_panel_id = ?""",
-            (panel_group, panel_code, typology if typology else None, house_type_panel_id)
+            (panel_group, panel_code, typology if typology else None, multiwall_id, house_type_panel_id)
         )
         db.commit()
         return cursor.rowcount > 0
@@ -313,6 +334,93 @@ def delete_panel_from_house_type_module(house_type_panel_id):
         return cursor.rowcount > 0
     except sqlite3.Error as e:
         print(f"Error deleting panel: {e}") # Replace with logging
+        return False
+
+# === Multiwalls ===
+
+def get_multiwalls_for_house_type_module(house_type_id, module_sequence_number):
+    """Fetches all multiwalls for a specific module within a house type."""
+    db = get_db()
+    query = """
+        SELECT
+            multiwall_id, panel_group, multiwall_code
+        FROM Multiwalls
+        WHERE house_type_id = ? AND module_sequence_number = ?
+        ORDER BY panel_group, multiwall_code
+    """
+    cursor = db.execute(query, (house_type_id, module_sequence_number))
+    return [dict(row) for row in cursor.fetchall()]
+
+def add_multiwall(house_type_id, module_sequence_number, panel_group, multiwall_code):
+    """Adds a new multiwall."""
+    db = get_db()
+    allowed_groups = ['Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros']
+    if panel_group not in allowed_groups:
+        raise ValueError(f"Invalid panel_group for multiwall: {panel_group}")
+
+    try:
+        cursor = db.execute(
+            """INSERT INTO Multiwalls
+               (house_type_id, module_sequence_number, panel_group, multiwall_code)
+               VALUES (?, ?, ?, ?)""",
+            (house_type_id, module_sequence_number, panel_group, multiwall_code)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        print(f"Error adding multiwall (IntegrityError): {e}")
+        raise e
+    except sqlite3.Error as e:
+        print(f"Error adding multiwall: {e}")
+        return None
+
+def update_multiwall(multiwall_id, panel_group, multiwall_code):
+    """Updates an existing multiwall."""
+    db = get_db()
+    allowed_groups = ['Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros']
+    if panel_group not in allowed_groups:
+        raise ValueError(f"Invalid panel_group for multiwall: {panel_group}")
+
+    try:
+        cursor = db.execute(
+            """UPDATE Multiwalls SET
+               panel_group = ?, multiwall_code = ?
+               WHERE multiwall_id = ?""",
+            (panel_group, multiwall_code, multiwall_id)
+        )
+        db.commit()
+        # Check if the update affected any rows
+        if cursor.rowcount > 0:
+            # Also, update the panel_group of associated panels if the group changed
+            # Fetch the panels associated with this multiwall
+            panels_cursor = db.execute("SELECT house_type_panel_id FROM HouseTypePanels WHERE multiwall_id = ?", (multiwall_id,))
+            panel_ids = [row['house_type_panel_id'] for row in panels_cursor.fetchall()]
+            if panel_ids:
+                 # Update panel_group for associated panels
+                 # Use executemany for potentially better performance if many panels
+                 update_panels_query = "UPDATE HouseTypePanels SET panel_group = ? WHERE house_type_panel_id = ?"
+                 db.executemany(update_panels_query, [(panel_group, pid) for pid in panel_ids])
+                 db.commit()
+            return True
+        else:
+            return False # Multiwall not found
+    except sqlite3.IntegrityError as e:
+        print(f"Error updating multiwall (IntegrityError): {e}")
+        raise e
+    except sqlite3.Error as e:
+        print(f"Error updating multiwall: {e}")
+        return False
+
+def delete_multiwall(multiwall_id):
+    """Deletes a multiwall. Associated panels will have multiwall_id set to NULL due to FK constraint."""
+    db = get_db()
+    try:
+        # The ON DELETE SET NULL constraint handles unlinking panels automatically
+        cursor = db.execute("DELETE FROM Multiwalls WHERE multiwall_id = ?", (multiwall_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting multiwall: {e}")
         return False
 
 # === Admin Team ===

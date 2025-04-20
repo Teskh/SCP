@@ -4,7 +4,8 @@ DROP TABLE IF EXISTS TaskLogs;
 DROP TABLE IF EXISTS TaskDefinitions;
 DROP TABLE IF EXISTS Modules;
 DROP TABLE IF EXISTS ProjectModules;
-DROP TABLE IF EXISTS HouseTypePanels; -- Added
+DROP TABLE IF EXISTS HouseTypePanels;
+DROP TABLE IF EXISTS Multiwalls; -- Added
 DROP TABLE IF EXISTS HouseTypeParameters;
 DROP TABLE IF EXISTS HouseParameters;
 DROP TABLE IF EXISTS HouseTypes;
@@ -182,14 +183,36 @@ CREATE TABLE HouseTypePanels (
     panel_group TEXT NOT NULL CHECK(panel_group IN ('Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros')), -- Category of the panel
     panel_code TEXT NOT NULL, -- Identifier/name of the panel
     typology TEXT, -- Optional: Specific typology this panel applies to (NULL means applies to all)
+    multiwall_id INTEGER, -- Optional: Link to a Multiwall
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    FOREIGN KEY (multiwall_id) REFERENCES Multiwalls(multiwall_id) ON DELETE SET NULL, -- If multiwall is deleted, unlink panels
     -- Ensure panel code is unique within the same house type, module, and group (allowing same code in different groups/modules)
+    -- Note: Uniqueness constraint does not involve multiwall_id directly. A panel code must be unique within its group/module regardless of multiwall assignment.
     UNIQUE (house_type_id, module_sequence_number, panel_group, panel_code)
 );
 
 -- Indexes for HouseTypePanels
 CREATE INDEX idx_housetypepanels_house_type_module ON HouseTypePanels (house_type_id, module_sequence_number);
 CREATE INDEX idx_housetypepanels_group ON HouseTypePanels (panel_group);
+CREATE INDEX idx_housetypepanels_multiwall ON HouseTypePanels (multiwall_id); -- Added index for FK
+
+
+-- ========= Multiwalls =========
+
+CREATE TABLE Multiwalls (
+    multiwall_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_type_id INTEGER NOT NULL,
+    module_sequence_number INTEGER NOT NULL,
+    panel_group TEXT NOT NULL CHECK(panel_group IN ('Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros')), -- Must match panel group
+    multiwall_code TEXT NOT NULL, -- Identifier for the multiwall (e.g., MW-01)
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    -- Ensure multiwall code is unique within the same house type, module, and group
+    UNIQUE (house_type_id, module_sequence_number, panel_group, multiwall_code)
+);
+
+-- Indexes for Multiwalls
+CREATE INDEX idx_multiwalls_house_type_module ON Multiwalls (house_type_id, module_sequence_number);
+CREATE INDEX idx_multiwalls_group ON Multiwalls (panel_group);
 
 
 -- ========= Admin Team =========

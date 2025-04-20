@@ -440,6 +440,116 @@ def delete_parameter_from_house_type_module_route(house_type_id, parameter_id, m
         current_app.logger.error(f"Error deleting parameter value for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
         return jsonify(error="Failed to remove parameter value"), 500
 
+
+# === Multiwalls Routes ===
+
+@admin_bp.route('/house_types/<int:house_type_id>/modules/<int:module_sequence_number>/multiwalls', methods=['GET'])
+def get_house_type_module_multiwalls(house_type_id, module_sequence_number):
+    """Get all multiwalls for a specific module within a house type."""
+    try:
+        module_seq_int = int(module_sequence_number)
+        if module_seq_int <= 0:
+             return jsonify(error="Invalid module_sequence_number, must be positive"), 400
+    except (ValueError, TypeError):
+         return jsonify(error="Invalid module_sequence_number, must be integer"), 400
+
+    try:
+        multiwalls = queries.get_multiwalls_for_house_type_module(house_type_id, module_seq_int)
+        return jsonify(multiwalls)
+    except Exception as e:
+        current_app.logger.error(f"Error getting multiwalls for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch multiwalls"), 500
+
+@admin_bp.route('/house_types/<int:house_type_id>/modules/<int:module_sequence_number>/multiwalls', methods=['POST'])
+def add_house_type_module_multiwall(house_type_id, module_sequence_number):
+    """Add a new multiwall to a specific module within a house type."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ('panel_group', 'multiwall_code')):
+        return jsonify(error="Missing required fields (panel_group, multiwall_code)"), 400
+
+    panel_group = data['panel_group']
+    multiwall_code = data['multiwall_code']
+
+    try:
+        module_seq_int = int(module_sequence_number)
+        if module_seq_int <= 0:
+             return jsonify(error="Invalid module_sequence_number, must be positive"), 400
+    except (ValueError, TypeError):
+         return jsonify(error="Invalid module_sequence_number, must be integer"), 400
+
+    try:
+        new_id = queries.add_multiwall(house_type_id, module_seq_int, panel_group, multiwall_code)
+        if new_id:
+            new_multiwall = {
+                'multiwall_id': new_id,
+                'house_type_id': house_type_id,
+                'module_sequence_number': module_seq_int,
+                'panel_group': panel_group,
+                'multiwall_code': multiwall_code
+            }
+            return jsonify(new_multiwall), 201
+        else:
+            return jsonify(error="Failed to add multiwall"), 500
+    except (ValueError, sqlite3.IntegrityError) as e:
+        current_app.logger.warning(f"Failed to add multiwall for house type {house_type_id}, module {module_seq_int}: {e}")
+        if 'UNIQUE constraint failed' in str(e):
+             return jsonify(error="Multiwall code already exists for this group and module"), 409
+        elif 'CHECK constraint failed' in str(e) or isinstance(e, ValueError):
+             return jsonify(error="Invalid panel group specified"), 400
+        else:
+             return jsonify(error=str(e)), 400
+    except Exception as e:
+        current_app.logger.error(f"Error adding multiwall for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
+        return jsonify(error="Failed to add multiwall"), 500
+
+@admin_bp.route('/multiwalls/<int:multiwall_id>', methods=['PUT'])
+def update_house_type_module_multiwall(multiwall_id):
+    """Update an existing multiwall by its ID."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ('panel_group', 'multiwall_code')):
+        return jsonify(error="Missing required fields (panel_group, multiwall_code)"), 400
+
+    panel_group = data['panel_group']
+    multiwall_code = data['multiwall_code']
+
+    try:
+        success = queries.update_multiwall(multiwall_id, panel_group, multiwall_code)
+        if success:
+            updated_multiwall = {
+                'multiwall_id': multiwall_id,
+                'panel_group': panel_group,
+                'multiwall_code': multiwall_code
+                # Note: house_type_id and module_sequence_number are not updated here
+            }
+            return jsonify(updated_multiwall), 200
+        else:
+            return jsonify(error="Multiwall not found or update failed"), 404
+    except (ValueError, sqlite3.IntegrityError) as e:
+        current_app.logger.warning(f"Failed to update multiwall {multiwall_id}: {e}")
+        if 'UNIQUE constraint failed' in str(e):
+             return jsonify(error="Multiwall code already exists for this group and module"), 409
+        elif 'CHECK constraint failed' in str(e) or isinstance(e, ValueError):
+             return jsonify(error="Invalid panel group specified"), 400
+        else:
+             return jsonify(error=str(e)), 400
+    except Exception as e:
+        current_app.logger.error(f"Error updating multiwall {multiwall_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update multiwall"), 500
+
+@admin_bp.route('/multiwalls/<int:multiwall_id>', methods=['DELETE'])
+def delete_house_type_module_multiwall(multiwall_id):
+    """Delete a multiwall by its ID."""
+    try:
+        success = queries.delete_multiwall(multiwall_id)
+        if success:
+            return jsonify(message="Multiwall deleted successfully"), 200 # Or 204 No Content
+        else:
+            return jsonify(error="Multiwall not found"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error deleting multiwall {multiwall_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to delete multiwall"), 500
+
+
 # === House Type Panels Routes ===
 
 @admin_bp.route('/house_types/<int:house_type_id>/modules/<int:module_sequence_number>/panels', methods=['GET'])
@@ -475,6 +585,8 @@ def add_house_type_module_panel(house_type_id, module_sequence_number):
     panel_group = data['panel_group']
     panel_code = data['panel_code']
     typology = data.get('typology') # Optional
+    multiwall_id = data.get('multiwall_id') # Optional
+    multiwall_id = data.get('multiwall_id') # Optional
 
     try:
         # Validate module sequence is positive integer
@@ -490,10 +602,47 @@ def add_house_type_module_panel(house_type_id, module_sequence_number):
         # if not house_type or module_seq_int > house_type['number_of_modules']:
         #    return jsonify(error="module_sequence_number exceeds the number of modules for this house type"), 400
 
-        new_id = queries.add_panel_to_house_type_module(house_type_id, module_seq_int, panel_group, panel_code, typology)
+        new_id = queries.add_panel_to_house_type_module(house_type_id, module_seq_int, panel_group, panel_code, typology, multiwall_id)
         if new_id:
-            new_panel = {
-                'house_type_panel_id': new_id,
+            # Fetch the newly added panel to get potentially joined multiwall_code
+            # This is slightly less efficient but ensures consistency
+            # Alternatively, construct manually if multiwall_code isn't needed immediately
+            panel_cursor = current_app.db.execute(
+                 """SELECT htp.house_type_panel_id, htp.panel_group, htp.panel_code, htp.typology,
+                           htp.multiwall_id, mw.multiwall_code
+                    FROM HouseTypePanels htp
+                    LEFT JOIN Multiwalls mw ON htp.multiwall_id = mw.multiwall_id
+                    WHERE htp.house_type_panel_id = ?""", (new_id,)
+            )
+            new_panel_row = panel_cursor.fetchone()
+            if new_panel_row:
+                 new_panel = dict(new_panel_row)
+                 # Add back house_type_id and module_sequence_number if needed by frontend
+                 new_panel['house_type_id'] = house_type_id
+                 new_panel['module_sequence_number'] = module_seq_int
+                 return jsonify(new_panel), 201
+            else:
+                 # Should not happen if insert succeeded, but handle defensively
+                 return jsonify(error="Failed to retrieve newly added panel"), 500
+        else:
+            # This case might not be reached if exceptions are raised properly
+            return jsonify(error="Failed to add panel"), 500
+    except (ValueError, sqlite3.IntegrityError) as e: # Catch validation or constraint errors
+        current_app.logger.warning(f"Failed to add panel for house type {house_type_id}, module {module_seq_int}: {e}")
+        # Provide more specific error messages based on the exception type if needed
+        if 'UNIQUE constraint failed' in str(e):
+             return jsonify(error="Panel code already exists for this group and module"), 409 # Conflict
+        elif 'CHECK constraint failed' in str(e):
+             return jsonify(error="Invalid panel group specified"), 400 # Bad Request
+        elif "Panel group must match the assigned multiwall's group" in str(e):
+             return jsonify(error="Panel group must match the assigned multiwall's group"), 400
+        elif "Assigned multiwall_id" in str(e) and "does not exist" in str(e):
+             return jsonify(error="Assigned multiwall does not exist"), 400
+        else:
+             return jsonify(error=str(e)), 400 # Bad Request for other ValueErrors
+    except Exception as e:
+        current_app.logger.error(f"Error adding panel for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
+        return jsonify(error="Failed to add panel"), 500
                 'house_type_id': house_type_id,
                 'module_sequence_number': module_seq_int,
                 'panel_group': panel_group,
@@ -530,12 +679,47 @@ def update_house_type_module_panel(house_type_panel_id):
     typology = data.get('typology') # Optional
 
     try:
-        success = queries.update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_code, typology)
+        success = queries.update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_code, typology, multiwall_id)
         if success:
-            # Fetch the updated panel to return it? Or just return the input data?
-            # Returning input data + ID is simpler
-            updated_panel = {
-                'house_type_panel_id': house_type_panel_id,
+            # Fetch the updated panel to return potentially updated multiwall_code
+            panel_cursor = current_app.db.execute(
+                 """SELECT htp.house_type_panel_id, htp.panel_group, htp.panel_code, htp.typology,
+                           htp.multiwall_id, mw.multiwall_code
+                    FROM HouseTypePanels htp
+                    LEFT JOIN Multiwalls mw ON htp.multiwall_id = mw.multiwall_id
+                    WHERE htp.house_type_panel_id = ?""", (house_type_panel_id,)
+            )
+            updated_panel_row = panel_cursor.fetchone()
+            if updated_panel_row:
+                 updated_panel = dict(updated_panel_row)
+                 # Add back house_type_id and module_sequence_number if needed by frontend
+                 # These are not updated, but might be useful context
+                 # ht_cursor = current_app.db.execute("SELECT house_type_id, module_sequence_number FROM HouseTypePanels WHERE house_type_panel_id = ?", (house_type_panel_id,))
+                 # ht_info = ht_cursor.fetchone()
+                 # if ht_info:
+                 #      updated_panel['house_type_id'] = ht_info['house_type_id']
+                 #      updated_panel['module_sequence_number'] = ht_info['module_sequence_number']
+                 return jsonify(updated_panel), 200
+            else:
+                 # Should not happen if update succeeded, but handle defensively
+                 return jsonify(error="Failed to retrieve updated panel"), 500
+        else:
+            return jsonify(error="Panel not found or update failed"), 404
+    except (ValueError, sqlite3.IntegrityError) as e: # Catch validation or constraint errors
+        current_app.logger.warning(f"Failed to update panel {house_type_panel_id}: {e}")
+        if 'UNIQUE constraint failed' in str(e):
+             return jsonify(error="Panel code already exists for this group and module"), 409 # Conflict
+        elif 'CHECK constraint failed' in str(e):
+             return jsonify(error="Invalid panel group specified"), 400 # Bad Request
+        elif "Panel group must match the assigned multiwall's group" in str(e):
+             return jsonify(error="Panel group must match the assigned multiwall's group"), 400
+        elif "Assigned multiwall_id" in str(e) and "does not exist" in str(e):
+             return jsonify(error="Assigned multiwall does not exist"), 400
+        else:
+             return jsonify(error=str(e)), 400 # Bad Request
+    except Exception as e:
+        current_app.logger.error(f"Error updating panel {house_type_panel_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update panel"), 500
                 'panel_group': panel_group,
                 'panel_code': panel_code,
                 'typology': typology if typology else None
