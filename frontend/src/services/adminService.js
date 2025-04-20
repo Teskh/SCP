@@ -70,6 +70,15 @@ export const deleteWorker = async (id) => {
     return true; // Indicate success
 };
 
+
+// === Supervisors (Subset of Admin Team) ===
+
+export const getSupervisors = async () => {
+    // Fetches only active admin team members with the 'Supervisor' role
+    const response = await fetch(`${API_BASE_URL}/supervisors`);
+    return handleResponse(response);
+};
+
 // === Admin Team ===
 
 export const getAdminTeam = async () => {

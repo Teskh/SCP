@@ -455,6 +455,16 @@ def delete_admin_team_member(admin_team_id):
         current_app.logger.error(f"Error in delete_admin_team_member: {e}", exc_info=True)
         return jsonify(error="Failed to delete admin team member"), 500
 
+@admin_bp.route('/supervisors', methods=['GET'])
+def get_supervisors():
+    """Get all active admin team members with the 'Supervisor' role."""
+    try:
+        supervisors = queries.get_all_supervisors()
+        return jsonify(supervisors)
+    except Exception as e:
+        current_app.logger.error(f"Error in get_supervisors: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch supervisors"), 500
+
 
 @admin_bp.route('/specialties/<int:specialty_id>', methods=['DELETE'])
 def delete_specialty(specialty_id):

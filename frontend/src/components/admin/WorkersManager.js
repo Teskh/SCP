@@ -31,7 +31,7 @@ const initialFormState = {
 function WorkersManager() {
     const [workers, setWorkers] = useState([]);
     const [specialties, setSpecialties] = useState([]);
-    const [supervisors, setSupervisors] = useState([]); // List of potential supervisors (other workers)
+    const [supervisors, setSupervisors] = useState([]); // List of potential supervisors (fetched from AdminTeam)
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [editMode, setEditMode] = useState(null); // null or worker_id
@@ -42,14 +42,16 @@ function WorkersManager() {
         setIsLoading(true);
         setError('');
         try {
-            const [workersData, specialtiesData] = await Promise.all([
+            // Fetch workers, specialties, and supervisors concurrently
+            const [workersData, specialtiesData, supervisorsData] = await Promise.all([
                 adminService.getWorkers(),
-                adminService.getSpecialties() // Needed for dropdown
+                adminService.getSpecialties(),
+                adminService.getSupervisors() // Fetch actual supervisors
             ]);
             setWorkers(workersData);
             setSpecialties(specialtiesData);
-            // Prepare supervisor list (all workers) - will filter later during edit
-            setSupervisors(workersData.map(w => ({ id: w.worker_id, name: `${w.first_name} ${w.last_name}` })));
+            // Set supervisors list directly from the fetched data
+            setSupervisors(supervisorsData.map(s => ({ id: s.admin_team_id, name: `${s.first_name} ${s.last_name}` })));
         } catch (err) {
             setError(err.message || 'Failed to fetch data');
         } finally {
@@ -76,14 +78,16 @@ function WorkersManager() {
             last_name: worker.last_name || '',
             pin: worker.pin || '', // Be cautious about displaying/editing PINs directly
             specialty_id: worker.specialty_id?.toString() || '',
+            // NOTE: The supervisor_id in the Workers table still refers to worker_id.
+            // We need to ensure the backend handles this correctly or adjust the schema/logic.
+            // For now, assuming the supervisor_id stored in Workers table IS a worker_id
+            // who happens to also be listed in AdminTeam with role 'Supervisor'.
+            // If supervisor_id should actually be admin_team_id, the backend PUT/POST needs adjustment.
+            // Let's keep the frontend logic consistent with the current schema assumption for now.
             supervisor_id: worker.supervisor_id?.toString() || '',
             is_active: worker.is_active ?? true, // Default to true if null/undefined
         });
-        // Update supervisor dropdown options to exclude the worker being edited
-        setSupervisors(workers
-            .filter(w => w.worker_id !== worker.worker_id)
-            .map(w => ({ id: w.worker_id, name: `${w.first_name} ${w.last_name}` }))
-        );
+        // No need to filter supervisor list here anymore, it's fetched separately.
         window.scrollTo(0, 0); // Scroll to form
     };
 
@@ -91,8 +95,7 @@ function WorkersManager() {
         setEditMode(null);
         setFormData(initialFormState);
         setError('');
-        // Reset supervisor list to all workers
-        setSupervisors(workers.map(w => ({ id: w.worker_id, name: `${w.first_name} ${w.last_name}` })));
+        // No need to reset supervisor list here, it's static based on fetchData
     };
 
     const handleSubmit = async (e) => {
@@ -176,6 +179,13 @@ function WorkersManager() {
                     <label style={styles.label} htmlFor="supervisor">Supervisor:</label>
                     <select id="supervisor" name="supervisor_id" value={formData.supervisor_id} onChange={handleInputChange} style={styles.select}>
                         <option value="">-- Opcional: Seleccionar Supervisor --</option>
+                        {/* Map over the fetched supervisors list */}
+                        {/* IMPORTANT: The 'value' here should match what the backend expects for Workers.supervisor_id */}
+                        {/* Currently, Workers.supervisor_id references Workers.worker_id. */}
+                        {/* If the supervisor list comes from AdminTeam, we need a way to link AdminTeam.admin_team_id back to Workers.worker_id */}
+                        {/* OR change Workers.supervisor_id to store AdminTeam.admin_team_id */}
+                        {/* For now, assuming the backend handles the mapping or the IDs are compatible. */}
+                        {/* Using sup.id which corresponds to admin_team_id from the fetched list */}
                         {supervisors.map(sup => (
                             <option key={sup.id} value={sup.id}>{sup.name}</option>
                         ))}

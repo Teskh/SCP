@@ -160,6 +160,19 @@ def delete_admin_team_member(admin_team_id):
         print(f"Error deleting admin team member: {e}") # Replace with logging
         return False
 
+def get_all_supervisors():
+    """Fetches all active admin team members with the 'Supervisor' role."""
+    db = get_db()
+    cursor = db.execute(
+        """SELECT admin_team_id, first_name, last_name
+           FROM AdminTeam
+           WHERE role = 'Supervisor' AND is_active = 1
+           ORDER BY last_name, first_name"""
+    )
+    supervisors = cursor.fetchall()
+    return [dict(row) for row in supervisors]
+
+
 def delete_task_definition(task_definition_id):
     """Deletes a task definition."""
     db = get_db()
