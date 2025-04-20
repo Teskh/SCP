@@ -6,6 +6,7 @@ import DefinitionsManager from './components/admin/DefinitionsManager';
 import WorkersManager from './components/admin/WorkersManager';
 import HouseTypesManager from './components/admin/HouseTypesManager'; // Import new component
 import HouseParametersManager from './components/admin/HouseParametersManager'; // Import new component
+import SpecialtiesManager from './components/admin/SpecialtiesManager'; // Import SpecialtiesManager
 // Import other pages/components as needed
 
 // Basic Nav styling
