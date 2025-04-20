@@ -335,13 +335,7 @@ function HouseTypesManager() {
             {isLoading && !houseTypes.length ? <p style={styles.loading}>Cargando tipos de vivienda...</p> : (
                 <table style={styles.table}>
                     <thead>
-                        <tr>
-                            <th style={styles.th}>Nombre</th>
-                            <th style={styles.th}>Descripción</th>
-                            <th style={styles.th}>Módulos</th>
-                            <th style={styles.th}>Parámetros</th> {/* Added Parameters column */}
-                            <th style={styles.th}>Acciones</th>
-                        </tr>
+                        <tr><th style={styles.th}>Nombre</th><th style={styles.th}>Descripción</th><th style={styles.th}>Módulos</th><th style={styles.th}>Parámetros</th>{/* Added Parameters column */}<th style={styles.th}>Acciones</th></tr>
                     </thead>
                     <tbody>
                         {houseTypes.map((ht) => {
