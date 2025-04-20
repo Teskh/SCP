@@ -1,3 +1,27 @@
+-- Drop existing tables (order matters for foreign keys, drop dependent tables first)
+DROP TABLE IF EXISTS TaskPauses;
+DROP TABLE IF EXISTS TaskLogs;
+DROP TABLE IF EXISTS TaskDefinitions;
+DROP TABLE IF EXISTS Modules;
+DROP TABLE IF EXISTS ProjectModules;
+DROP TABLE IF EXISTS HouseTypeParameters;
+DROP TABLE IF EXISTS HouseParameters;
+DROP TABLE IF EXISTS HouseTypes;
+DROP TABLE IF EXISTS Projects;
+DROP TABLE IF EXISTS Stations;
+DROP TABLE IF EXISTS Workers; -- Drop Workers before Specialties if supervisor FK is enforced strictly
+DROP TABLE IF EXISTS Specialties;
+DROP TABLE IF EXISTS AdminTeam;
+
+
+-- Recreate tables
+
+CREATE TABLE Specialties (
+    specialty_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE, -- e.g., 'Electrician', 'Plumber', 'Framer'
+    description TEXT
+);
+
 CREATE TABLE Workers (
     worker_id INTEGER PRIMARY KEY AUTOINCREMENT,
     first_name TEXT NOT NULL,
@@ -30,11 +54,7 @@ CREATE TABLE ProjectModules (
     UNIQUE (project_id, house_type_id)
 );
 
-CREATE TABLE Specialties (
-    specialty_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE, -- e.g., 'Electrician', 'Plumber', 'Framer'
-    description TEXT
-);
+-- Specialties table is created earlier now
 
 CREATE TABLE Stations (
     station_id TEXT PRIMARY KEY, -- e.g., 'W1', 'W2', ..., 'W5', 'M1', 'A1', ..., 'A6', 'B1', ..., 'C6'
