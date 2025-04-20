@@ -17,10 +17,10 @@ CREATE TABLE Specialties (
 );
 
 CREATE TABLE Stations (
-    station_id TEXT PRIMARY KEY, -- e.g., 'W1', 'W2', ..., 'W6', 'M1', 'A1', ..., 'A6', 'B1', ..., 'C6'
+    station_id TEXT PRIMARY KEY, -- e.g., 'W1', 'W2', ..., 'W5', 'M1', 'A1', ..., 'A6', 'B1', ..., 'C6'
     name TEXT NOT NULL, -- e.g., 'Panel Line 1: Framing', 'Buffer Magazine', 'Assembly Line A: Station 1'
     line_type TEXT NOT NULL, -- 'W', 'M', 'A', 'B', 'C'
-    sequence_order INTEGER NOT NULL -- For sorting/determining flow (e.g., W1=1, W6=6, M1=7, A1=8, B1=8, C1=8, A2=9, B2=9, C2=9 ...)
+    sequence_order INTEGER NOT NULL -- For sorting/determining flow (e.g., W1=1, W5=5, M1=6, A1=7, B1=7, C1=7, A2=8, B2=8, C2=8 ...)
 );
 
 CREATE TABLE Projects (
@@ -163,3 +163,33 @@ CREATE TABLE AdminTeam (
 -- Indexes for AdminTeam
 CREATE INDEX idx_adminteam_role ON AdminTeam (role);
 CREATE INDEX idx_adminteam_is_active ON AdminTeam (is_active);
+
+
+-- ========= Initial Data Inserts =========
+
+-- Insert Stations
+INSERT INTO Stations (station_id, name, line_type, sequence_order) VALUES
+('W1', 'Línea de Paneles 1: Estación de Estructura', 'W', 1),
+('W2', 'Línea de Paneles 2: Estación de Revestimiento PLI 1', 'W', 2),
+('W3', 'Línea de Paneles 3: Estación de Revestimiento PLI 2', 'W', 3),
+('W4', 'Línea de Paneles 4: Estación de Revestimiento PLA 1', 'W', 4),
+('W5', 'Línea de Paneles 5: Estación de Revestimiento PLA 2', 'W', 5),
+('M1', 'Almacén Intermedio', 'M', 6), -- M1 follows W5
+('A1', 'Línea de Ensamblaje A: Estación 1', 'A', 7), -- A1, B1, C1 are parallel
+('A2', 'Línea de Ensamblaje A: Estación 2', 'A', 8),
+('A3', 'Línea de Ensamblaje A: Estación 3', 'A', 9),
+('A4', 'Línea de Ensamblaje A: Estación 4', 'A', 10),
+('A5', 'Línea de Ensamblaje A: Estación 5', 'A', 11),
+('A6', 'Línea de Ensamblaje A: Estación 6', 'A', 12),
+('B1', 'Línea de Ensamblaje B: Estación 1', 'B', 7), -- A1, B1, C1 are parallel
+('B2', 'Línea de Ensamblaje B: Estación 2', 'B', 8),
+('B3', 'Línea de Ensamblaje B: Estación 3', 'B', 9),
+('B4', 'Línea de Ensamblaje B: Estación 4', 'B', 10),
+('B5', 'Línea de Ensamblaje B: Estación 5', 'B', 11),
+('B6', 'Línea de Ensamblaje B: Estación 6', 'B', 12),
+('C1', 'Línea de Ensamblaje C: Estación 1', 'C', 7), -- A1, B1, C1 are parallel
+('C2', 'Línea de Ensamblaje C: Estación 2', 'C', 8),
+('C3', 'Línea de Ensamblaje C: Estación 3', 'C', 9),
+('C4', 'Línea de Ensamblaje C: Estación 4', 'C', 10),
+('C5', 'Línea de Ensamblaje C: Estación 5', 'C', 11),
+('C6', 'Línea de Ensamblaje C: Estación 6', 'C', 12);

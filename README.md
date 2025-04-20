@@ -5,7 +5,12 @@ To develop a simple, low-stakes internal web application in Spanish for tracking
 Users: Production line workers and supervisors (for module movement and admin tasks).
 Environment: Fixed tablets located at each production station within the facility. The application should run full-screen in a web browser on these tablets.
 Production Line Structure: The physical layout consists of:
-Panel Line (W): 6 sequential stations (W1 to W6) for initial panel production.
+Panel Line (W): 5 sequential stations (W1 to W5) for initial panel production.
+    - W1: Estación de Estructura
+    - W2: Estación de Revestimiento PLI 1
+    - W3: Estación de Revestimiento PLI 2
+    - W4: Estación de Revestimiento PLA 1
+    - W5: Estación de Revestimiento PLA 2
 Buffer Magazine (M): A single intermediate storage/holding station (M1) following the panel line.
 Assembly Lines (A, B, C): 3 parallel lines, each with 6 stations (A1-A6, B1-B6, C1-C6), where panels are assembled into modules and finished. Modules move from M1 onto one of these parallel lines.
 3. System Architecture:
@@ -17,10 +22,10 @@ State Management: Initially, state will be managed using React's built-in featur
 Key Libraries (Planned): React, React Router (for SPA navigation), a JavaScript QR code scanning library (jsqr for QR login), standard fetching library (fetch API).
 Backend:
 Technology: Flask (Python microframework) served via Gunicorn.
-Reasoning: Flask is a lightweight and flexible microframework, well-suited for building APIs. Its simplicity, extensive documentation, large community, and wide range of extensions make it a good      
-choice. Gunicorn is a robust WSGI server for deploying Flask applications in production. HTTPS will be enforced via Gunicorn configuration using provided certificate and key files, which is necessary  
+Reasoning: Flask is a lightweight and flexible microframework, well-suited for building APIs. Its simplicity, extensive documentation, large community, and wide range of extensions make it a good
+choice. Gunicorn is a robust WSGI server for deploying Flask applications in production. HTTPS will be enforced via Gunicorn configuration using provided certificate and key files, which is necessary
 for secure camera access in modern browsers.
-Responsibilities: Serve the SPA's static build files (or configure Gunicorn/proxy for this), handle API requests (login, task fetching, task completion, module movement, admin CRUD operations),        
+Responsibilities: Serve the SPA's static build files (or configure Gunicorn/proxy for this), handle API requests (login, task fetching, task completion, module movement, admin CRUD operations),
 interact with the database, process QR code data (if received from the frontend).
 Database:
 Technology: SQLite3.
@@ -39,7 +44,7 @@ Logout/Idle: Automatic logout after inactivity or manual logout.
 Primary: PIN entry.
 Secondary: QR Code scanning. (QR scanner should always be working in the background -unless turned off at settings-, if the user flashes a QR code in front of the camera, it should log him in inmediately. Alternatively, the user can select his name from the list of relevant workers for that station and enter his PIN)
 6. Module Tracking & Movement:
-Production Flow Logic: System understands W1 -> ... -> W6 -> M1 -> [A1 | B1 | C1] -> ... -> [A6 | B6 | C6].
+Production Flow Logic: System understands W1 -> ... -> W5 -> M1 -> [A1 | B1 | C1] -> ... -> [A6 | B6 | C6].
 Mechanism: Initial manual entry via admin/supervisor interface, including specifying the target line (A/B/C) when moving from M1. Though it's predefined at the planning level (e.g. our production plan already considers which line they'll end up in, therefore it shouldn't be defined manually at the production level, but at the planning level instead)
 Clash Resolution: Basic auto-advance logic for clashes within the same line segment; specific validation needed for M1 and branching.
 Future Enhancement: Automatic tracking envisioned but out of initial scope.
