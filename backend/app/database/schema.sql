@@ -3,9 +3,10 @@ DROP TABLE IF EXISTS TaskPauses;
 DROP TABLE IF EXISTS TaskLogs;
 DROP TABLE IF EXISTS TaskDefinitions;
 DROP TABLE IF EXISTS Modules;
+DROP TABLE IF EXISTS ProductionPlan; -- Added: Drop new table
 DROP TABLE IF EXISTS ProjectModules;
 DROP TABLE IF EXISTS HouseTypePanels;
-DROP TABLE IF EXISTS Multiwalls; -- Added
+DROP TABLE IF EXISTS Multiwalls;
 DROP TABLE IF EXISTS HouseTypeParameters;
 DROP TABLE IF EXISTS HouseParameters;
 DROP TABLE IF EXISTS HouseTypes;
@@ -65,6 +66,34 @@ CREATE TABLE Stations (
     sequence_order INTEGER NOT NULL -- For sorting/determining flow (e.g., W1=1, W5=5, M1=6, A1=7, B1=7, C1=7, A2=8, B2=8, C2=8 ...)
 );
 
+-- ========= Production Plan =========
+
+CREATE TABLE ProductionPlan (
+    plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    house_type_id INTEGER NOT NULL,
+    house_identifier TEXT NOT NULL, -- Unique identifier for this house instance within the project (e.g., "ProjectX-Lot-12")
+    planned_sequence INTEGER NOT NULL, -- Overall production order across all projects/plans
+    planned_start_datetime TEXT NOT NULL, -- ISO8601 format recommended (YYYY-MM-DD HH:MM:SS)
+    planned_assembly_line TEXT NOT NULL CHECK(planned_assembly_line IN ('A', 'B', 'C')), -- Which line it's planned for
+    status TEXT NOT NULL DEFAULT 'Planned' CHECK(status IN ('Planned', 'Scheduled', 'In Progress', 'Completed', 'On Hold', 'Cancelled')), -- Status of this planned item
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP, -- Consider adding triggers to update this automatically
+    FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE, -- If project deleted, delete plan items
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE RESTRICT, -- Don't allow deleting house type if planned
+    UNIQUE (project_id, house_identifier) -- Ensure house identifier is unique within a project
+    -- UNIQUE (planned_sequence) -- Should sequence be globally unique? Maybe not strictly necessary, allows reordering.
+);
+
+-- Indexes for ProductionPlan
+CREATE INDEX idx_productionplan_project ON ProductionPlan (project_id);
+CREATE INDEX idx_productionplan_house_type ON ProductionPlan (house_type_id);
+CREATE INDEX idx_productionplan_sequence ON ProductionPlan (planned_sequence);
+CREATE INDEX idx_productionplan_start_datetime ON ProductionPlan (planned_start_datetime);
+CREATE INDEX idx_productionplan_status ON ProductionPlan (status);
+CREATE INDEX idx_productionplan_identifier ON ProductionPlan (project_id, house_identifier); -- For the unique constraint
+
+
 CREATE TABLE Modules (
     module_id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -74,9 +103,11 @@ CREATE TABLE Modules (
     current_station_id TEXT, -- Foreign Key to Stations table. Tracks the module's physical location. Nullable if not yet on the line.
     status TEXT DEFAULT 'Planned', -- e.g., 'Planned', 'In Progress', 'Completed', 'On Hold'
     last_moved_at TEXT, -- Timestamp of the last move, useful for tracking flow
+    plan_id INTEGER, -- Added: Link back to the specific production plan item this module belongs to
     FOREIGN KEY (project_id) REFERENCES Projects(project_id),
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id),
-    FOREIGN KEY (current_station_id) REFERENCES Stations(station_id) ON UPDATE CASCADE ON DELETE SET NULL -- Or RESTRICT? Decide policy.
+    FOREIGN KEY (current_station_id) REFERENCES Stations(station_id) ON UPDATE CASCADE ON DELETE SET NULL, -- Or RESTRICT? Decide policy.
+    FOREIGN KEY (plan_id) REFERENCES ProductionPlan(plan_id) ON DELETE SET NULL -- If plan item is deleted, unlink module but don't delete module? Or CASCADE? Let's use SET NULL for now.
 );
 
 -- ========= Task Definitions =========
@@ -127,8 +158,9 @@ CREATE TABLE TaskPauses (
 CREATE INDEX idx_modules_current_station ON Modules (current_station_id);
 CREATE INDEX idx_modules_project ON Modules (project_id);
 CREATE INDEX idx_modules_status ON Modules (status);
-CREATE INDEX idx_modules_house_type ON Modules (house_type_id); -- New index
-CREATE INDEX idx_taskdefinitions_house_type ON TaskDefinitions (house_type_id); -- Renamed index
+CREATE INDEX idx_modules_house_type ON Modules (house_type_id);
+CREATE INDEX idx_modules_plan_id ON Modules (plan_id); -- Added index
+CREATE INDEX idx_taskdefinitions_house_type ON TaskDefinitions (house_type_id);
 CREATE INDEX idx_taskdefinitions_specialty ON TaskDefinitions (specialty_id);
 CREATE INDEX idx_taskdefinitions_station ON TaskDefinitions (station_id);
 CREATE INDEX idx_tasklogs_module ON TaskLogs (module_id);
@@ -137,7 +169,7 @@ CREATE INDEX idx_tasklogs_status ON TaskLogs (status);
 CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
 CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
 CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id);
-CREATE INDEX idx_projectmodules_house_type ON ProjectModules (house_type_id); -- Renamed index
+CREATE INDEX idx_projectmodules_house_type ON ProjectModules (house_type_id);
 CREATE INDEX idx_projects_name ON Projects (name);
 CREATE INDEX idx_projects_status ON Projects (status);
 

@@ -8,7 +8,9 @@ import HouseTypesManager from './components/admin/HouseTypesManager';
 import HouseParametersManager from './components/admin/HouseParametersManager';
 import SpecialtiesManager from './components/admin/SpecialtiesManager';
 import AdminTeamManager from './components/admin/AdminTeamManager';
-import ProjectsManager from './components/admin/ProjectsManager'; // Import ProjectsManager
+import ProjectsManager from './components/admin/ProjectsManager';
+import ProductionPlanner from './components/admin/ProductionPlanner'; // Import ProductionPlanner
+import ActiveProductionDashboard from './components/admin/ActiveProductionDashboard'; // Import ActiveProductionDashboard
 // Import other pages/components as needed
 
 // Basic Nav styling
@@ -56,9 +58,16 @@ function App() {
                  <Route path="house-parameters" element={<HouseParametersManager />} />
                  <Route path="specialties" element={<SpecialtiesManager />} />
                  <Route path="admin-team" element={<AdminTeamManager />} />
-                 <Route path="projects" element={<ProjectsManager />} /> {/* Added route for Projects */}
-                 {/* Index route for /admin (optional, shows welcome message) */}
-                 {/* <Route index element={<div>Seleccione una sección de administración</div>} /> */}
+                 <Route path="projects" element={<ProjectsManager />} />
+                 <Route path="production-plan" element={<ProductionPlanner />} /> {/* Added route for Production Plan */}
+                 <Route path="production-status" element={<ActiveProductionDashboard />} /> {/* Added route for Production Status */}
+                 {/* Index route for /admin */}
+                  <Route index element={
+                      <div>
+                          <h1 style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>Panel de Administración</h1>
+                          <p>Seleccione una opción del menú para gestionar la configuración del sistema o ver el estado de producción.</p>
+                      </div>
+                  } />
             </Route>
 
             {/* Define other top-level routes here later */}

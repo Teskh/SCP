@@ -140,7 +140,7 @@ def delete_project(project_id):
     """Deletes a project. Cascading delete handles ProjectModules."""
     db = get_db()
     try:
-        # Cascading delete in schema handles ProjectModules
+        # Cascading delete in schema handles ProjectModules and ProductionPlan items
         cursor = db.execute("DELETE FROM Projects WHERE project_id = ?", (project_id,))
         db.commit()
         return cursor.rowcount > 0
@@ -317,7 +317,21 @@ def update_panel_for_house_type_module(house_type_panel_id, panel_group, panel_c
             (panel_group, panel_code, typology if typology else None, multiwall_id, house_type_panel_id)
         )
         db.commit()
-        return cursor.rowcount > 0
+        # Check if the update affected any rows
+        if cursor.rowcount > 0:
+            # Also, update the panel_group of associated panels if the group changed
+            # Fetch the panels associated with this multiwall
+            panels_cursor = db.execute("SELECT house_type_panel_id FROM HouseTypePanels WHERE multiwall_id = ?", (multiwall_id,))
+            panel_ids = [row['house_type_panel_id'] for row in panels_cursor.fetchall()]
+            if panel_ids:
+                 # Update panel_group for associated panels
+                 # Use executemany for potentially better performance if many panels
+                 update_panels_query = "UPDATE HouseTypePanels SET panel_group = ? WHERE house_type_panel_id = ?"
+                 db.executemany(update_panels_query, [(panel_group, pid) for pid in panel_ids])
+                 db.commit()
+            return True
+        else:
+            return False # Multiwall not found
     except sqlite3.IntegrityError as e:
         print(f"Error updating panel (IntegrityError): {e}") # Replace with logging
         raise e # Re-raise
@@ -458,7 +472,7 @@ def add_admin_team_member(first_name, last_name, role, pin, is_active):
         return None
 
 def update_admin_team_member(admin_team_id, first_name, last_name, role, pin, is_active):
-    """Updates an existing member in the AdminTeam table."""
+    """Updates an existing member in the팀 table."""
     db = get_db()
     # Validate role before updating
     allowed_roles = ['Supervisor', 'Gestión de producción', 'Admin']
@@ -527,7 +541,7 @@ def get_all_house_types():
     # Fetch all parameters linked to house types
     param_query = """
         SELECT
-            htp.house_type_id, htp.parameter_id, htp.module_sequence_number, htp.value,
+            htp.house_type_parameter_id, htp.parameter_id, htp.module_sequence_number, htp.value,
             hp.name as parameter_name, hp.unit as parameter_unit
         FROM HouseTypeParameters htp
         JOIN HouseParameters hp ON htp.parameter_id = hp.parameter_id
@@ -645,6 +659,210 @@ def delete_worker(worker_id):
         return False # Indicate failure
 
 
+# === Production Plan ===
+
+def add_production_plan_item(project_id, house_type_id, house_identifier, planned_sequence, planned_start_datetime, planned_assembly_line, status='Planned'):
+    """Adds a single item to the production plan."""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            """INSERT INTO ProductionPlan
+               (project_id, house_type_id, house_identifier, planned_sequence, planned_start_datetime, planned_assembly_line, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (project_id, house_type_id, house_identifier, planned_sequence, planned_start_datetime, planned_assembly_line, status)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        print(f"Error adding production plan item (IntegrityError): {e}")
+        raise e # Re-raise for API layer to handle (e.g., duplicate identifier)
+    except sqlite3.Error as e:
+        print(f"Error adding production plan item: {e}")
+        return None
+
+def add_bulk_production_plan_items(items_data):
+    """Adds multiple items to the production plan using executemany."""
+    db = get_db()
+    # items_data should be a list of tuples/lists matching the order of columns in the INSERT statement
+    # e.g., [(proj_id, ht_id, identifier, seq, start_dt, line, status), ...]
+    sql = """INSERT INTO ProductionPlan
+             (project_id, house_type_id, house_identifier, planned_sequence, planned_start_datetime, planned_assembly_line, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"""
+    try:
+        with db: # Use transaction
+            db.executemany(sql, items_data)
+        return True # Indicate success (doesn't return IDs easily with executemany)
+    except sqlite3.IntegrityError as e:
+        print(f"Error adding bulk production plan items (IntegrityError): {e}")
+        raise e # Re-raise
+    except sqlite3.Error as e:
+        print(f"Error adding bulk production plan items: {e}")
+        return False
+
+def get_production_plan(filters=None, sort_by='planned_sequence', sort_order='ASC', limit=None, offset=None):
+    """Fetches production plan items with optional filtering, sorting, and pagination."""
+    db = get_db()
+    base_query = """
+        SELECT
+            pp.plan_id, pp.project_id, p.name as project_name,
+            pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
+            pp.house_identifier, pp.planned_sequence, pp.planned_start_datetime,
+            pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at
+        FROM ProductionPlan pp
+        JOIN Projects p ON pp.project_id = p.project_id
+        JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+    """
+    where_clauses = []
+    params = []
+
+    if filters:
+        if filters.get('project_id'):
+            where_clauses.append("pp.project_id = ?")
+            params.append(filters['project_id'])
+        if filters.get('house_type_id'):
+            where_clauses.append("pp.house_type_id = ?")
+            params.append(filters['house_type_id'])
+        if filters.get('status'):
+            # Handle multiple statuses if needed (e.g., status='Planned,Scheduled')
+            statuses = filters['status'].split(',')
+            placeholders = ','.join('?' * len(statuses))
+            where_clauses.append(f"pp.status IN ({placeholders})")
+            params.extend(statuses)
+        if filters.get('start_date_after'): # Example filter
+            where_clauses.append("pp.planned_start_datetime >= ?")
+            params.append(filters['start_date_after'])
+        # Add more filters as needed
+
+    if where_clauses:
+        base_query += " WHERE " + " AND ".join(where_clauses)
+
+    # Validate sort_by and sort_order to prevent SQL injection
+    allowed_sort_columns = ['plan_id', 'project_name', 'house_type_name', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status', 'created_at', 'updated_at']
+    if sort_by not in allowed_sort_columns:
+        sort_by = 'planned_sequence' # Default sort
+    if sort_order.upper() not in ['ASC', 'DESC']:
+        sort_order = 'ASC'
+
+    base_query += f" ORDER BY {sort_by} {sort_order}"
+
+    if limit is not None:
+        base_query += " LIMIT ?"
+        params.append(limit)
+        if offset is not None:
+            base_query += " OFFSET ?"
+            params.append(offset)
+
+    cursor = db.execute(base_query, params)
+    return [dict(row) for row in cursor.fetchall()]
+
+def get_production_plan_item_by_id(plan_id):
+    """Fetches a single production plan item by its ID."""
+    db = get_db()
+    query = """
+        SELECT
+            pp.plan_id, pp.project_id, p.name as project_name,
+            pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
+            pp.house_identifier, pp.planned_sequence, pp.planned_start_datetime,
+            pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at
+        FROM ProductionPlan pp
+        JOIN Projects p ON pp.project_id = p.project_id
+        JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+        WHERE pp.plan_id = ?
+    """
+    cursor = db.execute(query, (plan_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def update_production_plan_item(plan_id, updates):
+    """Updates specific fields of a production plan item."""
+    db = get_db()
+    allowed_fields = ['project_id', 'house_type_id', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status']
+    set_clauses = []
+    params = []
+
+    for field, value in updates.items():
+        if field in allowed_fields:
+            set_clauses.append(f"{field} = ?")
+            params.append(value)
+
+    if not set_clauses:
+        return False # Nothing to update
+
+    # Add updated_at timestamp automatically? Requires schema trigger or manual update here.
+    # set_clauses.append("updated_at = CURRENT_TIMESTAMP") # If not using triggers
+
+    sql = f"UPDATE ProductionPlan SET {', '.join(set_clauses)} WHERE plan_id = ?"
+    params.append(plan_id)
+
+    try:
+        cursor = db.execute(sql, params)
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.IntegrityError as e:
+        print(f"Error updating production plan item (IntegrityError): {e}")
+        raise e
+    except sqlite3.Error as e:
+        print(f"Error updating production plan item: {e}")
+        return False
+
+def delete_production_plan_item(plan_id):
+    """Deletes a production plan item."""
+    db = get_db()
+    try:
+        # Consider implications: Should deleting a plan item delete associated Modules?
+        # Current schema sets Modules.plan_id to NULL. If CASCADE is desired, change schema.
+        cursor = db.execute("DELETE FROM ProductionPlan WHERE plan_id = ?", (plan_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting production plan item: {e}")
+        return False
+
+def get_station_status_and_upcoming(upcoming_count=5):
+    """Fetches current module at each station and the next N planned items."""
+    db = get_db()
+
+    # 1. Get current station occupancy
+    station_query = """
+        SELECT
+            s.station_id, s.name as station_name, s.line_type, s.sequence_order,
+            m.module_id, m.house_type_id, ht.name as house_type_name,
+            m.module_sequence_in_house, ht.number_of_modules,
+            m.project_id, p.name as project_name,
+            m.plan_id, pp.house_identifier -- Include plan details if module is linked
+        FROM Stations s
+        LEFT JOIN Modules m ON s.station_id = m.current_station_id AND m.status = 'In Progress' -- Only show active modules at stations
+        LEFT JOIN HouseTypes ht ON m.house_type_id = ht.house_type_id
+        LEFT JOIN Projects p ON m.project_id = p.project_id
+        LEFT JOIN ProductionPlan pp ON m.plan_id = pp.plan_id -- Join to get house_identifier
+        ORDER BY s.sequence_order, s.line_type -- Ensure consistent station order
+    """
+    station_cursor = db.execute(station_query)
+    station_status = [dict(row) for row in station_cursor.fetchall()]
+
+    # 2. Get next N upcoming planned items (status 'Planned' or 'Scheduled')
+    upcoming_query = """
+        SELECT
+            pp.plan_id, pp.project_id, p.name as project_name,
+            pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
+            pp.house_identifier, pp.planned_sequence, pp.planned_start_datetime,
+            pp.planned_assembly_line, pp.status
+        FROM ProductionPlan pp
+        JOIN Projects p ON pp.project_id = p.project_id
+        JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+        WHERE pp.status IN ('Planned', 'Scheduled')
+        ORDER BY pp.planned_sequence ASC, pp.planned_start_datetime ASC
+        LIMIT ?
+    """
+    upcoming_cursor = db.execute(upcoming_query, (upcoming_count,))
+    upcoming_items = [dict(row) for row in upcoming_cursor.fetchall()]
+
+    return {
+        'station_status': station_status,
+        'upcoming_items': upcoming_items
+    }
+
+
 # === House Types ===
 
 # get_all_house_types is defined above in the helpers section
@@ -678,7 +896,7 @@ def delete_house_type(house_type_id):
     # Cascading deletes should handle ProjectModules, HouseTypeParameters.
     # TaskDefinitions.house_type_id will be set to NULL.
     # Modules.house_type_id might cause issues if not handled (e.g., ON DELETE RESTRICT). Schema uses default behavior.
-    # Consider adding more robust checks or constraints if needed.
+    # ProductionPlan.house_type_id has ON DELETE RESTRICT, so deletion will fail if house type is used in plan.
     cursor = db.execute("DELETE FROM HouseTypes WHERE house_type_id = ?", (house_type_id,))
     db.commit()
     return cursor.rowcount > 0

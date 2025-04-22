@@ -1,38 +1,46 @@
 import React from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import styles from '../components/admin/AdminComponentStyles'; // Import shared styles
 
 // Basic styling for layout and navigation
-const styles = {
-    dashboard: { display: 'flex' },
-    nav: {
-        width: '200px',
-        borderRight: '1px solid #ccc',
-        padding: '20px',
-        height: 'calc(100vh - 80px)', // Adjust based on header/footer height
-        background: '#f8f8f8'
-    },
-    navList: { listStyle: 'none', padding: 0, margin: 0 },
-    navItem: { marginBottom: '10px' },
-    navLink: {
-        textDecoration: 'none',
-        color: '#337ab7',
-        padding: '8px 12px',
-        display: 'block',
-        borderRadius: '4px',
-    },
-    navLinkActive: {
-        backgroundColor: '#e7e7e7',
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    content: {
-        flexGrow: 1,
-        padding: '20px',
-        overflowY: 'auto', // Allow content scrolling
-        height: 'calc(100vh - 80px)', // Match nav height
-    },
-    header: { marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 },
+const dashboardStyles = {
+    display: 'flex',
 };
+
+const navStyles = {
+    width: '200px',
+    borderRight: '1px solid #ccc',
+    padding: '20px',
+    height: 'calc(100vh - 80px)', // Adjust based on header/footer height
+    background: '#f8f8f8',
+    overflowY: 'auto', // Allow navigation scrolling if many links
+};
+
+const navListStyles = { listStyle: 'none', padding: 0, margin: 0 };
+
+const navItemStyles = { marginBottom: '10px' };
+
+const navLinkStyles = {
+    textDecoration: 'none',
+    color: '#337ab7',
+    padding: '8px 12px',
+    display: 'block',
+    borderRadius: '4px',
+};
+
+const navLinkActiveStyles = {
+    backgroundColor: '#e7e7e7',
+    fontWeight: 'bold',
+    color: '#333',
+};
+
+const contentStyles = {
+    flexGrow: 1,
+    padding: '20px',
+    overflowY: 'auto', // Allow content scrolling
+    height: 'calc(100vh - 80px)', // Match nav height
+};
+
 
 function AdminDashboard() {
     const location = useLocation(); // Get current location for active link styling
@@ -41,100 +49,116 @@ function AdminDashboard() {
     const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 
     return (
-        <div style={styles.dashboard}>
-            <nav style={styles.nav}>
+        <div style={dashboardStyles}>
+            <nav style={navStyles}>
                 <h2 style={{...styles.header, borderBottom: 'none', marginBottom: '20px'}}>Menú Admin</h2>
-                <ul style={styles.navList}>
-                    <li style={styles.navItem}>
+                <ul style={navListStyles}>
+                    <li style={navItemStyles}>
                         <Link
                             to="/admin/definitions"
                             style={{
-                                ...styles.navLink,
-                                ...(isActive('/admin/definitions') ? styles.navLinkActive : {})
+                                ...navLinkStyles,
+                                ...(isActive('/admin/definitions') ? navLinkActiveStyles : {})
                             }}
                         >
                             Definiciones
                         </Link>
                     </li>
-                    <li style={styles.navItem}>
+                    <li style={navItemStyles}>
                         <Link
                             to="/admin/workers"
                             style={{
-                                ...styles.navLink,
-                                ...(isActive('/admin/workers') ? styles.navLinkActive : {})
+                                ...navLinkStyles,
+                                ...(isActive('/admin/workers') ? navLinkActiveStyles : {})
                             }}
                         >
                             Trabajadores
                         </Link>
                     </li>
-                     <li style={styles.navItem}>
+                     <li style={navItemStyles}>
                         <Link
                             to="/admin/house-types"
                             style={{
-                                ...styles.navLink,
-                                ...(isActive('/admin/house-types') ? styles.navLinkActive : {})
+                                ...navLinkStyles,
+                                ...(isActive('/admin/house-types') ? navLinkActiveStyles : {})
                             }}
                         >
                             Tipos de Vivienda
                         </Link>
                     </li>
-                     <li style={styles.navItem}>
+                     <li style={navItemStyles}>
                         <Link
                             to="/admin/house-parameters"
                             style={{
-                                ...styles.navLink,
-                                ...(isActive('/admin/house-parameters') ? styles.navLinkActive : {})
+                                ...navLinkStyles,
+                                ...(isActive('/admin/house-parameters') ? navLinkActiveStyles : {})
                             }}
                         >
                             Parámetros Vivienda
                         </Link>
                     </li>
-                    <li style={styles.navItem}>
+                    <li style={navItemStyles}>
                         <Link
                             to="/admin/specialties"
                             style={{
-                                ...styles.navLink,
-                                ...(isActive('/admin/specialties') ? styles.navLinkActive : {})
+                                ...navLinkStyles,
+                                ...(isActive('/admin/specialties') ? navLinkActiveStyles : {})
                             }}
                         >
                             Especialidades
                         </Link>
                     </li>
-                     <li style={styles.navItem}>
+                     <li style={navItemStyles}>
                         <Link
                             to="/admin/admin-team"
                             style={{
-                                ...styles.navLink,
-                                ...(isActive('/admin/admin-team') ? styles.navLinkActive : {})
+                                ...navLinkStyles,
+                                ...(isActive('/admin/admin-team') ? navLinkActiveStyles : {})
                             }}
                         >
                             Equipo Admin
                         </Link>
                     </li>
-                     <li style={styles.navItem}>
+                     <li style={navItemStyles}>
                         <Link
                             to="/admin/projects"
                             style={{
-                                ...styles.navLink,
-                                ...(isActive('/admin/projects') ? styles.navLinkActive : {})
+                                ...navLinkStyles,
+                                ...(isActive('/admin/projects') ? navLinkActiveStyles : {})
                             }}
                         >
                             Proyectos
                         </Link>
                     </li>
-                    {/* Add links for Production Planning etc. later */}
+                     <li style={navItemStyles}>
+                        <Link
+                            to="/admin/production-plan"
+                            style={{
+                                ...navLinkStyles,
+                                ...(isActive('/admin/production-plan') ? navLinkActiveStyles : {})
+                            }}
+                        >
+                            Plan Producción
+                        </Link>
+                    </li>
+                     <li style={navItemStyles}>
+                        <Link
+                            to="/admin/production-status"
+                            style={{
+                                ...navLinkStyles,
+                                ...(isActive('/admin/production-status') ? navLinkActiveStyles : {})
+                            }}
+                        >
+                            Estado Producción
+                        </Link>
+                    </li>
+                    {/* Add links for other features later */}
                 </ul>
             </nav>
-            <main style={styles.content}>
+            <main style={contentStyles}>
                  {/* Render the matched child route component here */}
-                 {location.pathname === '/admin' || location.pathname === '/admin/' ? (
-                    <div>
-                        <h1 style={styles.header}>Panel de Administración</h1>
-                        <p>Seleccione una opción del menú para gestionar la configuración del sistema.</p>
-                    </div>
-                 ) : (
-                    <Outlet />
-                 )}
+                 {/* Outlet will render the index route or the matched child route */}
+                 <Outlet />
             </main>
         </div>
     );

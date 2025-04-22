@@ -1078,6 +1078,206 @@ def delete_house_type(house_type_id):
         return jsonify(error="Failed to delete house type"), 500
 
 
+# === Production Plan Routes ===
+
+@admin_bp.route('/production_plan', methods=['POST'])
+def add_production_plan():
+    """Add one or more items to the production plan."""
+    data = request.get_json()
+    if not data:
+        return jsonify(error="Missing request data"), 400
+
+    # Check if it's bulk add (list of items) or single item (dict)
+    if isinstance(data, list):
+        # Bulk add
+        items_to_add = []
+        required_fields = ['project_id', 'house_type_id', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line']
+        for item in data:
+            if not all(k in item for k in required_fields):
+                return jsonify(error=f"Missing required fields in bulk item: {', '.join(required_fields)}"), 400
+            # Basic validation (could be more robust)
+            try:
+                int(item['project_id'])
+                int(item['house_type_id'])
+                int(item['planned_sequence'])
+                # Add datetime validation if needed
+                if item['planned_assembly_line'] not in ['A', 'B', 'C']:
+                    return jsonify(error=f"Invalid planned_assembly_line in bulk item: {item.get('house_identifier', 'N/A')}"), 400
+            except (ValueError, TypeError):
+                 return jsonify(error=f"Invalid numeric field in bulk item: {item.get('house_identifier', 'N/A')}"), 400
+
+            items_to_add.append((
+                item['project_id'],
+                item['house_type_id'],
+                item['house_identifier'],
+                item['planned_sequence'],
+                item['planned_start_datetime'],
+                item['planned_assembly_line'],
+                item.get('status', 'Planned') # Default status
+            ))
+        try:
+            success = queries.add_bulk_production_plan_items(items_to_add)
+            if success:
+                # Bulk add doesn't easily return IDs, return success message
+                return jsonify(message=f"{len(items_to_add)} production plan items added successfully"), 201
+            else:
+                return jsonify(error="Failed to add bulk production plan items"), 500
+        except sqlite3.IntegrityError as ie:
+            # Handle specific integrity errors like duplicate house_identifier
+            if 'UNIQUE constraint failed: ProductionPlan.project_id, ProductionPlan.house_identifier' in str(ie):
+                return jsonify(error="Duplicate house identifier found within a project during bulk add"), 409
+            else:
+                current_app.logger.error(f"Integrity error adding bulk plan items: {ie}", exc_info=True)
+                return jsonify(error="Database integrity error during bulk add"), 409
+        except Exception as e:
+            current_app.logger.error(f"Error in bulk add_production_plan: {e}", exc_info=True)
+            return jsonify(error="Failed to add bulk production plan items"), 500
+
+    elif isinstance(data, dict):
+        # Single add
+        required_fields = ['project_id', 'house_type_id', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line']
+        if not all(k in data for k in required_fields):
+            return jsonify(error=f"Missing required fields: {', '.join(required_fields)}"), 400
+
+        try:
+            project_id = int(data['project_id'])
+            house_type_id = int(data['house_type_id'])
+            house_identifier = data['house_identifier']
+            planned_sequence = int(data['planned_sequence'])
+            planned_start_datetime = data['planned_start_datetime'] # Add validation
+            planned_assembly_line = data['planned_assembly_line']
+            status = data.get('status', 'Planned')
+
+            if planned_assembly_line not in ['A', 'B', 'C']:
+                 return jsonify(error="Invalid planned_assembly_line. Must be 'A', 'B', or 'C'"), 400
+            if status not in ['Planned', 'Scheduled', 'In Progress', 'Completed', 'On Hold', 'Cancelled']:
+                 return jsonify(error="Invalid status"), 400
+
+        except (ValueError, TypeError):
+            return jsonify(error="Invalid data type for numeric fields (project_id, house_type_id, planned_sequence)"), 400
+
+        try:
+            new_id = queries.add_production_plan_item(
+                project_id, house_type_id, house_identifier, planned_sequence,
+                planned_start_datetime, planned_assembly_line, status
+            )
+            if new_id:
+                # Fetch the newly created item to return it
+                new_item = queries.get_production_plan_item_by_id(new_id)
+                return jsonify(new_item), 201
+            else:
+                # Should be caught by exceptions below, but handle defensively
+                return jsonify(error="Failed to add production plan item"), 500
+        except sqlite3.IntegrityError as ie:
+            if 'UNIQUE constraint failed: ProductionPlan.project_id, ProductionPlan.house_identifier' in str(ie):
+                return jsonify(error=f"House identifier '{house_identifier}' already exists for this project"), 409
+            else:
+                current_app.logger.error(f"Integrity error adding plan item: {ie}", exc_info=True)
+                return jsonify(error="Database integrity error"), 409
+        except Exception as e:
+            current_app.logger.error(f"Error in add_production_plan: {e}", exc_info=True)
+            return jsonify(error="Failed to add production plan item"), 500
+    else:
+        return jsonify(error="Invalid request data format. Expecting JSON object or list."), 400
+
+
+@admin_bp.route('/production_plan', methods=['GET'])
+def get_production_plan_route():
+    """Get production plan items with filtering, sorting, pagination."""
+    try:
+        # Extract query parameters
+        filters = {
+            'project_id': request.args.get('projectId'),
+            'house_type_id': request.args.get('houseTypeId'),
+            'status': request.args.get('status'),
+            'start_date_after': request.args.get('startDateAfter'),
+            # Add more filters as needed
+        }
+        # Remove None values from filters
+        filters = {k: v for k, v in filters.items() if v is not None}
+
+        sort_by = request.args.get('sortBy', 'planned_sequence')
+        sort_order = request.args.get('sortOrder', 'ASC')
+        limit = request.args.get('limit', type=int)
+        offset = request.args.get('offset', type=int)
+
+        plan_items = queries.get_production_plan(
+            filters=filters,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit,
+            offset=offset
+        )
+        # Could also return total count for pagination headers if needed
+        return jsonify(plan_items)
+    except Exception as e:
+        current_app.logger.error(f"Error in get_production_plan_route: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch production plan"), 500
+
+@admin_bp.route('/production_plan/<int:plan_id>', methods=['PUT'])
+def update_production_plan_route(plan_id):
+    """Update a specific production plan item."""
+    data = request.get_json()
+    if not data:
+        return jsonify(error="Missing request data"), 400
+
+    # Validate data types and values if necessary
+    updates = {}
+    allowed_fields = ['project_id', 'house_type_id', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status']
+    for field in allowed_fields:
+        if field in data:
+            # Add specific validation here if needed (e.g., check status value)
+            if field == 'planned_assembly_line' and data[field] not in ['A', 'B', 'C']:
+                 return jsonify(error="Invalid planned_assembly_line"), 400
+            if field == 'status' and data[field] not in ['Planned', 'Scheduled', 'In Progress', 'Completed', 'On Hold', 'Cancelled']:
+                 return jsonify(error="Invalid status"), 400
+            updates[field] = data[field]
+
+    if not updates:
+        return jsonify(error="No valid fields provided for update"), 400
+
+    try:
+        success = queries.update_production_plan_item(plan_id, updates)
+        if success:
+            updated_item = queries.get_production_plan_item_by_id(plan_id)
+            return jsonify(updated_item)
+        else:
+            return jsonify(error="Production plan item not found or update failed"), 404
+    except sqlite3.IntegrityError as ie:
+         if 'UNIQUE constraint failed: ProductionPlan.project_id, ProductionPlan.house_identifier' in str(ie):
+             return jsonify(error="House identifier already exists for this project"), 409
+         else:
+             current_app.logger.error(f"Integrity error updating plan item {plan_id}: {ie}", exc_info=True)
+             return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error in update_production_plan_route {plan_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update production plan item"), 500
+
+@admin_bp.route('/production_plan/<int:plan_id>', methods=['DELETE'])
+def delete_production_plan_route(plan_id):
+    """Delete a production plan item."""
+    try:
+        success = queries.delete_production_plan_item(plan_id)
+        if success:
+            return jsonify(message="Production plan item deleted successfully"), 200 # Or 204
+        else:
+            return jsonify(error="Production plan item not found"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error in delete_production_plan_route {plan_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to delete production plan item"), 500
+
+@admin_bp.route('/production_status', methods=['GET'])
+def get_production_status_route():
+    """Get current station status and upcoming planned items."""
+    try:
+        upcoming_count = request.args.get('upcoming', 5, type=int)
+        status_data = queries.get_station_status_and_upcoming(upcoming_count)
+        return jsonify(status_data)
+    except Exception as e:
+        current_app.logger.error(f"Error in get_production_status_route: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch production status"), 500
+
+
 @admin_bp.route('/stations', methods=['GET'])
 def get_stations():
     """Get all stations for dropdowns."""
