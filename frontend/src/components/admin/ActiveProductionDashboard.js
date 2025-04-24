@@ -322,48 +322,57 @@ function ActiveProductionDashboard() {
                 </div>
             </div>
 
-            {/* Upcoming Items - Grouped by Project */}
-            <div style={{ marginTop: '30px' }}>
-                <h3 style={styles.header}>Plan de Producción Pendiente ({upcomingItems.length} items)</h3>
-                {sortedProjectIds.length > 0 ? (
-                    sortedProjectIds.map(projectId => {
-                        const projectGroup = groupedUpcomingItems[projectId];
-                        const isCollapsed = collapsedProjects[projectId];
-                        return (
-                            <div key={projectId} style={{ marginBottom: '15px', border: '1px solid #eee', borderRadius: '4px' }}>
-                                <div
-                                    onClick={() => toggleProjectCollapse(projectId)}
-                                    style={{
-                                        backgroundColor: '#f0f0f0',
-                                        padding: '10px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        borderBottom: isCollapsed ? 'none' : '1px solid #eee'
-                                    }}
-                                >
-                                    <h4 style={{ margin: 0, fontWeight: 'bold' }}>
-                                        Proyecto: {projectGroup.projectName} ({projectGroup.items.length} items)
-                                    </h4>
-                                    <span>{isCollapsed ? '[+] Expandir' : '[-] Colapsar'}</span>
-                                </div>
-                                {!isCollapsed && (
-                                    <ul style={{ ...upcomingListStyle, padding: '10px', margin: 0 }}>
-                                        {projectGroup.items.map(item => (
-                                            <li key={item.plan_id} style={upcomingItemStyle}>
-                                                <strong>#{item.planned_sequence}:</strong> {item.house_identifier} (Módulo {item.module_sequence_in_house}/{item.number_of_modules}) - Tipo: {item.house_type_name} - Línea: {item.planned_assembly_line} - Inicio: {item.planned_start_datetime} ({item.status})
-                                            </li>
-                                        ))}
-                                    </ul>
+            {/* Upcoming Items - Grouped by Project with Drag and Drop */}
+            <DragDropContext onDragEnd={onDragEnd}>
+                <div style={{ marginTop: '30px' }}>
+                    <h3 style={styles.header}>Plan de Producción Pendiente ({upcomingItems.length} items)</h3>
+                    {/* We need one top-level Droppable for all items */}
+                    <Droppable droppableId="productionPlan">
+                        {(provided) => (
+                            <div
+                                {...provided.droppableProps}
+                                ref={provided.innerRef}
+                            >
+                                {upcomingItems.length > 0 ? (
+                                    // Render items directly from the flat upcomingItems list for DnD
+                                    upcomingItems.map((item, index) => (
+                                        <Draggable key={item.plan_id.toString()} draggableId={item.plan_id.toString()} index={index}>
+                                            {(providedDraggable, snapshot) => (
+                                                <div
+                                                    ref={providedDraggable.innerRef}
+                                                    {...providedDraggable.draggableProps}
+                                                    {...providedDraggable.dragHandleProps} // Use the whole item as handle for now
+                                                    style={{
+                                                        ...upcomingItemStyle,
+                                                        ...(snapshot.isDragging ? draggingListItemStyle : {}), // Apply dragging style
+                                                        ...providedDraggable.draggableProps.style, // Required styles from lib
+                                                        // Add project grouping visual cues if needed, e.g., border top
+                                                        borderTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '2px solid #ccc' : upcomingItemStyle.border,
+                                                        marginTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '10px' : upcomingItemStyle.marginBottom,
+                                                    }}
+                                                >
+                                                    {/* Optional: Add a drag handle icon */}
+                                                    {/* <span style={dragHandleStyle}>⠿</span> */}
+                                                    <span>
+                                                        <strong>#{item.planned_sequence}:</strong> [{item.project_name}] {item.house_identifier} (Módulo {item.module_sequence_in_house}/{item.number_of_modules}) - Tipo: {item.house_type_name} - Línea: {item.planned_assembly_line} - Inicio: {item.planned_start_datetime} ({item.status})
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </Draggable>
+                                    ))
+                                ) : (
+                                    <p>No hay elementos planeados o programados en el plan de producción.</p>
                                 )}
+                                {provided.placeholder} {/* Placeholder for space during drag */}
                             </div>
-                        );
-                    })
-                ) : (
-                    <p>No hay elementos planeados o programados en el plan de producción.</p>
-                )}
-            </div>
+                        )}
+                    </Droppable>
+                     {/* Note: The collapsible project group display is removed in favor of a flat draggable list.
+                         Visual cues (like borderTop) are added to imply grouping.
+                         If collapsible groups AND drag-and-drop are both strictly required,
+                         a more complex setup (e.g., nested droppables or a different library) might be needed. */}
+                </div>
+            </DragDropContext>
         </div>
     );
 }
