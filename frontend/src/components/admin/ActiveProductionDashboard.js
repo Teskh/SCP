@@ -318,13 +318,14 @@ function ActiveProductionDashboard() {
                  } else {
                      // If dropping before, the splice index is correct as is.
                  }
-                 // Correction: Simpler approach - find the index of 'over' in the filtered list, and splice there.
-                 // The relative order takes care of positioning.
+                 // Correction: Find the index of 'over' in the filtered list.
+                 // To insert *after* the 'over' item, we splice at index + 1.
+                 const insertionIndex = newIndexInFilteredList + 1;
 
                 reorderedItems = [
-                    ...itemsWithoutGroup.slice(0, newIndexInFilteredList),
-                    ...groupBeingDragged,
-                    ...itemsWithoutGroup.slice(newIndexInFilteredList)
+                    ...itemsWithoutGroup.slice(0, insertionIndex), // Items up to and including the 'over' item
+                    ...groupBeingDragged,                          // The dragged group
+                    ...itemsWithoutGroup.slice(insertionIndex)     // Items after the 'over' item
                 ];
 
             } else {
