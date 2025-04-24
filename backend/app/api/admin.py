@@ -1116,6 +1116,33 @@ def get_production_plan_route():
         current_app.logger.error(f"Error in get_production_plan_route: {e}", exc_info=True)
         return jsonify(error="Failed to fetch production plan"), 500
 
+@admin_bp.route('/production_plan/reorder', methods=['POST'])
+def reorder_production_plan():
+    """Reorders production plan items based on a list of plan_ids."""
+    data = request.get_json()
+    if not data or 'ordered_plan_ids' not in data or not isinstance(data['ordered_plan_ids'], list):
+        return jsonify(error="Missing or invalid 'ordered_plan_ids' list in request data"), 400
+
+    ordered_plan_ids = data['ordered_plan_ids']
+
+    # Optional: Basic validation if IDs are integers
+    try:
+        ordered_plan_ids = [int(pid) for pid in ordered_plan_ids]
+    except (ValueError, TypeError):
+        return jsonify(error="All items in 'ordered_plan_ids' must be integers"), 400
+
+    try:
+        success = queries.update_production_plan_sequence(ordered_plan_ids)
+        if success:
+            return jsonify(message="Production plan reordered successfully"), 200
+        else:
+            # This could be due to a database error during the transaction
+            return jsonify(error="Failed to reorder production plan"), 500
+    except Exception as e:
+        current_app.logger.error(f"Error in reorder_production_plan: {e}", exc_info=True)
+        return jsonify(error="An internal error occurred during reordering"), 500
+
+
 # Removed PUT and DELETE endpoints for /production_plan/<plan_id>
 
 @admin_bp.route('/production_status', methods=['GET'])

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import * as adminService from '../../services/adminService';
 import styles from './AdminComponentStyles'; // Assuming shared styles
 
@@ -18,6 +19,7 @@ const lineStyles = {
     paddingBottom: '10px',
     borderBottom: '1px solid #eee',
     overflowX: 'auto', // Allow horizontal scroll if needed
+    minHeight: '120px', // Ensure line container has height even if empty
 };
 
 const assemblyLinesContainer = {
@@ -73,6 +75,20 @@ const upcomingItemStyle = {
     borderRadius: '3px',
     backgroundColor: '#fff',
     fontSize: '0.9em',
+    userSelect: 'none', // Prevent text selection during drag
+    transition: 'background-color 0.2s ease', // Smooth background transition
+    // Add styles for when dragging
+};
+
+const draggingListItemStyle = {
+    backgroundColor: '#e6f7ff', // Light blue background when dragging
+};
+
+const dragHandleStyle = { // Optional: Style for a dedicated drag handle
+    display: 'inline-block',
+    marginRight: '10px',
+    cursor: 'grab',
+    color: '#aaa',
 };
 
 
@@ -105,10 +121,107 @@ function ActiveProductionDashboard() {
         }
     }, []);
 
-    // Group upcoming items by project
-    const groupedUpcomingItems = upcomingItems.reduce((acc, item) => {
-        const projectId = item.project_id;
-        if (!acc[projectId]) {
+    // Group upcoming items by project ID for display purposes
+    const groupItemsByProject = (items) => {
+       return items.reduce((acc, item) => {
+            const projectId = item.project_id;
+            if (!acc[projectId]) {
+                acc[projectId] = {
+                    projectName: item.project_name,
+                    items: []
+                };
+            }
+            acc[projectId].items.push(item);
+            return acc;
+        }, {});
+    };
+
+    // Sort projects based on the sequence of their first item
+    const getSortedProjectIds = (groupedItems) => {
+        return Object.keys(groupedItems).sort((a, b) => {
+            const firstItemSeqA = groupedItems[a].items[0]?.planned_sequence || 0;
+            const firstItemSeqB = groupedItems[b].items[0]?.planned_sequence || 0;
+            // If sequences are the same, maintain stable sort by project ID
+            if (firstItemSeqA === firstItemSeqB) {
+                return parseInt(a) - parseInt(b);
+            }
+            return firstItemSeqA - firstItemSeqB;
+        });
+    };
+
+    // Memoize grouped items and sorted IDs to avoid recalculation on every render
+    const groupedUpcomingItems = React.useMemo(() => groupItemsByProject(upcomingItems), [upcomingItems]);
+    const sortedProjectIds = React.useMemo(() => getSortedProjectIds(groupedUpcomingItems), [groupedUpcomingItems]);
+
+
+    useEffect(() => {
+        fetchData();
+        // Optional: Set up auto-refresh interval
+        const intervalId = setInterval(fetchData, 30000); // Refresh every 30 seconds
+        return () => clearInterval(intervalId); // Cleanup on unmount
+    }, [fetchData]);
+
+    const toggleProjectCollapse = (projectId) => {
+        setCollapsedProjects(prev => ({
+            ...prev,
+            [projectId]: !prev[projectId]
+        }));
+    };
+
+    // --- Drag and Drop Handler ---
+    const onDragEnd = async (result) => {
+        const { source, destination, draggableId } = result;
+
+        // Dropped outside the list
+        if (!destination) {
+            return;
+        }
+
+        // Dropped in the same place
+        if (
+            destination.droppableId === source.droppableId &&
+            destination.index === source.index
+        ) {
+            return;
+        }
+
+        // Optimistically update the UI
+        const items = Array.from(upcomingItems);
+        const [reorderedItem] = items.splice(source.index, 1);
+        items.splice(destination.index, 0, reorderedItem);
+
+        // Update the local state immediately
+        setUpcomingItems(items);
+
+        // Prepare the list of IDs in the new order
+        const orderedPlanIds = items.map(item => item.plan_id);
+
+        // Call the backend to persist the new order
+        try {
+            setIsLoading(true); // Show loading indicator during backend update
+            setError('');
+            await adminService.reorderProductionPlan(orderedPlanIds);
+            // Optional: Refetch data to confirm backend state, or rely on optimistic update
+            // await fetchData();
+            setLastUpdated(new Date()); // Update timestamp after successful reorder
+        } catch (err) {
+            setError(`Error reordering plan: ${err.message}. Reverting local changes.`);
+            console.error("Reorder error:", err);
+            // Revert the optimistic update on error
+            const originalItems = Array.from(upcomingItems); // Get state before optimistic update
+             const [movedItem] = originalItems.splice(destination.index, 1); // Remove item from new pos
+             originalItems.splice(source.index, 0, movedItem); // Insert back to original pos
+            // This revert logic might be tricky if state updated between drag end and error.
+            // A simpler revert is often just refetching:
+            await fetchData(); // Refetch to get the correct state from backend
+        } finally {
+            setIsLoading(false);
+        }
+    };
+     // --- End Drag and Drop Handler ---
+
+
+    const renderStation = (stationId) => {
             acc[projectId] = {
                 projectName: item.project_name,
                 items: []

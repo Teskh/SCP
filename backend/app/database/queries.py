@@ -972,6 +972,41 @@ def delete_production_plan_item(plan_id):
         print(f"Error deleting production plan item: {e}")
         return False
 
+def update_production_plan_sequence(ordered_plan_ids):
+    """
+    Updates the planned_sequence for a list of production plan items based on
+    the exact order provided in the list. Assigns sequence numbers 1, 2, 3, ...
+    to the items in the list according to their position.
+    Assumes ordered_plan_ids contains ALL items that should be sequenced contiguously.
+    """
+    db = get_db()
+    if not ordered_plan_ids:
+        print("No plan IDs provided for reordering.")
+        return True # Nothing to reorder
+
+    try:
+        with db: # Use transaction
+            # Update sequence for each item based on its index in the list (0-based index + 1 for 1-based sequence)
+            for i, plan_id in enumerate(ordered_plan_ids):
+                new_sequence = i + 1
+                cursor = db.execute(
+                    "UPDATE ProductionPlan SET planned_sequence = ? WHERE plan_id = ?",
+                    (new_sequence, plan_id)
+                )
+                if cursor.rowcount == 0:
+                    # This indicates a potential problem - a plan_id sent from frontend doesn't exist?
+                    # Or maybe it was filtered out (e.g., status changed)?
+                    # For robustness, log this but continue. Consider raising an error if strict consistency is needed.
+                    print(f"Warning: plan_id {plan_id} not found during sequence update.") # Replace with logging
+
+        print(f"Successfully reordered {len(ordered_plan_ids)} plan items.") # Replace with logging
+        return True
+    except sqlite3.Error as e:
+        print(f"Error updating production plan sequence: {e}") # Replace with logging
+        # Transaction ensures rollback on error
+        return False
+
+
 def get_station_status_and_upcoming(upcoming_count=5):
     """Fetches current module at each station and the next N planned items."""
     db = get_db()

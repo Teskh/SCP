@@ -21,6 +21,17 @@ export const getSpecialties = async () => {
     return handleResponse(response);
 };
 
+// Reorder production plan items
+export const reorderProductionPlan = async (orderedPlanIds) => {
+    const response = await fetch(`${API_BASE_URL}/production_plan/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordered_plan_ids: orderedPlanIds }),
+    });
+    // Expects a 200 OK with a message on success
+    return handleResponse(response);
+};
+
 // === Workers ===
 
 export const getWorkers = async () => {
