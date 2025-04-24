@@ -21,6 +21,7 @@ def get_db():
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         g.db.row_factory = sqlite3.Row # Return rows that behave like dicts
+        g.db.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
 
     return g.db
 
