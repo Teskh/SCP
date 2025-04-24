@@ -35,7 +35,8 @@ def init_db():
     """Initializes the database using schema.sql."""
     db = get_db()
     schema_path = os.path.join(os.path.dirname(__file__), 'schema.sql')
-    with open(schema_path, 'r') as f:
+    # Explicitly open with UTF-8 encoding
+    with open(schema_path, 'r', encoding='utf-8') as f:
         db.executescript(f.read())
     print("Database initialized.")
 
