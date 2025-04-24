@@ -362,21 +362,14 @@ function ActiveProductionDashboard() {
                                         />
                                     );
                                 }
-                                    // Note: Visual grouping cues (borderTop, marginTop) are now handled
-                                    // inside SortableItem using the isFirstInProjectGroup prop.
-                                    // borderTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '2px solid #ccc' : '1px solid #eee',
-                                    // marginTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '10px' : '5px',
-                                ) // Removed extra closing parenthesis here
+                                ) 
                             ) : (
                                 <p>No hay elementos planeados o programados en el plan de producción.</p>
                             )}
                         </div>
                     </SortableContext>
                 </DndContext>
-                 {/* Note: The collapsible project group display is removed in favor of a flat draggable list.
-                     Visual cues (like borderTop) are added to imply grouping.
-                     If collapsible groups AND drag-and-drop are both strictly required,
-                     a more complex setup might be needed. */}
+
             </div>
         </div>
     );
