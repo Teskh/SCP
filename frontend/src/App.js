@@ -9,7 +9,7 @@ import HouseParametersManager from './components/admin/HouseParametersManager';
 import SpecialtiesManager from './components/admin/SpecialtiesManager';
 import AdminTeamManager from './components/admin/AdminTeamManager';
 import ProjectsManager from './components/admin/ProjectsManager';
-import ProductionPlanner from './components/admin/ProductionPlanner'; // Import ProductionPlanner
+// import ProductionPlanner from './components/admin/ProductionPlanner'; // Removed ProductionPlanner
 import ActiveProductionDashboard from './components/admin/ActiveProductionDashboard'; // Import ActiveProductionDashboard
 // Import other pages/components as needed
 
@@ -59,7 +59,7 @@ function App() {
                  <Route path="specialties" element={<SpecialtiesManager />} />
                  <Route path="admin-team" element={<AdminTeamManager />} />
                  <Route path="projects" element={<ProjectsManager />} />
-                 <Route path="production-plan" element={<ProductionPlanner />} /> {/* Added route for Production Plan */}
+                 {/* <Route path="production-plan" element={<ProductionPlanner />} /> Removed route for Production Plan */}
                  <Route path="production-status" element={<ActiveProductionDashboard />} /> {/* Added route for Production Status */}
                  {/* Index route for /admin */}
                   <Route index element={

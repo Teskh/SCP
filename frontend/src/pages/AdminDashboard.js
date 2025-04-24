@@ -130,17 +130,7 @@ function AdminDashboard() {
                             Proyectos
                         </Link>
                     </li>
-                     <li style={navItemStyles}>
-                        <Link
-                            to="/admin/production-plan"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/production-plan') ? navLinkActiveStyles : {})
-                            }}
-                        >
-                            Plan Producción
-                        </Link>
-                    </li>
+                     {/* Removed Production Plan link */}
                      <li style={navItemStyles}>
                         <Link
                             to="/admin/production-status"

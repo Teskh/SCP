@@ -136,6 +136,80 @@ def update_project(project_id, name, description, status, house_types_data):
         print(f"Error updating project: {e}") # Replace with logging
         return False
 
+from datetime import datetime, timedelta # Add imports for date calculation
+
+def update_project(project_id, name, description, status, house_types_data):
+    """Updates an existing project and its associated house types.
+       Handles automatic generation/removal of production plan items based on status change.
+    """
+    db = get_db()
+    # Get current status before update
+    current_status_cursor = db.execute("SELECT status FROM Projects WHERE project_id = ?", (project_id,))
+    current_status_row = current_status_cursor.fetchone()
+    current_status = current_status_row['status'] if current_status_row else None
+
+    try:
+        with db: # Use transaction
+            # Update project details
+            update_cursor = db.execute(
+                "UPDATE Projects SET name = ?, description = ?, status = ? WHERE project_id = ?",
+                (name, description, status, project_id)
+            )
+            if update_cursor.rowcount == 0:
+                print(f"Project {project_id} not found for update.")
+                return False # Project not found
+
+            # --- Update ProjectModules ---
+            # 1. Delete existing ProjectModules for this project
+            db.execute("DELETE FROM ProjectModules WHERE project_id = ?", (project_id,))
+
+            # 2. Insert new ProjectModules based on house_types_data
+            project_modules_data = []
+            if house_types_data:
+                project_modules_data = [
+                    (project_id, ht['house_type_id'], ht['quantity'])
+                    for ht in house_types_data if ht.get('house_type_id') and ht.get('quantity')
+                ]
+                if project_modules_data:
+                    db.executemany(
+                        "INSERT INTO ProjectModules (project_id, house_type_id, quantity) VALUES (?, ?, ?)",
+                        project_modules_data
+                    )
+
+            # --- Handle Production Plan Generation/Removal ---
+            if current_status != 'Active' and status == 'Active':
+                # Project is being activated - Generate plan items
+                print(f"Project {project_id} activated. Generating production plan...")
+                # Fetch details needed for generation (including house type names)
+                details_query = """
+                    SELECT pm.house_type_id, pm.quantity, ht.name as house_type_name
+                    FROM ProjectModules pm
+                    JOIN HouseTypes ht ON pm.house_type_id = ht.house_type_id
+                    WHERE pm.project_id = ?
+                """
+                details_cursor = db.execute(details_query, (project_id,))
+                house_types_details = [dict(row) for row in details_cursor.fetchall()]
+                if not generate_production_plan_for_project(project_id, name, house_types_details):
+                    # If generation fails, we should ideally roll back the transaction.
+                    # The `with db:` block handles this automatically by not committing if an exception occurs.
+                    raise Exception(f"Failed to generate production plan for project {project_id}. Rolling back.") # Raise exception to trigger rollback
+
+            elif current_status == 'Active' and status != 'Active':
+                # Project is being deactivated - Remove planned items
+                print(f"Project {project_id} deactivated. Removing planned/scheduled items...")
+                if not remove_planned_items_for_project(project_id):
+                     raise Exception(f"Failed to remove production plan items for project {project_id}. Rolling back.")
+
+        return True # Success - transaction committed
+    except sqlite3.IntegrityError as e:
+        print(f"Error updating project (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise
+    except Exception as e: # Catch generation/removal errors too
+        print(f"Error updating project: {e}") # Replace with logging
+        # Transaction ensures rollback on error
+        return False
+
+
 def delete_project(project_id):
     """Deletes a project. Cascading delete handles ProjectModules."""
     db = get_db()
@@ -147,6 +221,77 @@ def delete_project(project_id):
     except sqlite3.Error as e:
         # Handle potential foreign key issues if project_id is used elsewhere without CASCADE
         print(f"Error deleting project: {e}") # Replace with logging
+        return False
+
+# === Production Plan Generation Helpers ===
+
+def get_max_planned_sequence():
+    """Gets the maximum planned_sequence value from the ProductionPlan table."""
+    db = get_db()
+    cursor = db.execute("SELECT MAX(planned_sequence) FROM ProductionPlan")
+    max_seq = cursor.fetchone()[0]
+    return max_seq if max_seq is not None else 0
+
+def generate_production_plan_for_project(project_id, project_name, house_types_details):
+    """Generates ProductionPlan items for a newly activated project."""
+    db = get_db()
+    items_to_add = []
+    current_sequence = get_max_planned_sequence() + 1
+    assembly_lines = ['A', 'B', 'C']
+    line_index = 0
+    start_datetime_base = datetime.now() # Base time for planning
+
+    for ht_detail in house_types_details:
+        house_type_id = ht_detail['house_type_id']
+        quantity = ht_detail['quantity']
+        house_type_name = ht_detail['house_type_name'] # Assuming this is passed or fetched
+
+        for i in range(quantity):
+            house_identifier = f"{project_name}-{house_type_name}-{i+1}" # Example identifier
+            planned_assembly_line = assembly_lines[line_index % len(assembly_lines)]
+
+            # Simple date increment logic (e.g., add 8 hours per sequence item) - ADJUST AS NEEDED
+            # This is a placeholder; a more sophisticated calculation might be needed.
+            planned_start_dt = start_datetime_base + timedelta(hours=(current_sequence - (get_max_planned_sequence() + 1)) * 8)
+            planned_start_datetime_str = planned_start_dt.strftime('%Y-%m-%d %H:%M:%S')
+
+            items_to_add.append((
+                project_id,
+                house_type_id,
+                house_identifier,
+                current_sequence,
+                planned_start_datetime_str,
+                planned_assembly_line,
+                'Planned' # Default status
+            ))
+            current_sequence += 1
+            line_index += 1
+
+    if items_to_add:
+        try:
+            add_bulk_production_plan_items(items_to_add)
+            print(f"Successfully generated {len(items_to_add)} plan items for project {project_id}.") # Replace with logging
+            return True
+        except Exception as e:
+            print(f"Error generating bulk plan items for project {project_id}: {e}") # Replace with logging
+            # Consider rollback or cleanup if partial insertion occurred? Transaction handles this.
+            return False
+    return True # No items needed, still success
+
+def remove_planned_items_for_project(project_id):
+    """Removes 'Planned' or 'Scheduled' ProductionPlan items for a deactivated project."""
+    db = get_db()
+    try:
+        # Only remove items that haven't started progress
+        cursor = db.execute(
+            "DELETE FROM ProductionPlan WHERE project_id = ? AND status IN ('Planned', 'Scheduled')",
+            (project_id,)
+        )
+        db.commit()
+        print(f"Removed {cursor.rowcount} planned/scheduled items for deactivated project {project_id}.") # Replace with logging
+        return True
+    except sqlite3.Error as e:
+        print(f"Error removing planned items for project {project_id}: {e}") # Replace with logging
         return False
 
 

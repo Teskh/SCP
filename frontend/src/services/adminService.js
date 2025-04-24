@@ -444,25 +444,8 @@ export const deleteParameterFromHouseTypeModule = async (houseTypeId, parameterI
 
 // === Production Plan ===
 
-// Add a single production plan item
-export const addProductionPlanItem = async (itemData) => {
-    const response = await fetch(`${API_BASE_URL}/production_plan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(itemData), // Send single object
-    });
-    return handleResponse(response);
-};
-
-// Add multiple production plan items in bulk
-export const addBulkProductionPlanItems = async (itemsArray) => {
-    const response = await fetch(`${API_BASE_URL}/production_plan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(itemsArray), // Send array of objects
-    });
-    return handleResponse(response);
-};
+// Note: Functions for adding/updating/deleting individual plan items are removed.
+// This is now handled automatically when updating a Project's status to/from 'Active'.
 
 // Get production plan items with filtering/sorting/pagination
 export const getProductionPlan = async (params = {}) => {
@@ -472,27 +455,6 @@ export const getProductionPlan = async (params = {}) => {
     return handleResponse(response);
 };
 
-// Update a specific production plan item
-export const updateProductionPlanItem = async (planId, updateData) => {
-    const response = await fetch(`${API_BASE_URL}/production_plan/${planId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData),
-    });
-    return handleResponse(response);
-};
-
-// Delete a specific production plan item
-export const deleteProductionPlanItem = async (planId) => {
-    const response = await fetch(`${API_BASE_URL}/production_plan/${planId}`, {
-        method: 'DELETE',
-    });
-    if (!response.ok && response.status !== 204) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-    return true; // Indicate success
-};
 
 // === Production Status Dashboard ===
 
