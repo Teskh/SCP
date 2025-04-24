@@ -166,6 +166,7 @@ function ActiveProductionDashboard() {
     const [collapsedProjects, setCollapsedProjects] = useState({}); // State for collapsed projects { projectId: true/false }
     const [selectedItemIds, setSelectedItemIds] = useState(new Set()); // State for selected item IDs
     const [lastClickedItemId, setLastClickedItemId] = useState(null); // State for shift-click logic
+    const [draggedItemIds, setDraggedItemIds] = useState(null); // State to hold IDs being dragged (single or group)
 
     const fetchData = useCallback(async () => {
         // Preserve selection if items still exist after fetch? For now, clear on fetch.
@@ -248,43 +249,123 @@ function ActiveProductionDashboard() {
         })
     );
 
+    const handleDragStart = useCallback((event) => {
+        const { active } = event;
+        // Check if the dragged item is part of the current selection
+        if (selectedItemIds.has(active.id)) {
+            // If yes, we are dragging the whole selection
+            setDraggedItemIds(selectedItemIds);
+        } else {
+            // If no, we are dragging a single, unselected item
+            setDraggedItemIds(new Set([active.id]));
+            // Optional: Clear selection when dragging an unselected item?
+            // setSelectedItemIds(new Set());
+            // setLastClickedItemId(null);
+        }
+    }, [selectedItemIds]);
+
     const handleDragEnd = useCallback(async (event) => {
         const { active, over } = event;
 
-        if (over && active.id !== over.id) {
-            const oldIndex = upcomingItems.findIndex((item) => item.plan_id === active.id);
-            const newIndex = upcomingItems.findIndex((item) => item.plan_id === over.id);
+        // Ensure draggedItemIds is set (should be by handleDragStart)
+        if (!draggedItemIds) {
+            console.warn("Drag end called without draggedItemIds being set.");
+            return;
+        }
 
-            if (oldIndex === -1 || newIndex === -1) {
-                console.error("Could not find dragged item indices");
-                return; // Should not happen if IDs are correct
+        // Reset dragged items state regardless of outcome
+        setDraggedItemIds(null);
+
+        if (over && active.id !== over.id) {
+            const originalItems = [...upcomingItems]; // Store original order for potential revert
+            let reorderedItems = originalItems;
+
+            // Check if we dragged a group (more than one item)
+            const isGroupDrag = draggedItemIds.size > 1;
+
+            if (isGroupDrag) {
+                // --- Group Drag Logic ---
+                // Ensure 'over.id' is not part of the dragged group itself
+                if (draggedItemIds.has(over.id)) {
+                    console.log("Cannot drop group onto itself. No change.");
+                    return; // Prevent dropping group onto one of its own items
+                }
+
+                // 1. Get the items being dragged, preserving their relative order
+                const groupBeingDragged = originalItems.filter(item => draggedItemIds.has(item.plan_id));
+
+                // 2. Create a list of items *not* being dragged
+                const itemsWithoutGroup = originalItems.filter(item => !draggedItemIds.has(item.plan_id));
+
+                // 3. Find the index where the 'over' item is in the list *without* the group
+                const newIndexInFilteredList = itemsWithoutGroup.findIndex(item => item.plan_id === over.id);
+
+                if (newIndexInFilteredList === -1) {
+                    console.error("Could not find the 'over' item index in the filtered list.");
+                    return; // Should not happen if over.id is valid and not in the group
+                }
+
+                // 4. Insert the dragged group into the filtered list at the target index
+                // Adjust index based on whether the original position of the group was before or after the target
+                 const originalIndexOfFirstDragged = originalItems.findIndex(item => item.plan_id === groupBeingDragged[0].plan_id);
+                 const originalIndexOfOver = originalItems.findIndex(item => item.plan_id === over.id);
+
+                 let insertionIndex = newIndexInFilteredList;
+                 // If the item we are dropping over was originally *after* the group,
+                 // its index in the filtered list needs adjustment when inserting the group.
+                 if (originalIndexOfOver > originalIndexOfFirstDragged) {
+                     // No index adjustment needed in splice if dropping after
+                 } else {
+                     // If dropping before, the splice index is correct as is.
+                 }
+                 // Correction: Simpler approach - find the index of 'over' in the filtered list, and splice there.
+                 // The relative order takes care of positioning.
+
+                reorderedItems = [
+                    ...itemsWithoutGroup.slice(0, newIndexInFilteredList),
+                    ...groupBeingDragged,
+                    ...itemsWithoutGroup.slice(newIndexInFilteredList)
+                ];
+
+            } else {
+                // --- Single Item Drag Logic (Existing) ---
+                const oldIndex = originalItems.findIndex((item) => item.plan_id === active.id);
+                const newIndex = originalItems.findIndex((item) => item.plan_id === over.id);
+
+                if (oldIndex === -1 || newIndex === -1) {
+                    console.error("Could not find dragged item indices for single drag.");
+                    return;
+                }
+                reorderedItems = arrayMove(originalItems, oldIndex, newIndex);
             }
 
-            // Optimistically update the UI using arrayMove
-            const reorderedItems = arrayMove(upcomingItems, oldIndex, newIndex);
+            // --- Apply Changes (Optimistic Update & Backend Call) ---
             setUpcomingItems(reorderedItems); // Update local state immediately
 
-            // Prepare the list of IDs in the new order
             const orderedPlanIds = reorderedItems.map(item => item.plan_id);
 
-            // Call the backend to persist the new order
-            const originalItems = [...upcomingItems]; // Store original order for potential revert
             try {
                 setIsLoading(true);
                 setError('');
                 await adminService.reorderProductionPlan(orderedPlanIds);
                 setLastUpdated(new Date());
+                // Optional: Clear selection after successful drag?
+                // setSelectedItemIds(new Set());
+                // setLastClickedItemId(null);
             } catch (err) {
                 setError(`Error reordering plan: ${err.message}. Reverting local changes.`);
                 console.error("Reorder error:", err);
-                // Revert the optimistic update on error by setting state back
-                setUpcomingItems(originalItems);
-                // Optionally refetch to be absolutely sure: await fetchData();
+                setUpcomingItems(originalItems); // Revert optimistic update
             } finally {
                 setIsLoading(false);
             }
         }
-    }, [upcomingItems, fetchData]); // Include fetchData if using it for revert
+    }, [upcomingItems, fetchData, draggedItemIds]); // Add draggedItemIds dependency
+
+     const handleDragCancel = useCallback(() => {
+        // Reset dragged items state if drag is cancelled
+        setDraggedItemIds(null);
+    }, []);
     // --- End dnd-kit Setup ---
 
     // --- Selection Logic ---
@@ -429,7 +510,9 @@ function ActiveProductionDashboard() {
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
+                    onDragStart={handleDragStart} // Add handler
                     onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel} // Add handler
                 >
                     <SortableContext
                         items={upcomingItems.map(item => item.plan_id)} // Pass array of IDs
