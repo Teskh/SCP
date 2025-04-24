@@ -82,12 +82,13 @@ function ActiveProductionDashboard() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [lastUpdated, setLastUpdated] = useState(null);
+    const [collapsedProjects, setCollapsedProjects] = useState({}); // State for collapsed projects { projectId: true/false }
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
-            const statusData = await adminService.getProductionStatus(5); // Fetch status and next 5 items
+            const statusData = await adminService.getProductionStatus(); // Fetch status and ALL upcoming items
             // Process station data into a map for easy lookup
             const statusMap = statusData.station_status.reduce((acc, station) => {
                 acc[station.station_id] = station;
@@ -104,12 +105,40 @@ function ActiveProductionDashboard() {
         }
     }, []);
 
+    // Group upcoming items by project
+    const groupedUpcomingItems = upcomingItems.reduce((acc, item) => {
+        const projectId = item.project_id;
+        if (!acc[projectId]) {
+            acc[projectId] = {
+                projectName: item.project_name,
+                items: []
+            };
+        }
+        acc[projectId].items.push(item);
+        return acc;
+    }, {});
+
+    // Sort projects by the sequence of their first item
+    const sortedProjectIds = Object.keys(groupedUpcomingItems).sort((a, b) => {
+        const firstItemSeqA = groupedUpcomingItems[a].items[0]?.planned_sequence || 0;
+        const firstItemSeqB = groupedUpcomingItems[b].items[0]?.planned_sequence || 0;
+        return firstItemSeqA - firstItemSeqB;
+    });
+
+
     useEffect(() => {
         fetchData();
         // Optional: Set up auto-refresh interval
         const intervalId = setInterval(fetchData, 30000); // Refresh every 30 seconds
         return () => clearInterval(intervalId); // Cleanup on unmount
     }, [fetchData]);
+
+    const toggleProjectCollapse = (projectId) => {
+        setCollapsedProjects(prev => ({
+            ...prev,
+            [projectId]: !prev[projectId]
+        }));
+    };
 
     const renderStation = (stationId) => {
         const station = stationStatus[stationId];
@@ -180,19 +209,46 @@ function ActiveProductionDashboard() {
                 </div>
             </div>
 
-             {/* Upcoming Items */}
-             <div style={{ marginTop: '30px' }}>
-                <h3 style={styles.header}>Próximos en Plan ({upcomingItems.length})</h3>
-                {upcomingItems.length > 0 ? (
-                    <ul style={upcomingListStyle}>
-                        {upcomingItems.map(item => (
-                            <li key={item.plan_id} style={upcomingItemStyle}>
-                                <strong>#{item.planned_sequence}:</strong> {item.house_identifier} ({item.house_type_name}) - Proyecto: {item.project_name} - Línea: {item.planned_assembly_line} - Inicio: {item.planned_start_datetime} ({item.status})
-                            </li>
-                        ))}
-                    </ul>
+            {/* Upcoming Items - Grouped by Project */}
+            <div style={{ marginTop: '30px' }}>
+                <h3 style={styles.header}>Plan de Producción Pendiente ({upcomingItems.length} items)</h3>
+                {sortedProjectIds.length > 0 ? (
+                    sortedProjectIds.map(projectId => {
+                        const projectGroup = groupedUpcomingItems[projectId];
+                        const isCollapsed = collapsedProjects[projectId];
+                        return (
+                            <div key={projectId} style={{ marginBottom: '15px', border: '1px solid #eee', borderRadius: '4px' }}>
+                                <div
+                                    onClick={() => toggleProjectCollapse(projectId)}
+                                    style={{
+                                        backgroundColor: '#f0f0f0',
+                                        padding: '10px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        borderBottom: isCollapsed ? 'none' : '1px solid #eee'
+                                    }}
+                                >
+                                    <h4 style={{ margin: 0, fontWeight: 'bold' }}>
+                                        Proyecto: {projectGroup.projectName} ({projectGroup.items.length} items)
+                                    </h4>
+                                    <span>{isCollapsed ? '[+] Expandir' : '[-] Colapsar'}</span>
+                                </div>
+                                {!isCollapsed && (
+                                    <ul style={{ ...upcomingListStyle, padding: '10px', margin: 0 }}>
+                                        {projectGroup.items.map(item => (
+                                            <li key={item.plan_id} style={upcomingItemStyle}>
+                                                <strong>#{item.planned_sequence}:</strong> {item.house_identifier} ({item.house_type_name}) - Línea: {item.planned_assembly_line} - Inicio: {item.planned_start_datetime} ({item.status})
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        );
+                    })
                 ) : (
-                    <p>No hay elementos planeados próximos.</p>
+                    <p>No hay elementos planeados o programados en el plan de producción.</p>
                 )}
             </div>
         </div>

@@ -1120,10 +1120,10 @@ def get_production_plan_route():
 
 @admin_bp.route('/production_status', methods=['GET'])
 def get_production_status_route():
-    """Get current station status and upcoming planned items."""
+    """Get current station status and all upcoming planned items."""
     try:
-        upcoming_count = request.args.get('upcoming', 5, type=int)
-        status_data = queries.get_station_status_and_upcoming(upcoming_count)
+        # upcoming_count parameter is removed
+        status_data = queries.get_station_status_and_upcoming() # Call without count
         return jsonify(status_data)
     except Exception as e:
         current_app.logger.error(f"Error in get_production_status_route: {e}", exc_info=True)

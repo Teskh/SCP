@@ -458,7 +458,7 @@ export const getProductionPlan = async (params = {}) => {
 
 // === Production Status Dashboard ===
 
-export const getProductionStatus = async (upcomingCount = 5) => {
-    const response = await fetch(`${API_BASE_URL}/production_status?upcoming=${upcomingCount}`);
+export const getProductionStatus = async () => { // Removed upcomingCount parameter
+    const response = await fetch(`${API_BASE_URL}/production_status`); // Removed query parameter
     return handleResponse(response);
 };
