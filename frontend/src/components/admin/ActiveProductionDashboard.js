@@ -348,21 +348,51 @@ function ActiveProductionDashboard() {
                         items={upcomingItems.map(item => item.plan_id)} // Pass array of IDs
                         strategy={verticalListSortingStrategy}
                     >
-                        <div style={upcomingListStyle}> {/* Use the ul/div styling */}
+                        <div style={upcomingListStyle}>
                             {upcomingItems.length > 0 ? (
-                                upcomingItems.map((item, index) => {
-                                    // Determine if this item starts a new project group visually
-                                    const isFirstInProjectGroup = index === 0 || upcomingItems[index - 1].project_id !== item.project_id;
+                                sortedProjectIds.map(projectId => {
+                                    const group = groupedUpcomingItems[projectId];
+                                    const isCollapsed = collapsedProjects[projectId];
+                                    const firstItemIdInGroup = group.items[0]?.plan_id; // Needed for SortableItem check
+
                                     return (
-                                        <SortableItem
-                                            key={item.plan_id}
-                                            id={item.plan_id}
-                                            item={item}
-                                            isFirstInProjectGroup={isFirstInProjectGroup} // Pass prop
-                                        />
+                                        <div key={projectId} style={{ marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                                            <div
+                                                style={{
+                                                    padding: '8px 12px',
+                                                    backgroundColor: '#f0f0f0',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    borderBottom: isCollapsed ? 'none' : '1px solid #ddd',
+                                                    fontWeight: 'bold',
+                                                }}
+                                                onClick={() => toggleProjectCollapse(projectId)}
+                                            >
+                                                <span>{group.projectName} ({group.items.length} módulos)</span>
+                                                <span>{isCollapsed ? '▼ Expandir' : '▲ Contraer'}</span>
+                                            </div>
+                                            {!isCollapsed && (
+                                                <div style={{ padding: '5px' }}>
+                                                    {group.items.map((item, index) => {
+                                                        // Determine if this item starts a new project group visually (always true for the first item in the rendered group)
+                                                        const isFirstInDisplayedGroup = index === 0;
+                                                        return (
+                                                            <SortableItem
+                                                                key={item.plan_id}
+                                                                id={item.plan_id}
+                                                                item={item}
+                                                                // Pass true only if it's the very first item of this project *within the overall flat list*
+                                                                isFirstInProjectGroup={item.plan_id === firstItemIdInGroup}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
                                     );
-                                }
-                                ) 
+                                })
                             ) : (
                                 <p>No hay elementos planeados o programados en el plan de producción.</p>
                             )}
