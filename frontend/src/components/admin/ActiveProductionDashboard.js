@@ -1,5 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities'; // For transform/transition styles
 import * as adminService from '../../services/adminService';
 import styles from './AdminComponentStyles'; // Assuming shared styles
 
@@ -168,57 +183,52 @@ function ActiveProductionDashboard() {
         }));
     };
 
-    // --- Drag and Drop Handler ---
-    const onDragEnd = async (result) => {
-        const { source, destination, draggableId } = result;
+    // --- dnd-kit Setup ---
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
-        // Dropped outside the list
-        if (!destination) {
-            return;
+    const handleDragEnd = useCallback(async (event) => {
+        const { active, over } = event;
+
+        if (over && active.id !== over.id) {
+            const oldIndex = upcomingItems.findIndex((item) => item.plan_id === active.id);
+            const newIndex = upcomingItems.findIndex((item) => item.plan_id === over.id);
+
+            if (oldIndex === -1 || newIndex === -1) {
+                console.error("Could not find dragged item indices");
+                return; // Should not happen if IDs are correct
+            }
+
+            // Optimistically update the UI using arrayMove
+            const reorderedItems = arrayMove(upcomingItems, oldIndex, newIndex);
+            setUpcomingItems(reorderedItems); // Update local state immediately
+
+            // Prepare the list of IDs in the new order
+            const orderedPlanIds = reorderedItems.map(item => item.plan_id);
+
+            // Call the backend to persist the new order
+            const originalItems = [...upcomingItems]; // Store original order for potential revert
+            try {
+                setIsLoading(true);
+                setError('');
+                await adminService.reorderProductionPlan(orderedPlanIds);
+                setLastUpdated(new Date());
+            } catch (err) {
+                setError(`Error reordering plan: ${err.message}. Reverting local changes.`);
+                console.error("Reorder error:", err);
+                // Revert the optimistic update on error by setting state back
+                setUpcomingItems(originalItems);
+                // Optionally refetch to be absolutely sure: await fetchData();
+            } finally {
+                setIsLoading(false);
+            }
         }
-
-        // Dropped in the same place
-        if (
-            destination.droppableId === source.droppableId &&
-            destination.index === source.index
-        ) {
-            return;
-        }
-
-        // Optimistically update the UI
-        const items = Array.from(upcomingItems);
-        const [reorderedItem] = items.splice(source.index, 1);
-        items.splice(destination.index, 0, reorderedItem);
-
-        // Update the local state immediately
-        setUpcomingItems(items);
-
-        // Prepare the list of IDs in the new order
-        const orderedPlanIds = items.map(item => item.plan_id);
-
-        // Call the backend to persist the new order
-        try {
-            setIsLoading(true); // Show loading indicator during backend update
-            setError('');
-            await adminService.reorderProductionPlan(orderedPlanIds);
-            // Optional: Refetch data to confirm backend state, or rely on optimistic update
-            // await fetchData();
-            setLastUpdated(new Date()); // Update timestamp after successful reorder
-        } catch (err) {
-            setError(`Error reordering plan: ${err.message}. Reverting local changes.`);
-            console.error("Reorder error:", err);
-            // Revert the optimistic update on error
-            const originalItems = Array.from(upcomingItems); // Get state before optimistic update
-             const [movedItem] = originalItems.splice(destination.index, 1); // Remove item from new pos
-             originalItems.splice(source.index, 0, movedItem); // Insert back to original pos
-            // This revert logic might be tricky if state updated between drag end and error.
-            // A simpler revert is often just refetching:
-            await fetchData(); // Refetch to get the correct state from backend
-        } finally {
-            setIsLoading(false);
-        }
-    };
-     // --- End Drag and Drop Handler ---
+    }, [upcomingItems, fetchData]); // Include fetchData if using it for revert
+    // --- End dnd-kit Setup ---
 
 
     const renderStation = (stationId) => {
@@ -322,57 +332,40 @@ function ActiveProductionDashboard() {
                 </div>
             </div>
 
-            {/* Upcoming Items - Grouped by Project with Drag and Drop */}
-            <DragDropContext onDragEnd={onDragEnd}>
-                <div style={{ marginTop: '30px' }}>
-                    <h3 style={styles.header}>Plan de Producción Pendiente ({upcomingItems.length} items)</h3>
-                    {/* We need one top-level Droppable for all items */}
-                    <Droppable droppableId="productionPlan">
-                        {(provided) => (
-                            <div
-                                {...provided.droppableProps}
-                                ref={provided.innerRef}
-                            >
-                                {upcomingItems.length > 0 ? (
-                                    // Render items directly from the flat upcomingItems list for DnD
-                                    upcomingItems.map((item, index) => (
-                                        <Draggable key={item.plan_id.toString()} draggableId={item.plan_id.toString()} index={index}>
-                                            {(providedDraggable, snapshot) => (
-                                                <div
-                                                    ref={providedDraggable.innerRef}
-                                                    {...providedDraggable.draggableProps}
-                                                    {...providedDraggable.dragHandleProps} // Use the whole item as handle for now
-                                                    style={{
-                                                        ...upcomingItemStyle,
-                                                        ...(snapshot.isDragging ? draggingListItemStyle : {}), // Apply dragging style
-                                                        ...providedDraggable.draggableProps.style, // Required styles from lib
-                                                        // Add project grouping visual cues if needed, e.g., border top
-                                                        borderTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '2px solid #ccc' : upcomingItemStyle.border,
-                                                        marginTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '10px' : upcomingItemStyle.marginBottom,
-                                                    }}
-                                                >
-                                                    {/* Optional: Add a drag handle icon */}
-                                                    {/* <span style={dragHandleStyle}>⠿</span> */}
-                                                    <span>
-                                                        <strong>#{item.planned_sequence}:</strong> [{item.project_name}] {item.house_identifier} (Módulo {item.module_sequence_in_house}/{item.number_of_modules}) - Tipo: {item.house_type_name} - Línea: {item.planned_assembly_line} - Inicio: {item.planned_start_datetime} ({item.status})
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </Draggable>
-                                    ))
-                                ) : (
-                                    <p>No hay elementos planeados o programados en el plan de producción.</p>
-                                )}
-                                {provided.placeholder} {/* Placeholder for space during drag */}
-                            </div>
-                        )}
-                    </Droppable>
-                     {/* Note: The collapsible project group display is removed in favor of a flat draggable list.
-                         Visual cues (like borderTop) are added to imply grouping.
-                         If collapsible groups AND drag-and-drop are both strictly required,
-                         a more complex setup (e.g., nested droppables or a different library) might be needed. */}
-                </div>
-            </DragDropContext>
+            {/* Upcoming Items - Sortable List using dnd-kit */}
+            <div style={{ marginTop: '30px' }}>
+                <h3 style={styles.header}>Plan de Producción Pendiente ({upcomingItems.length} items)</h3>
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                >
+                    <SortableContext
+                        items={upcomingItems.map(item => item.plan_id)} // Pass array of IDs
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <div style={upcomingListStyle}> {/* Use the ul/div styling */}
+                            {upcomingItems.length > 0 ? (
+                                upcomingItems.map((item, index) => (
+                                    // Pass the full item data to SortableItem
+                                    <SortableItem key={item.plan_id} id={item.plan_id} item={item} />
+                                    // Note: Visual grouping cues (borderTop, marginTop) need to be added
+                                    // inside SortableItem or passed as props if complex logic is needed.
+                                    // Example (simple logic, might need refinement):
+                                    // borderTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '2px solid #ccc' : '1px solid #eee',
+                                    // marginTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '10px' : '5px',
+                                ))
+                            ) : (
+                                <p>No hay elementos planeados o programados en el plan de producción.</p>
+                            )}
+                        </div>
+                    </SortableContext>
+                </DndContext>
+                 {/* Note: The collapsible project group display is removed in favor of a flat draggable list.
+                     Visual cues (like borderTop) are added to imply grouping.
+                     If collapsible groups AND drag-and-drop are both strictly required,
+                     a more complex setup might be needed. */}
+            </div>
         </div>
     );
 }
