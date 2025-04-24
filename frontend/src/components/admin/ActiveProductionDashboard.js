@@ -92,7 +92,13 @@ const upcomingItemStyle = {
     fontSize: '0.9em',
     userSelect: 'none', // Prevent text selection during drag
     transition: 'background-color 0.2s ease', // Smooth background transition
+    cursor: 'pointer', // Indicate items are clickable
     // Add styles for when dragging
+};
+
+const selectedListItemStyle = {
+    backgroundColor: '#d6eaff', // A distinct background for selected items
+    borderLeft: '3px solid #007bff', // Add a visual indicator on the left
 };
 
 const draggingListItemStyle = {
@@ -108,10 +114,10 @@ const dragHandleStyle = { // Optional: Style for a dedicated drag handle
 
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isFirstInProjectGroup }) { // Added prop for visual grouping
+function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick }) { // Added isSelected and onClick props
     const {
         attributes,
-        listeners,
+        listeners, // These are for drag-and-drop
         setNodeRef,
         transform,
         transition,
@@ -122,9 +128,10 @@ function SortableItem({ id, item, isFirstInProjectGroup }) { // Added prop for v
         transform: CSS.Transform.toString(transform),
         transition,
         ...upcomingItemStyle, // Base style
-        ...(isDragging ? draggingListItemStyle : {}), // Apply dragging style
+        ...(isSelected && !isDragging ? selectedListItemStyle : {}), // Apply selected style if selected and not dragging
+        ...(isDragging ? draggingListItemStyle : {}), // Apply dragging style (overrides selected style visually during drag)
         // Add project grouping visual cues using the prop
-        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : upcomingItemStyle.border,
+        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected ? selectedListItemStyle.border : upcomingItemStyle.border), // Keep border consistent
         marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom,
         zIndex: isDragging ? 1 : 'auto',
         position: 'relative',
@@ -133,8 +140,16 @@ function SortableItem({ id, item, isFirstInProjectGroup }) { // Added prop for v
     // Display text generation remains the same
     const displayText = `<strong>#${item.planned_sequence}:</strong> [${item.project_name}] ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Línea: ${item.planned_assembly_line} - Inicio: ${item.planned_start_datetime} (${item.status})`;
 
+    // Combine drag listeners and click handler
+    const combinedListeners = {
+        ...listeners, // Spread the drag listeners from useSortable
+        onClick: (e) => onClick(e, id), // Add the onClick handler passed from parent
+    };
+
     return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+        // Apply combined listeners and attributes to the main div
+        <div ref={setNodeRef} style={style} {...attributes} {...combinedListeners}>
+            {/* Drag handle could go here if needed, but listeners are on the whole item */}
             <span dangerouslySetInnerHTML={{ __html: displayText }} />
         </div>
     );
@@ -149,8 +164,14 @@ function ActiveProductionDashboard() {
     const [error, setError] = useState('');
     const [lastUpdated, setLastUpdated] = useState(null);
     const [collapsedProjects, setCollapsedProjects] = useState({}); // State for collapsed projects { projectId: true/false }
+    const [selectedItemIds, setSelectedItemIds] = useState(new Set()); // State for selected item IDs
+    const [lastClickedItemId, setLastClickedItemId] = useState(null); // State for shift-click logic
 
     const fetchData = useCallback(async () => {
+        // Preserve selection if items still exist after fetch? For now, clear on fetch.
+        // If preservation is needed, logic would compare old/new items.
+        setSelectedItemIds(new Set());
+        setLastClickedItemId(null);
         setIsLoading(true);
         setError('');
         try {
@@ -266,6 +287,71 @@ function ActiveProductionDashboard() {
     }, [upcomingItems, fetchData]); // Include fetchData if using it for revert
     // --- End dnd-kit Setup ---
 
+    // --- Selection Logic ---
+    const handleItemClick = useCallback((event, clickedItemId) => {
+        event.stopPropagation(); // Prevent click from bubbling to the deselect handler
+
+        const isShiftPressed = event.nativeEvent.shiftKey; // Check if Shift key was held
+
+        setSelectedItemIds(prevSelectedIds => {
+            const newSelectedIds = new Set(prevSelectedIds);
+
+            if (isShiftPressed && lastClickedItemId && lastClickedItemId !== clickedItemId) {
+                // Shift + Click: Select range
+                const itemsInOrder = sortedProjectIds.flatMap(pid => groupedUpcomingItems[pid]?.items || []);
+                const lastClickedIndex = itemsInOrder.findIndex(item => item.plan_id === lastClickedItemId);
+                const currentClickedIndex = itemsInOrder.findIndex(item => item.plan_id === clickedItemId);
+
+                if (lastClickedIndex !== -1 && currentClickedIndex !== -1) {
+                    const start = Math.min(lastClickedIndex, currentClickedIndex);
+                    const end = Math.max(lastClickedIndex, currentClickedIndex);
+                    // Clear previous selection before applying range? Or add to it? Let's clear for simplicity.
+                    // newSelectedIds.clear(); // Uncomment to clear previous selection first
+                    for (let i = start; i <= end; i++) {
+                        if (itemsInOrder[i]) {
+                            newSelectedIds.add(itemsInOrder[i].plan_id);
+                        }
+                    }
+                } else {
+                    // Fallback if indices not found (shouldn't happen): just toggle the clicked item
+                    if (newSelectedIds.has(clickedItemId)) {
+                        newSelectedIds.delete(clickedItemId);
+                    } else {
+                        newSelectedIds.add(clickedItemId);
+                    }
+                }
+            } else {
+                // Normal Click (or first click in a shift-select sequence)
+                if (newSelectedIds.has(clickedItemId)) {
+                    newSelectedIds.delete(clickedItemId);
+                } else {
+                    newSelectedIds.add(clickedItemId);
+                }
+            }
+            return newSelectedIds;
+        });
+
+        // Update last clicked item ID *unless* shift was pressed (keep the anchor)
+        if (!isShiftPressed) {
+            setLastClickedItemId(clickedItemId);
+        }
+
+    }, [lastClickedItemId, sortedProjectIds, groupedUpcomingItems]); // Dependencies for selection logic
+
+    const handleDeselectAll = (event) => {
+        // Check if the click target is NOT within a sortable item or the project header
+        // This is a simple check; more robust might involve checking class names or data attributes
+        if (!event.target.closest('[role="button"]')) { // Assuming SortableItem's div gets role="button" via attributes
+             // Check if the click is not on a project header either
+             const projectHeader = event.target.closest('[data-project-header]');
+             if (!projectHeader) {
+                setSelectedItemIds(new Set());
+                setLastClickedItemId(null);
+             }
+        }
+    };
+    // --- End Selection Logic ---
+
 
     const renderStation = (stationId) => {
         const station = stationStatus[stationId];
@@ -298,7 +384,8 @@ function ActiveProductionDashboard() {
     );
 
     return (
-        <div style={styles.container}>
+        // Add onClick for deselection to the main container
+        <div style={styles.container} onClick={handleDeselectAll}>
             <h2 style={styles.header}>Estado Actual de Producción</h2>
 
             {error && <p style={styles.error}>{error}</p>}
@@ -368,7 +455,8 @@ function ActiveProductionDashboard() {
                                                     borderBottom: isCollapsed ? 'none' : '1px solid #ddd',
                                                     fontWeight: 'bold',
                                                 }}
-                                                onClick={() => toggleProjectCollapse(projectId)}
+                                                onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(projectId); }} // Stop propagation
+                                                data-project-header="true" // Add attribute for deselection check
                                             >
                                                 <span>{group.projectName} ({group.items.length} módulos)</span>
                                                 <span>{isCollapsed ? '▼ Expandir' : '▲ Contraer'}</span>
@@ -383,8 +471,9 @@ function ActiveProductionDashboard() {
                                                                 key={item.plan_id}
                                                                 id={item.plan_id}
                                                                 item={item}
-                                                                // Pass true only if it's the very first item of this project *within the overall flat list*
                                                                 isFirstInProjectGroup={item.plan_id === firstItemIdInGroup}
+                                                                isSelected={selectedItemIds.has(item.plan_id)} // Pass selection state
+                                                                onClick={handleItemClick} // Pass click handler
                                                             />
                                                         );
                                                     })}
