@@ -320,7 +320,7 @@ function ActiveProductionDashboard() {
                  }
                  // Correction: Find the index of 'over' in the filtered list.
                  // To insert *after* the 'over' item, we splice at index + 1.
-                 const insertionIndex = newIndexInFilteredList + 1;
+                 insertionIndex = newIndexInFilteredList + 1; // Reassign the existing variable
 
                 reorderedItems = [
                     ...itemsWithoutGroup.slice(0, insertionIndex), // Items up to and including the 'over' item
