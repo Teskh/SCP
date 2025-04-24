@@ -232,38 +232,6 @@ function ActiveProductionDashboard() {
 
 
     const renderStation = (stationId) => {
-            acc[projectId] = {
-                projectName: item.project_name,
-                items: []
-            };
-        }
-        acc[projectId].items.push(item);
-        return acc;
-    }, {});
-
-    // Sort projects by the sequence of their first item
-    const sortedProjectIds = Object.keys(groupedUpcomingItems).sort((a, b) => {
-        const firstItemSeqA = groupedUpcomingItems[a].items[0]?.planned_sequence || 0;
-        const firstItemSeqB = groupedUpcomingItems[b].items[0]?.planned_sequence || 0;
-        return firstItemSeqA - firstItemSeqB;
-    });
-
-
-    useEffect(() => {
-        fetchData();
-        // Optional: Set up auto-refresh interval
-        const intervalId = setInterval(fetchData, 30000); // Refresh every 30 seconds
-        return () => clearInterval(intervalId); // Cleanup on unmount
-    }, [fetchData]);
-
-    const toggleProjectCollapse = (projectId) => {
-        setCollapsedProjects(prev => ({
-            ...prev,
-            [projectId]: !prev[projectId]
-        }));
-    };
-
-    const renderStation = (stationId) => {
         const station = stationStatus[stationId];
         if (!station) return <div style={stationBoxStyle}>Error: Station {stationId} not found</div>;
 
