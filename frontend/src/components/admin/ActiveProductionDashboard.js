@@ -106,6 +106,41 @@ const dragHandleStyle = { // Optional: Style for a dedicated drag handle
     color: '#aaa',
 };
 
+// --- Sortable Item Component (for dnd-kit) ---
+// Moved outside ActiveProductionDashboard for correct component definition scope
+function SortableItem({ id, item, isFirstInProjectGroup }) { // Added prop for visual grouping
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        ...upcomingItemStyle, // Base style
+        ...(isDragging ? draggingListItemStyle : {}), // Apply dragging style
+        // Add project grouping visual cues using the prop
+        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : upcomingItemStyle.border,
+        marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom,
+        zIndex: isDragging ? 1 : 'auto',
+        position: 'relative',
+    };
+
+    // Display text generation remains the same
+    const displayText = `<strong>#${item.planned_sequence}:</strong> [${item.project_name}] ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Línea: ${item.planned_assembly_line} - Inicio: ${item.planned_start_datetime} (${item.status})`;
+
+    return (
+        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+            <span dangerouslySetInnerHTML={{ __html: displayText }} />
+        </div>
+    );
+}
+// --- End Sortable Item Component ---
+
 
 function ActiveProductionDashboard() {
     const [stationStatus, setStationStatus] = useState([]);
@@ -136,6 +171,7 @@ function ActiveProductionDashboard() {
         }
     }, []);
 
+    // --- Helper Functions (defined within component scope) ---
     // Group upcoming items by project ID for display purposes
     const groupItemsByProject = (items) => {
        return items.reduce((acc, item) => {
@@ -314,12 +350,20 @@ function ActiveProductionDashboard() {
                     >
                         <div style={upcomingListStyle}> {/* Use the ul/div styling */}
                             {upcomingItems.length > 0 ? (
-                                upcomingItems.map((item, index) => (
-                                    // Pass the full item data to SortableItem
-                                    <SortableItem key={item.plan_id} id={item.plan_id} item={item} />
-                                    // Note: Visual grouping cues (borderTop, marginTop) need to be added
-                                    // inside SortableItem or passed as props if complex logic is needed.
-                                    // Example (simple logic, might need refinement):
+                                upcomingItems.map((item, index) => {
+                                    // Determine if this item starts a new project group visually
+                                    const isFirstInProjectGroup = index === 0 || upcomingItems[index - 1].project_id !== item.project_id;
+                                    return (
+                                        <SortableItem
+                                            key={item.plan_id}
+                                            id={item.plan_id}
+                                            item={item}
+                                            isFirstInProjectGroup={isFirstInProjectGroup} // Pass prop
+                                        />
+                                    );
+                                }
+                                    // Note: Visual grouping cues (borderTop, marginTop) are now handled
+                                    // inside SortableItem using the isFirstInProjectGroup prop.
                                     // borderTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '2px solid #ccc' : '1px solid #eee',
                                     // marginTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '10px' : '5px',
                                 ))
