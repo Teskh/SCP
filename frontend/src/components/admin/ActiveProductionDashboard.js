@@ -239,7 +239,7 @@ function ActiveProductionDashboard() {
                                     <ul style={{ ...upcomingListStyle, padding: '10px', margin: 0 }}>
                                         {projectGroup.items.map(item => (
                                             <li key={item.plan_id} style={upcomingItemStyle}>
-                                                <strong>#{item.planned_sequence}:</strong> {item.house_identifier} ({item.house_type_name}) - Línea: {item.planned_assembly_line} - Inicio: {item.planned_start_datetime} ({item.status})
+                                                <strong>#{item.planned_sequence}:</strong> {item.house_identifier} (Módulo {item.module_sequence_in_house}/{item.number_of_modules}) - Tipo: {item.house_type_name} - Línea: {item.planned_assembly_line} - Inicio: {item.planned_start_datetime} ({item.status})
                                             </li>
                                         ))}
                                     </ul>

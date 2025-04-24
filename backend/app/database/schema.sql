@@ -73,6 +73,7 @@ CREATE TABLE ProductionPlan (
     project_id INTEGER NOT NULL,
     house_type_id INTEGER NOT NULL,
     house_identifier TEXT NOT NULL, -- Unique identifier for this house instance within the project (e.g., "ProjectX-Lot-12")
+    module_sequence_in_house INTEGER NOT NULL, -- Which module of the house this plan item represents (1-based)
     planned_sequence INTEGER NOT NULL, -- Overall production order across all projects/plans
     planned_start_datetime TEXT NOT NULL, -- ISO8601 format recommended (YYYY-MM-DD HH:MM:SS)
     planned_assembly_line TEXT NOT NULL CHECK(planned_assembly_line IN ('A', 'B', 'C')), -- Which line it's planned for
@@ -81,7 +82,8 @@ CREATE TABLE ProductionPlan (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP, -- Consider adding triggers to update this automatically
     FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE, -- If project deleted, delete plan items
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE RESTRICT, -- Don't allow deleting house type if planned
-    UNIQUE (project_id, house_identifier) -- Ensure house identifier is unique within a project
+    -- Ensure house identifier + module sequence is unique within a project
+    UNIQUE (project_id, house_identifier, module_sequence_in_house)
     -- UNIQUE (planned_sequence) -- Should sequence be globally unique? Maybe not strictly necessary, allows reordering.
 );
 
@@ -91,7 +93,8 @@ CREATE INDEX idx_productionplan_house_type ON ProductionPlan (house_type_id);
 CREATE INDEX idx_productionplan_sequence ON ProductionPlan (planned_sequence);
 CREATE INDEX idx_productionplan_start_datetime ON ProductionPlan (planned_start_datetime);
 CREATE INDEX idx_productionplan_status ON ProductionPlan (status);
-CREATE INDEX idx_productionplan_identifier ON ProductionPlan (project_id, house_identifier); -- For the unique constraint
+-- Updated index for the unique constraint
+CREATE INDEX idx_productionplan_identifier_module ON ProductionPlan (project_id, house_identifier, module_sequence_in_house);
 
 
 CREATE TABLE Modules (

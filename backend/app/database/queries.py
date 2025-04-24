@@ -180,9 +180,9 @@ def update_project(project_id, name, description, status, house_types_data):
             if current_status != 'Active' and status == 'Active':
                 # Project is being activated - Generate plan items
                 print(f"Project {project_id} activated. Generating production plan...")
-                # Fetch details needed for generation (including house type names)
+                # Fetch details needed for generation (including house type names and number of modules)
                 details_query = """
-                    SELECT pm.house_type_id, pm.quantity, ht.name as house_type_name
+                    SELECT pm.house_type_id, pm.quantity, ht.name as house_type_name, ht.number_of_modules
                     FROM ProjectModules pm
                     JOIN HouseTypes ht ON pm.house_type_id = ht.house_type_id
                     WHERE pm.project_id = ?
@@ -233,7 +233,7 @@ def get_max_planned_sequence():
     return max_seq if max_seq is not None else 0
 
 def generate_production_plan_for_project(project_id, project_name, house_types_details):
-    """Generates ProductionPlan items for a newly activated project."""
+    """Generates ProductionPlan items (one per module) for a newly activated project."""
     db = get_db()
     items_to_add = []
     current_sequence = get_max_planned_sequence() + 1
@@ -244,28 +244,35 @@ def generate_production_plan_for_project(project_id, project_name, house_types_d
     for ht_detail in house_types_details:
         house_type_id = ht_detail['house_type_id']
         quantity = ht_detail['quantity']
-        house_type_name = ht_detail['house_type_name'] # Assuming this is passed or fetched
+        house_type_name = ht_detail['house_type_name']
+        number_of_modules = ht_detail['number_of_modules'] # Fetch number of modules
 
-        for i in range(quantity):
-            house_identifier = f"{project_name}-{house_type_name}-{i+1}" # Example identifier
-            planned_assembly_line = assembly_lines[line_index % len(assembly_lines)]
+        for i in range(quantity): # For each house instance
+            house_base_identifier = f"{project_name}-{house_type_name}-{i+1}" # Identifier for the house
 
-            # Simple date increment logic (e.g., add 8 hours per sequence item) - ADJUST AS NEEDED
-            # This is a placeholder; a more sophisticated calculation might be needed.
-            planned_start_dt = start_datetime_base + timedelta(hours=(current_sequence - (get_max_planned_sequence() + 1)) * 8)
-            planned_start_datetime_str = planned_start_dt.strftime('%Y-%m-%d %H:%M:%S')
+            for module_seq in range(1, number_of_modules + 1): # For each module within the house
+                # Identifier could include module sequence, e.g., "ProjectX-TypeA-1-M1"
+                # Or keep house_identifier the same and rely on module_sequence_in_house column
+                house_identifier = house_base_identifier # Using house identifier, module sequence is separate column
 
-            items_to_add.append((
-                project_id,
-                house_type_id,
-                house_identifier,
-                current_sequence,
-                planned_start_datetime_str,
-                planned_assembly_line,
-                'Planned' # Default status
-            ))
-            current_sequence += 1
-            line_index += 1
+                planned_assembly_line = assembly_lines[line_index % len(assembly_lines)]
+
+                # Simple date increment logic (e.g., add 8 hours per module) - ADJUST AS NEEDED
+                planned_start_dt = start_datetime_base + timedelta(hours=(current_sequence - (get_max_planned_sequence() + 1)) * 8)
+                planned_start_datetime_str = planned_start_dt.strftime('%Y-%m-%d %H:%M:%S')
+
+                items_to_add.append((
+                    project_id,
+                    house_type_id,
+                    house_identifier,
+                    module_seq, # Add module_sequence_in_house
+                    current_sequence,
+                    planned_start_datetime_str,
+                    planned_assembly_line,
+                    'Planned' # Default status
+                ))
+                current_sequence += 1
+                line_index += 1 # Alternate line per module
 
     if items_to_add:
         try:
@@ -829,10 +836,10 @@ def add_bulk_production_plan_items(items_data):
     """Adds multiple items to the production plan using executemany."""
     db = get_db()
     # items_data should be a list of tuples/lists matching the order of columns in the INSERT statement
-    # e.g., [(proj_id, ht_id, identifier, seq, start_dt, line, status), ...]
+    # e.g., [(proj_id, ht_id, identifier, module_seq, planned_seq, start_dt, line, status), ...]
     sql = """INSERT INTO ProductionPlan
-             (project_id, house_type_id, house_identifier, planned_sequence, planned_start_datetime, planned_assembly_line, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?)"""
+             (project_id, house_type_id, house_identifier, module_sequence_in_house, planned_sequence, planned_start_datetime, planned_assembly_line, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""" # Added module_sequence_in_house
     try:
         with db: # Use transaction
             db.executemany(sql, items_data)
@@ -851,7 +858,8 @@ def get_production_plan(filters=None, sort_by='planned_sequence', sort_order='AS
         SELECT
             pp.plan_id, pp.project_id, p.name as project_name,
             pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
-            pp.house_identifier, pp.planned_sequence, pp.planned_start_datetime,
+            pp.house_identifier, pp.module_sequence_in_house, -- Added module sequence
+            pp.planned_sequence, pp.planned_start_datetime,
             pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at
         FROM ProductionPlan pp
         JOIN Projects p ON pp.project_id = p.project_id
@@ -907,7 +915,8 @@ def get_production_plan_item_by_id(plan_id):
         SELECT
             pp.plan_id, pp.project_id, p.name as project_name,
             pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
-            pp.house_identifier, pp.planned_sequence, pp.planned_start_datetime,
+            pp.house_identifier, pp.module_sequence_in_house, -- Added module sequence
+            pp.planned_sequence, pp.planned_start_datetime,
             pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at
         FROM ProductionPlan pp
         JOIN Projects p ON pp.project_id = p.project_id
@@ -990,7 +999,8 @@ def get_station_status_and_upcoming(upcoming_count=5):
         SELECT
             pp.plan_id, pp.project_id, p.name as project_name,
             pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
-            pp.house_identifier, pp.planned_sequence, pp.planned_start_datetime,
+            pp.house_identifier, pp.module_sequence_in_house, -- Added module sequence
+            pp.planned_sequence, pp.planned_start_datetime,
             pp.planned_assembly_line, pp.status
         FROM ProductionPlan pp
         JOIN Projects p ON pp.project_id = p.project_id
