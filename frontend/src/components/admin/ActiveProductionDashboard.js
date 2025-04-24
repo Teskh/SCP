@@ -366,7 +366,7 @@ function ActiveProductionDashboard() {
                                     // inside SortableItem using the isFirstInProjectGroup prop.
                                     // borderTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '2px solid #ccc' : '1px solid #eee',
                                     // marginTop: index > 0 && upcomingItems[index-1].project_id !== item.project_id ? '10px' : '5px',
-                                ))
+                                ) // Removed extra closing parenthesis here
                             ) : (
                                 <p>No hay elementos planeados o programados en el plan de producción.</p>
                             )}
