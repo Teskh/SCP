@@ -296,6 +296,80 @@ def delete_project(project_id):
         return jsonify(error="Failed to delete project"), 500
 
 
+# === House Type Tipologias Routes ===
+
+@admin_bp.route('/house_types/<int:house_type_id>/tipologias', methods=['GET'])
+def get_house_type_tipologias_route(house_type_id):
+    """Get all tipologias for a specific house type."""
+    try:
+        tipologias = queries.get_tipologias_for_house_type(house_type_id)
+        return jsonify(tipologias)
+    except Exception as e:
+        current_app.logger.error(f"Error getting tipologias for house type {house_type_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch tipologias"), 500
+
+@admin_bp.route('/house_types/<int:house_type_id>/tipologias', methods=['POST'])
+def add_house_type_tipologia_route(house_type_id):
+    """Add a new tipologia to a house type."""
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify(error="Missing required field 'name'"), 400
+    name = data['name']
+    description = data.get('description', '')
+
+    try:
+        # Optional: Validate house_type_id exists? queries.add_tipologia handles FK constraint
+        new_id = queries.add_tipologia_to_house_type(house_type_id, name, description)
+        if new_id:
+            new_tipologia = queries.get_tipologia_by_id(new_id) # Fetch to return full object
+            return jsonify(new_tipologia), 201
+        else:
+            # Should not happen if exception is raised on error
+            return jsonify(error="Failed to add tipologia"), 500
+    except sqlite3.IntegrityError:
+        return jsonify(error="Tipologia name already exists for this house type"), 409 # Conflict
+    except Exception as e:
+        current_app.logger.error(f"Error adding tipologia for house type {house_type_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to add tipologia"), 500
+
+@admin_bp.route('/tipologias/<int:tipologia_id>', methods=['PUT'])
+def update_tipologia_route(tipologia_id):
+    """Update an existing tipologia."""
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify(error="Missing required field 'name'"), 400
+    name = data['name']
+    description = data.get('description', '')
+
+    try:
+        success = queries.update_tipologia(tipologia_id, name, description)
+        if success:
+            updated_tipologia = queries.get_tipologia_by_id(tipologia_id) # Fetch updated data
+            return jsonify(updated_tipologia)
+        else:
+            return jsonify(error="Tipologia not found or update failed"), 404
+    except sqlite3.IntegrityError:
+        # Assuming name must be unique within its house type (handled by schema)
+        # We don't know the house_type_id here easily without another query, so generic conflict message
+        return jsonify(error="Tipologia name conflict"), 409
+    except Exception as e:
+        current_app.logger.error(f"Error updating tipologia {tipologia_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update tipologia"), 500
+
+@admin_bp.route('/tipologias/<int:tipologia_id>', methods=['DELETE'])
+def delete_tipologia_route(tipologia_id):
+    """Delete a tipologia."""
+    try:
+        success = queries.delete_tipologia(tipologia_id)
+        if success:
+            return jsonify(message="Tipologia deleted successfully"), 200 # Or 204
+        else:
+            return jsonify(error="Tipologia not found"), 404
+    except Exception as e:
+        current_app.logger.error(f"Error deleting tipologia {tipologia_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to delete tipologia"), 500
+
+
 # === House Parameters Routes ===
 
 @admin_bp.route('/house_parameters', methods=['GET'])
@@ -400,28 +474,36 @@ def add_or_update_house_type_parameter_route(house_type_id):
         # if not house_type or module_seq_int > house_type['number_of_modules']:
         #    return jsonify(error="module_sequence_number exceeds the number of modules for this house type"), 400
 
-        success = queries.add_or_update_house_type_parameter(house_type_id, parameter_id, module_seq_int, value)
+        # Validate tipologia_id if provided (check if it exists for this house_type_id)
+        if tipologia_id is not None:
+            tipologia = queries.get_tipologia_by_id(tipologia_id)
+            if not tipologia or tipologia['house_type_id'] != house_type_id:
+                return jsonify(error=f"Invalid tipologia_id {tipologia_id} for house type {house_type_id}"), 400
+
+        success = queries.add_or_update_house_type_parameter(house_type_id, parameter_id, module_seq_int, value, tipologia_id)
         if success:
-            # Return the data that was set
-            # Fetching the full object might be better if the query returned the ID
+            # Fetching the full object might be better if the query returned the ID or more details
+            # For now, return the data that was set
             result = {
                 'house_type_id': house_type_id,
                 'parameter_id': parameter_id,
                 'module_sequence_number': module_seq_int,
+                'tipologia_id': tipologia_id, # Include tipologia_id in response
                 'value': value
             }
             return jsonify(result), 200 # OK, as it's an UPSERT
         else:
-            # This might indicate a DB error or constraint violation not caught by UPSERT logic
+            # This might indicate a DB error or constraint violation not caught by UPSERT logic (e.g., FK violation if parameter_id is invalid)
             return jsonify(error="Failed to set parameter value for house type"), 500
     except Exception as e:
         current_app.logger.error(f"Error setting parameter for house type {house_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to set parameter value"), 500
 
-# New route to delete a specific parameter value for a specific module
+# Updated route to handle optional tipologia ID for deletion
 @admin_bp.route('/house_types/<int:house_type_id>/parameters/<int:parameter_id>/module/<int:module_sequence_number>', methods=['DELETE'])
-def delete_parameter_from_house_type_module_route(house_type_id, parameter_id, module_sequence_number):
-    """Remove a specific parameter value for a specific module within a house type."""
+@admin_bp.route('/house_types/<int:house_type_id>/parameters/<int:parameter_id>/module/<int:module_sequence_number>/tipologia/<int:tipologia_id>', methods=['DELETE'])
+def delete_parameter_from_house_type_module_route(house_type_id, parameter_id, module_sequence_number, tipologia_id=None):
+    """Remove a specific parameter value for a specific module and optional tipologia within a house type."""
     try:
         # Validate module sequence is positive integer
         module_seq_int = int(module_sequence_number)
@@ -430,15 +512,20 @@ def delete_parameter_from_house_type_module_route(house_type_id, parameter_id, m
     except (ValueError, TypeError):
          return jsonify(error="Invalid module_sequence_number, must be integer"), 400
 
+    # tipologia_id comes directly from the route parameter if present
+
     try:
-        success = queries.delete_parameter_from_house_type_module(house_type_id, parameter_id, module_seq_int)
+        success = queries.delete_parameter_from_house_type_module(house_type_id, parameter_id, module_seq_int, tipologia_id)
         if success:
-            return jsonify(message="Parameter value removed successfully for this module"), 200 # Or 204
+            tipologia_msg = f"for tipologia {tipologia_id}" if tipologia_id is not None else "for general (no tipologia)"
+            return jsonify(message=f"Parameter value removed successfully {tipologia_msg} for this module"), 200 # Or 204
         else:
-            # This implies the link didn't exist for this specific module
-            return jsonify(error="Parameter value not found for this house type, parameter, and module sequence"), 404
+            # This implies the link didn't exist for this specific combination
+            tipologia_msg = f", tipologia {tipologia_id}" if tipologia_id is not None else ", general (no tipologia)"
+            return jsonify(error=f"Parameter value not found for this house type, parameter, module sequence{tipologia_msg}"), 404
     except Exception as e:
-        current_app.logger.error(f"Error deleting parameter value for house type {house_type_id}, module {module_seq_int}: {e}", exc_info=True)
+        tipologia_msg = f", tipologia {tipologia_id}" if tipologia_id is not None else ""
+        current_app.logger.error(f"Error deleting parameter value for house type {house_type_id}, module {module_seq_int}{tipologia_msg}: {e}", exc_info=True)
         return jsonify(error="Failed to remove parameter value"), 500
 
 

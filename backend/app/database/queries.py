@@ -706,35 +706,55 @@ def get_all_house_types():
     """
     db = get_db()
     # Fetch basic house type info
-    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes ORDER BY name")
-    house_types_list = [dict(row) for row in cursor.fetchall()]
+    ht_cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes ORDER BY name")
+    house_types_list = [dict(row) for row in ht_cursor.fetchall()]
     house_types_dict = {ht['house_type_id']: ht for ht in house_types_list}
 
-    # Fetch all parameters linked to house types
+    # Initialize lists for parameters and tipologias
+    for ht_id in house_types_dict:
+        house_types_dict[ht_id]['parameters'] = []
+        house_types_dict[ht_id]['tipologias'] = []
+
+    # Fetch all parameters linked to house types, including tipologia info
     param_query = """
         SELECT
-            htp.house_type_parameter_id, htp.parameter_id, htp.module_sequence_number, htp.value,
+            htp.house_type_id, -- Keep for grouping
+            htp.house_type_parameter_id, htp.parameter_id, htp.module_sequence_number,
+            htp.tipologia_id, htt.name as tipologia_name, -- Added tipologia info
+            htp.value,
             hp.name as parameter_name, hp.unit as parameter_unit
         FROM HouseTypeParameters htp
         JOIN HouseParameters hp ON htp.parameter_id = hp.parameter_id
-        ORDER BY htp.house_type_id, htp.module_sequence_number, hp.name
+        LEFT JOIN HouseTypeTipologias htt ON htp.tipologia_id = htt.tipologia_id -- Left join for tipologia name
+        ORDER BY htp.house_type_id, htp.module_sequence_number, htt.name, hp.name -- Sort including tipologia name
     """
-    cursor = db.execute(param_query)
-    parameters = cursor.fetchall()
+    param_cursor = db.execute(param_query)
+    parameters = param_cursor.fetchall()
 
     # Group parameters by house_type_id
-    for ht_id in house_types_dict:
-        house_types_dict[ht_id]['parameters'] = [] # Initialize parameters list
-
     for param_row in parameters:
         param_dict = dict(param_row)
-        ht_id = param_dict['house_type_id']
+        ht_id = param_dict.pop('house_type_id') # Remove after using for grouping
         if ht_id in house_types_dict:
-            # Remove redundant house_type_id from the parameter dict before appending
-            del param_dict['house_type_id']
             house_types_dict[ht_id]['parameters'].append(param_dict)
 
-    # Return the list of house type dictionaries, now including parameters
+    # Fetch all tipologias
+    tipologia_query = """
+        SELECT house_type_id, tipologia_id, name, description
+        FROM HouseTypeTipologias
+        ORDER BY house_type_id, name
+    """
+    tipologia_cursor = db.execute(tipologia_query)
+    tipologias = tipologia_cursor.fetchall()
+
+    # Group tipologias by house_type_id
+    for tipologia_row in tipologias:
+        tipologia_dict = dict(tipologia_row)
+        ht_id = tipologia_dict.pop('house_type_id') # Remove after using for grouping
+        if ht_id in house_types_dict:
+            house_types_dict[ht_id]['tipologias'].append(tipologia_dict)
+
+    # Return the list of house type dictionaries, now including parameters and tipologias
     return list(house_types_dict.values())
 
 def get_all_stations():
@@ -1111,6 +1131,70 @@ def delete_house_type(house_type_id):
     db.commit()
     return cursor.rowcount > 0
 
+
+# === House Type Tipologias ===
+
+def get_tipologias_for_house_type(house_type_id):
+    """Fetches all tipologias for a specific house type."""
+    db = get_db()
+    cursor = db.execute(
+        "SELECT tipologia_id, house_type_id, name, description FROM HouseTypeTipologias WHERE house_type_id = ? ORDER BY name",
+        (house_type_id,)
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+def get_tipologia_by_id(tipologia_id):
+    """Fetches a single tipologia by its ID."""
+    db = get_db()
+    cursor = db.execute(
+        "SELECT tipologia_id, house_type_id, name, description FROM HouseTypeTipologias WHERE tipologia_id = ?",
+        (tipologia_id,)
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def add_tipologia_to_house_type(house_type_id, name, description):
+    """Adds a new tipologia to a house type."""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            "INSERT INTO HouseTypeTipologias (house_type_id, name, description) VALUES (?, ?, ?)",
+            (house_type_id, name, description)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        # Handle unique constraint (house_type_id, name)
+        print(f"Error adding tipologia (IntegrityError): {e}")
+        raise e # Re-raise for API layer
+
+def update_tipologia(tipologia_id, name, description):
+    """Updates an existing tipologia."""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            "UPDATE HouseTypeTipologias SET name = ?, description = ? WHERE tipologia_id = ?",
+            (name, description, tipologia_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.IntegrityError as e:
+        print(f"Error updating tipologia (IntegrityError): {e}")
+        raise e # Re-raise
+
+def delete_tipologia(tipologia_id):
+    """Deletes a tipologia. Associated parameters with this specific tipologia_id will be deleted by CASCADE."""
+    db = get_db()
+    try:
+        # CASCADE constraint on HouseTypeParameters.tipologia_id handles parameter deletion
+        cursor = db.execute("DELETE FROM HouseTypeTipologias WHERE tipologia_id = ?", (tipologia_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting tipologia: {e}")
+        return False
+
+
 # === House Parameters ===
 
 def get_all_house_parameters():
@@ -1147,34 +1231,37 @@ def delete_house_parameter(parameter_id):
 # === House Type Parameters (Linking Table) ===
 
 def get_parameters_for_house_type(house_type_id):
-    """Fetches all parameters and their values for a specific house type, including module sequence."""
+    """Fetches all parameters and their values for a specific house type, including module sequence and tipologia info."""
     db = get_db()
     query = """
         SELECT
-            htp.house_type_parameter_id, htp.parameter_id, htp.module_sequence_number, htp.value,
+            htp.house_type_parameter_id, htp.parameter_id, htp.module_sequence_number,
+            htp.tipologia_id, htt.name as tipologia_name, -- Added tipologia info
+            htp.value,
             hp.name as parameter_name, hp.unit as parameter_unit
         FROM HouseTypeParameters htp
         JOIN HouseParameters hp ON htp.parameter_id = hp.parameter_id
+        LEFT JOIN HouseTypeTipologias htt ON htp.tipologia_id = htt.tipologia_id -- Left join for tipologia name
         WHERE htp.house_type_id = ?
-        ORDER BY htp.module_sequence_number, hp.name
+        ORDER BY htp.module_sequence_number, htt.name, hp.name -- Sort including tipologia name
     """
     cursor = db.execute(query, (house_type_id,))
     return [dict(row) for row in cursor.fetchall()]
 
-def add_or_update_house_type_parameter(house_type_id, parameter_id, module_sequence_number, value):
-    """Adds or updates the value for a parameter for a specific module within a house type."""
+def add_or_update_house_type_parameter(house_type_id, parameter_id, module_sequence_number, value, tipologia_id=None):
+    """Adds or updates the value for a parameter for a specific module and tipologia within a house type."""
     db = get_db()
     try:
-        # Use UPSERT (requires SQLite 3.24.0+)
+        # Use UPSERT (requires SQLite 3.24.0+) - Updated unique constraint includes tipologia_id
         cursor = db.execute(
-            """INSERT INTO HouseTypeParameters (house_type_id, parameter_id, module_sequence_number, value)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(house_type_id, parameter_id, module_sequence_number)
+            """INSERT INTO HouseTypeParameters (house_type_id, parameter_id, module_sequence_number, tipologia_id, value)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(house_type_id, parameter_id, module_sequence_number, tipologia_id)
                DO UPDATE SET value = excluded.value""",
-            (house_type_id, parameter_id, module_sequence_number, value)
+            (house_type_id, parameter_id, module_sequence_number, tipologia_id, value)
         )
         db.commit()
-        # Return the ID of the inserted/updated row if needed
+        # Return the ID of the inserted/updated row if needed (lastrowid might not be reliable for UPSERT updates)
         # For simplicity, return True on success
         return True
     except sqlite3.Error as e:
@@ -1188,12 +1275,26 @@ def delete_house_type_parameter(house_type_parameter_id):
     db.commit()
     return cursor.rowcount > 0
 
-def delete_parameter_from_house_type_module(house_type_id, parameter_id, module_sequence_number):
-    """Removes a parameter link by house_type_id, parameter_id, and module sequence."""
+def delete_parameter_from_house_type_module(house_type_id, parameter_id, module_sequence_number, tipologia_id=None):
+    """Removes a parameter link by house_type_id, parameter_id, module sequence, and optionally tipologia_id."""
     db = get_db()
-    cursor = db.execute(
-        "DELETE FROM HouseTypeParameters WHERE house_type_id = ? AND parameter_id = ? AND module_sequence_number = ?",
-        (house_type_id, parameter_id, module_sequence_number)
-    )
-    db.commit()
-    return cursor.rowcount > 0
+    try:
+        if tipologia_id is None:
+            # Delete the general parameter (where tipologia_id IS NULL)
+            cursor = db.execute(
+                """DELETE FROM HouseTypeParameters
+                   WHERE house_type_id = ? AND parameter_id = ? AND module_sequence_number = ? AND tipologia_id IS NULL""",
+                (house_type_id, parameter_id, module_sequence_number)
+            )
+        else:
+            # Delete the parameter for the specific tipologia
+            cursor = db.execute(
+                """DELETE FROM HouseTypeParameters
+                   WHERE house_type_id = ? AND parameter_id = ? AND module_sequence_number = ? AND tipologia_id = ?""",
+                (house_type_id, parameter_id, module_sequence_number, tipologia_id)
+            )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting house type parameter: {e}") # Replace with logging
+        return False
