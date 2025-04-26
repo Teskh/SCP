@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS HouseTypePanels;
 DROP TABLE IF EXISTS Multiwalls;
 DROP TABLE IF EXISTS HouseTypeParameters;
 DROP TABLE IF EXISTS HouseParameters;
+DROP TABLE IF EXISTS HouseTypeTipologias; -- Added: Drop new table
 DROP TABLE IF EXISTS HouseTypes;
 DROP TABLE IF EXISTS Projects;
 DROP TABLE IF EXISTS Stations;
@@ -185,6 +186,16 @@ CREATE TABLE HouseTypes (
     number_of_modules INTEGER NOT NULL DEFAULT 1 -- How many physical modules make up this house type
 );
 
+-- Added: Table for Tipologias associated with a HouseType
+CREATE TABLE HouseTypeTipologias (
+    tipologia_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_type_id INTEGER NOT NULL,
+    name TEXT NOT NULL, -- e.g., 'Single', 'Duplex', 'Standard', 'Premium'
+    description TEXT,
+    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    UNIQUE (house_type_id, name) -- Tipologia name must be unique within a house type
+);
+
 CREATE TABLE HouseParameters (
     parameter_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE, -- e.g., 'Floor Area', 'Number of Windows', 'Exterior Wall Length'
@@ -196,18 +207,22 @@ CREATE TABLE HouseTypeParameters (
     house_type_id INTEGER NOT NULL,
     parameter_id INTEGER NOT NULL,
     module_sequence_number INTEGER NOT NULL, -- Which module within the house type this value applies to (1-based index)
+    tipologia_id INTEGER, -- Nullable FK: If NULL, applies to all typologies for the module. If set, applies only to this specific typology.
     value REAL NOT NULL, -- Using REAL to accommodate various numeric types (integers, decimals)
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
     FOREIGN KEY (parameter_id) REFERENCES HouseParameters(parameter_id) ON DELETE CASCADE,
-    -- Ensure only one value per parameter per module sequence within a house type
-    UNIQUE (house_type_id, parameter_id, module_sequence_number)
+    FOREIGN KEY (tipologia_id) REFERENCES HouseTypeTipologias(tipologia_id) ON DELETE CASCADE, -- If typology deleted, delete specific param values
+    -- Ensure only one value per parameter per module sequence *per specific typology* OR one value for *all typologies* (NULL)
+    UNIQUE (house_type_id, parameter_id, module_sequence_number, tipologia_id)
 );
 
 -- Indexes for new tables
+CREATE INDEX idx_housetypetipologias_house_type ON HouseTypeTipologias (house_type_id); -- Index for Tipologias FK
 CREATE INDEX idx_housetypeparameters_house_type ON HouseTypeParameters (house_type_id);
 CREATE INDEX idx_housetypeparameters_parameter ON HouseTypeParameters (parameter_id);
 CREATE INDEX idx_housetypeparameters_module_seq ON HouseTypeParameters (module_sequence_number);
-CREATE INDEX idx_housetypeparameters_composite ON HouseTypeParameters (house_type_id, parameter_id, module_sequence_number); -- Index for the unique constraint
+CREATE INDEX idx_housetypeparameters_tipologia ON HouseTypeParameters (tipologia_id); -- Index for Tipologia FK
+CREATE INDEX idx_housetypeparameters_composite ON HouseTypeParameters (house_type_id, parameter_id, module_sequence_number, tipologia_id); -- Index for the unique constraint
 
 -- ========= House Type Panels =========
 
