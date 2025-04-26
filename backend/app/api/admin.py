@@ -448,24 +448,30 @@ def get_house_type_parameters(house_type_id):
 
 @admin_bp.route('/house_types/<int:house_type_id>/parameters', methods=['POST'])
 def add_or_update_house_type_parameter_route(house_type_id):
-    """Add or update a parameter value for a specific module within a house type."""
+    """Add or update a parameter value for a specific module and optional tipologia within a house type."""
     data = request.get_json()
-    if not data or not all(k in data for k in ('parameter_id', 'module_sequence_number', 'value')):
-        return jsonify(error="Missing required fields (parameter_id, module_sequence_number, value)"), 400
+    required_fields = ['parameter_id', 'module_sequence_number', 'value'] # Keep same required fields from frontend
+    if not data or not all(k in data for k in required_fields):
+        return jsonify(error=f"Missing required fields ({', '.join(required_fields)})"), 400
 
     parameter_id = data['parameter_id']
     module_sequence_number = data['module_sequence_number']
     value_str = data['value']
+    tipologia_id = data.get('tipologia_id') # Optional, can be null/None
 
     # Validate value is numeric (float or int) and module sequence is positive integer
     try:
-        value = float(value_str) if value_str is not None and value_str != '' else None # Allow clearing value? Or require non-empty? Let's require for now.
+        # Allow empty string or null to potentially clear a value? Let's treat as error for now.
+        value = float(value_str) if value_str is not None and str(value_str).strip() != '' else None
         if value is None:
-             return jsonify(error="Value cannot be empty"), 400
+             # Frontend should handle this, but add a check just in case
+             return jsonify(error="Value cannot be empty or non-numeric"), 400
+
         module_seq_int = int(module_sequence_number)
         if module_seq_int <= 0:
             return jsonify(error="Invalid module_sequence_number, must be positive"), 400
     except (ValueError, TypeError):
+        # Catches float conversion error or int conversion error
         return jsonify(error="Invalid value (must be numeric) or module_sequence_number (must be integer)"), 400
 
     try:
