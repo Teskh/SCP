@@ -44,6 +44,7 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
 
     const handleGenericChange = (parameterId, moduleSequence, checked) => {
         const key = `${parameterId}_${moduleSequence}`;
+        setIsGeneric(prev => ({ ...prev, [key]: checked }));
         // Optional: Clear values when switching modes?
         // If switching TO generic, clear specific tipologia values?
         // If switching FROM generic, clear general value?
