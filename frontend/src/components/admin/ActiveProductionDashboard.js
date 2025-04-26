@@ -130,15 +130,17 @@ function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick }) 
         ...upcomingItemStyle, // Base style
         ...(isSelected && !isDragging ? selectedListItemStyle : {}), // Apply selected style if selected and not dragging
         ...(isDragging ? draggingListItemStyle : {}), // Apply dragging style (overrides selected style visually during drag)
-        // Add project grouping visual cues using the prop
         borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected ? selectedListItemStyle.border : upcomingItemStyle.border), // Keep border consistent
         marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom,
         zIndex: isDragging ? 1 : 'auto',
         position: 'relative',
+        display: 'flex', // Arrange children horizontally
+        alignItems: 'center', // Vertically align items in the center
+        paddingRight: '5px', // Add some padding so indicators don't touch edge
     };
 
-    // Display text generation remains the same
-    const displayText = `<strong>#${item.planned_sequence}:</strong> [${item.project_name}] ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Línea: ${item.planned_assembly_line} - Inicio: ${item.planned_start_datetime} (${item.status})`;
+    // Display text generation - REMOVED Line Info
+    const displayText = `<strong>#${item.planned_sequence}:</strong> [${item.project_name}] ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`;
 
     // Combine drag listeners and click handler
     const combinedListeners = {
@@ -146,11 +148,46 @@ function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick }) 
         onClick: (e) => onClick(e, id), // Add the onClick handler passed from parent
     };
 
+    // Styles for the line indicator columns and the indicator itself
+    const lineIndicatorColumnStyle = {
+        minWidth: '40px', // Fixed width for each line column
+        textAlign: 'center',
+        padding: '0 5px', // Add some horizontal padding within columns
+    };
+    const lineIndicatorStyle = {
+        display: 'inline-block',
+        padding: '3px 6px', // Smaller padding
+        borderRadius: '4px',
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: '0.8em', // Smaller font size
+        minWidth: '20px',
+        textAlign: 'center',
+    };
+
+
     return (
         // Apply combined listeners and attributes to the main div
         <div ref={setNodeRef} style={style} {...attributes} {...combinedListeners}>
-            {/* Drag handle could go here if needed, but listeners are on the whole item */}
-            <span dangerouslySetInnerHTML={{ __html: displayText }} />
+            {/* Main text content - takes up remaining space */}
+            <span style={{ flexGrow: 1, marginRight: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} dangerouslySetInnerHTML={{ __html: displayText }} />
+
+            {/* Line Indicator Columns */}
+            <div style={lineIndicatorColumnStyle}>
+                {item.planned_assembly_line === 'A' && (
+                    <div style={{...lineIndicatorStyle, backgroundColor: '#dc3545'}}>A</div> // Red
+                )}
+            </div>
+            <div style={lineIndicatorColumnStyle}>
+                {item.planned_assembly_line === 'B' && (
+                    <div style={{...lineIndicatorStyle, backgroundColor: '#28a745'}}>B</div> // Green
+                )}
+            </div>
+            <div style={lineIndicatorColumnStyle}>
+                {item.planned_assembly_line === 'C' && (
+                    <div style={{...lineIndicatorStyle, backgroundColor: '#007bff'}}>C</div> // Blue
+                )}
+            </div>
         </div>
     );
 }
