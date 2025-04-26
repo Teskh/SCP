@@ -91,13 +91,33 @@ def add_project(name, description, status, house_types_data):
                         "INSERT INTO ProjectModules (project_id, house_type_id, quantity) VALUES (?, ?, ?)",
                         project_modules_data
                     )
+
+            # --- Handle Production Plan Generation if status is 'Active' ---
+            if status == 'Active':
+                print(f"Project {project_id} created as Active. Generating production plan...")
+                # Fetch details needed for generation (including house type names and number of modules)
+                # Need to query within the same transaction context 'db'
+                details_query = """
+                    SELECT pm.house_type_id, pm.quantity, ht.name as house_type_name, ht.number_of_modules
+                    FROM ProjectModules pm
+                    JOIN HouseTypes ht ON pm.house_type_id = ht.house_type_id
+                    WHERE pm.project_id = ?
+                """
+                details_cursor = db.execute(details_query, (project_id,))
+                house_types_details = [dict(row) for row in details_cursor.fetchall()]
+
+                if not generate_production_plan_for_project(project_id, name, house_types_details):
+                    # If generation fails, raise an exception to trigger rollback
+                    raise Exception(f"Failed to generate production plan for newly added project {project_id}. Rolling back.")
+
         return project_id # Return the ID of the newly created project
     except sqlite3.IntegrityError as e:
         # Handle potential unique constraint violation (e.g., duplicate name)
         print(f"Error adding project (IntegrityError): {e}") # Replace with logging
         raise e # Re-raise to be caught by API layer
-    except sqlite3.Error as e:
+    except Exception as e: # Catch generation errors too
         print(f"Error adding project: {e}") # Replace with logging
+        # Transaction ensures rollback on error
         return None
 
 def update_project(project_id, name, description, status, house_types_data):
