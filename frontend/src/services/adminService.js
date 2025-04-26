@@ -419,6 +419,45 @@ export const deleteProject = async (id) => {
 };
 
 
+// === House Type Tipologias ===
+
+export const getHouseTypeTipologias = async (houseTypeId) => {
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/tipologias`);
+    return handleResponse(response);
+};
+
+export const addHouseTypeTipologia = async (houseTypeId, tipologiaData) => {
+    // tipologiaData should include name, description (optional)
+    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/tipologias`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tipologiaData),
+    });
+    return handleResponse(response);
+};
+
+export const updateHouseTypeTipologia = async (tipologiaId, tipologiaData) => {
+    // tipologiaData should include name, description (optional)
+    const response = await fetch(`${API_BASE_URL}/tipologias/${tipologiaId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tipologiaData),
+    });
+    return handleResponse(response);
+};
+
+export const deleteHouseTypeTipologia = async (tipologiaId) => {
+    const response = await fetch(`${API_BASE_URL}/tipologias/${tipologiaId}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok && response.status !== 204) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return true; // Indicate success
+};
+
+
 // === House Type Parameters (Linking) ===
 
 export const getParametersForHouseType = async (houseTypeId) => {
@@ -426,23 +465,28 @@ export const getParametersForHouseType = async (houseTypeId) => {
     return handleResponse(response);
 };
 
-// Updated to include module_sequence_number
-export const setHouseTypeParameter = async (houseTypeId, parameterId, moduleSequenceNumber, value) => {
+// Updated to include module_sequence_number and optional tipologia_id
+export const setHouseTypeParameter = async (houseTypeId, parameterId, moduleSequenceNumber, value, tipologiaId = null) => {
     const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters`, {
         method: 'POST', // Using POST for add/update via backend UPSERT
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             parameter_id: parameterId,
             module_sequence_number: moduleSequenceNumber,
-            value: value
+            value: value,
+            tipologia_id: tipologiaId // Send null if not provided or explicitly null
         }),
     });
     return handleResponse(response);
 };
 
-// New function to delete a specific parameter value for a specific module
-export const deleteParameterFromHouseTypeModule = async (houseTypeId, parameterId, moduleSequenceNumber) => {
-    const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/parameters/${parameterId}/module/${moduleSequenceNumber}`, {
+// Updated function to delete a specific parameter value for a specific module and optional tipologia
+export const deleteParameterFromHouseTypeModule = async (houseTypeId, parameterId, moduleSequenceNumber, tipologiaId = null) => {
+    let url = `${API_BASE_URL}/house_types/${houseTypeId}/parameters/${parameterId}/module/${moduleSequenceNumber}`;
+    if (tipologiaId !== null) {
+        url += `/tipologia/${tipologiaId}`; // Append tipologia ID if provided
+    }
+    const response = await fetch(url, {
         method: 'DELETE',
     });
     if (!response.ok && response.status !== 204) {
