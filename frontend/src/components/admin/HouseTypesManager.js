@@ -5,26 +5,45 @@ import HouseTypePanelsModal from './HouseTypePanelsModal';
 // --- Sub-component for Editing Parameters per Module ---
 // NOTE: Component names and props remain in English for code consistency
 const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, onSave, onCancel, isLoading, error }) => {
-    // State structure: { 'paramId_moduleSeq_tipologiaId': value }
+    // State structure for values: { 'paramId_moduleSeq_tipologiaId': value }
     // tipologiaId can be 'null' for the general value or the actual tipologia_id
     const [values, setValues] = useState({});
+    // State structure for generic checkbox: { 'paramId_moduleSeq': boolean }
+    const [isGeneric, setIsGeneric] = useState({});
 
-    // Initialize state with existing values, mapping tipologia_id (null becomes 'null' string key)
+    // Initialize state with existing values and determine initial generic state
     useEffect(() => {
         const initialValues = {};
+        const initialIsGeneric = {};
+
+        // Populate initial values
         existingValues.forEach(ev => {
             const tipologiaKey = ev.tipologia_id === null ? 'null' : ev.tipologia_id;
             initialValues[`${ev.parameter_id}_${ev.module_sequence_number}_${tipologiaKey}`] = ev.value;
         });
+
+        // Determine initial generic state based on presence of general value (tipologia_id === null)
+        parameters.forEach(param => {
+            for (let modSeq = 1; modSeq <= houseType.number_of_modules; modSeq++) {
+                const genericKey = `${param.parameter_id}_${modSeq}`;
+                const generalValueKey = `${param.parameter_id}_${modSeq}_null`;
+                // Check if a general value exists OR if there are no tipologias (default to generic)
+                initialIsGeneric[genericKey] = initialValues[generalValueKey] !== undefined || !tipologias || tipologias.length === 0;
+            }
+        });
+
         setValues(initialValues);
-    }, [existingValues]);
+        setIsGeneric(initialIsGeneric);
+    }, [existingValues, parameters, houseType.number_of_modules, tipologias]);
 
     const handleValueChange = (parameterId, moduleSequence, tipologiaId, value) => {
         const tipologiaKey = tipologiaId === null ? 'null' : tipologiaId;
-        setValues(prev => ({
-            ...prev,
-            [`${parameterId}_${moduleSequence}_${tipologiaKey}`]: value
-        setIsGeneric(prev => ({ ...prev, [key]: checked }));
+        const key = `${parameterId}_${moduleSequence}_${tipologiaKey}`;
+        setValues(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleGenericChange = (parameterId, moduleSequence, checked) => {
+        const key = `${parameterId}_${moduleSequence}`;
         // Optional: Clear values when switching modes?
         // If switching TO generic, clear specific tipologia values?
         // If switching FROM generic, clear general value?
