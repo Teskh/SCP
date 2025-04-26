@@ -1,54 +1,86 @@
-import React, { useState, useEffect, useCallback, Fragment } from 'react'; // Added Fragment
+import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import * as adminService from '../../services/adminService';
-import HouseTypePanelsModal from './HouseTypePanelsModal'; // Import the panels modal
+import HouseTypePanelsModal from './HouseTypePanelsModal';
 
 // --- Sub-component for Editing Parameters per Module ---
 // NOTE: Component names and props remain in English for code consistency
-const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCancel, isLoading, error }) => {
-    const [values, setValues] = useState({}); // Store { 'paramId_moduleSeq': value }
+const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, onSave, onCancel, isLoading, error }) => {
+    // State structure: { 'paramId_moduleSeq_tipologiaId': value }
+    // tipologiaId can be 'null' for the general value or the actual tipologia_id
+    const [values, setValues] = useState({});
 
-    // Initialize state with existing values
+    // Initialize state with existing values, mapping tipologia_id (null becomes 'null' string key)
     useEffect(() => {
         const initialValues = {};
         existingValues.forEach(ev => {
-            initialValues[`${ev.parameter_id}_${ev.module_sequence_number}`] = ev.value;
+            const tipologiaKey = ev.tipologia_id === null ? 'null' : ev.tipologia_id;
+            initialValues[`${ev.parameter_id}_${ev.module_sequence_number}_${tipologiaKey}`] = ev.value;
         });
         setValues(initialValues);
     }, [existingValues]);
 
-    const handleValueChange = (parameterId, moduleSequence, value) => {
+    const handleValueChange = (parameterId, moduleSequence, tipologiaId, value) => {
+        const tipologiaKey = tipologiaId === null ? 'null' : tipologiaId;
         setValues(prev => ({
             ...prev,
-            [`${parameterId}_${moduleSequence}`]: value
+            [`${parameterId}_${moduleSequence}_${tipologiaKey}`]: value
         }));
     };
 
     const handleSave = () => {
-        // Prepare payload for the service calls
-        const changes = [];
-        parameters.forEach(param => {
-            for (let i = 1; i <= houseType.number_of_modules; i++) {
-                const key = `${param.parameter_id}_${i}`;
-                const currentValue = values[key];
-                const originalValue = existingValues.find(ev => ev.parameter_id === param.parameter_id && ev.module_sequence_number === i)?.value;
+        const changes = []; // { action: 'set'/'delete', parameter_id, module_sequence_number, tipologia_id, value? }
+        const hasTipologias = tipologias && tipologias.length > 0;
 
-                // Check if value changed or is newly added (and not empty)
-                if (currentValue !== undefined && currentValue !== '' && currentValue != originalValue) {
-                     // Check if it's a valid number before adding
-                     if (!isNaN(parseFloat(currentValue)) && isFinite(currentValue)) {
+        parameters.forEach(param => {
+            for (let modSeq = 1; modSeq <= houseType.number_of_modules; modSeq++) {
+                const processValue = (tipologiaId) => {
+                    const tipologiaKey = tipologiaId === null ? 'null' : tipologiaId;
+                    const key = `${param.parameter_id}_${modSeq}_${tipologiaKey}`;
+                    const currentValue = values[key];
+                    const originalValueObj = existingValues.find(ev =>
+                        ev.parameter_id === param.parameter_id &&
+                        ev.module_sequence_number === modSeq &&
+                        ev.tipologia_id === tipologiaId
+                    );
+                    const originalValue = originalValueObj?.value;
+
+                    const isNumeric = currentValue !== undefined && currentValue !== null && currentValue !== '' && !isNaN(parseFloat(currentValue)) && isFinite(currentValue);
+                    const isEmpty = currentValue === undefined || currentValue === null || currentValue === '';
+
+                    if (isNumeric) {
+                        const numericValue = parseFloat(currentValue);
+                        if (numericValue != originalValue) { // Use != to handle type differences if originalValue was string/number
+                            changes.push({
+                                action: 'set',
+                                parameter_id: param.parameter_id,
+                                module_sequence_number: modSeq,
+                                tipologia_id: tipologiaId,
+                                value: numericValue
+                            });
+                        }
+                    } else if (isEmpty && originalValue !== undefined) {
+                        // Value was cleared, and there was an original value -> delete it
                         changes.push({
+                            action: 'delete',
                             parameter_id: param.parameter_id,
-                            module_sequence_number: i,
-                            value: parseFloat(currentValue) // Ensure it's a number
+                            module_sequence_number: modSeq,
+                            tipologia_id: tipologiaId
                         });
-                     } else {
-                         // Optionally show an error message for this specific input
-                         // Keep console warnings in English for developers
-                         console.warn(`Invalid number format for ${param.name} - Module ${i}: ${currentValue}`);
-                     }
+                    } else if (!isEmpty && !isNumeric) {
+                        // Invalid input, log warning but don't save/delete
+                        console.warn(`Invalid number format for ${param.name} - Module ${modSeq} - Tipologia ${tipologiaKey}: ${currentValue}`);
+                    }
+                };
+
+                if (hasTipologias) {
+                    // Process general value (null tipologia_id)
+                    processValue(null);
+                    // Process each specific tipologia value
+                    tipologias.forEach(t => processValue(t.tipologia_id));
+                } else {
+                    // No tipologias, only process general value (null tipologia_id)
+                    processValue(null);
                 }
-                // TODO: Handle deletion if value is cleared? Requires a different API call.
-                // For now, we only add/update non-empty numeric values.
             }
         });
         onSave(changes);
@@ -59,12 +91,17 @@ const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCanc
         container: { marginTop: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px', background: '#f9f9f9' },
         moduleSection: { marginBottom: '15px', paddingBottom: '10px', borderBottom: '1px solid #eee' },
         paramRow: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '5px' },
-        paramLabel: { minWidth: '150px', textAlign: 'right', fontWeight: 'bold' },
-        paramUnit: { minWidth: '50px', color: '#666' },
-        input: { padding: '5px', border: '1px solid #ccc', borderRadius: '3px', width: '100px' },
+        paramLabel: { minWidth: '150px', textAlign: 'right', fontWeight: 'bold', alignSelf: 'start', paddingTop: '5px' }, // Adjusted alignment
+        paramUnit: { minWidth: '50px', color: '#666', alignSelf: 'start', paddingTop: '5px' }, // Adjusted alignment
+        input: { padding: '5px', border: '1px solid #ccc', borderRadius: '3px', width: '100px', marginBottom: '3px' }, // Added margin bottom
+        inputGroup: { display: 'flex', flexDirection: 'column', gap: '2px' }, // Group inputs for a parameter
+        tipologiaInputRow: { display: 'flex', gap: '5px', alignItems: 'center', marginLeft: '20px' }, // Indent tipologia inputs
+        tipologiaLabel: { fontSize: '0.9em', color: '#555', minWidth: '80px' },
         actions: { marginTop: '15px' },
         error: { color: 'red', marginBottom: '10px' }
     };
+
+    const hasTipologias = tipologias && tipologias.length > 0;
 
     return (
         <div style={editorStyles.container}>
@@ -76,19 +113,38 @@ const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCanc
                 <div key={moduleSeq} style={editorStyles.moduleSection}>
                     <h5>Módulo {moduleSeq}</h5>
                     {parameters.map(param => {
-                        const key = `${param.parameter_id}_${moduleSeq}`;
+                        const renderInput = (tipologiaId, label) => {
+                            const tipologiaKey = tipologiaId === null ? 'null' : tipologiaId;
+                            const key = `${param.parameter_id}_${moduleSeq}_${tipologiaKey}`;
+                            return (
+                                <div key={key} style={hasTipologias ? editorStyles.tipologiaInputRow : {}}>
+                                    {hasTipologias && <label style={editorStyles.tipologiaLabel} htmlFor={key}>{label}:</label>}
+                                    <input
+                                        id={key}
+                                        type="number"
+                                        step="any"
+                                        style={editorStyles.input}
+                                        value={values[key] || ''}
+                                        onChange={(e) => handleValueChange(param.parameter_id, moduleSeq, tipologiaId, e.target.value)}
+                                        placeholder="Valor"
+                                    />
+                                </div>
+                            );
+                        };
+
                         return (
-                            <div key={key} style={editorStyles.paramRow}>
-                                <label style={editorStyles.paramLabel} htmlFor={key}>{param.name}:</label>
-                                <input
-                                    id={key}
-                                    type="number" // Use number type for better input control
-                                    step="any" // Allow decimals
-                                    style={editorStyles.input}
-                                    value={values[key] || ''}
-                                    onChange={(e) => handleValueChange(param.parameter_id, moduleSeq, e.target.value)}
-                                    placeholder="Valor"
-                                />
+                            <div key={`${param.parameter_id}_${moduleSeq}`} style={editorStyles.paramRow}>
+                                <label style={editorStyles.paramLabel}>{param.name}:</label>
+                                <div style={editorStyles.inputGroup}>
+                                    {hasTipologias ? (
+                                        <>
+                                            {renderInput(null, 'General')}
+                                            {tipologias.map(t => renderInput(t.tipologia_id, t.name))}
+                                        </>
+                                    ) : (
+                                        renderInput(null, '') // Render single input if no tipologias
+                                    )}
+                                </div>
                                 <span style={editorStyles.paramUnit}>({param.unit || 'N/A'})</span>
                             </div>
                         );
@@ -97,7 +153,7 @@ const ParameterEditor = ({ houseType, parameters, existingValues, onSave, onCanc
             ))}
             <div style={editorStyles.actions}>
                 <button onClick={handleSave} disabled={isLoading} style={styles.button}>
-                    {isLoading ? 'Guardando...' : 'Guardar Valores de Parámetros'}
+                    {isLoading ? 'Guardando...' : 'Guardar Cambios de Parámetros'}
                 </button>
                 <button onClick={onCancel} disabled={isLoading} style={styles.button}>
                     Cancelar
@@ -121,19 +177,28 @@ const styles = { // Reusing styles from other managers
     input: { padding: '8px', border: '1px solid #ccc', borderRadius: '4px', flexGrow: 1 },
     textarea: { padding: '8px', border: '1px solid #ccc', borderRadius: '4px', flexGrow: 1, minHeight: '60px' },
     error: { color: 'red', marginTop: '10px' },
-    loading: { fontStyle: 'italic' }
+    loading: { fontStyle: 'italic' },
+    // Tipologia specific styles
+    tipologiaSection: { marginTop: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px', background: '#f9f9f9' },
+    tipologiaTable: { width: '100%', borderCollapse: 'collapse', marginTop: '10px' },
+    tipologiaTh: { border: '1px solid #ccc', padding: '6px', backgroundColor: '#e9e9e9', textAlign: 'left' },
+    tipologiaTd: { border: '1px solid #ccc', padding: '6px' },
+    tipologiaForm: { marginTop: '10px', padding: '10px', border: '1px solid #eee', borderRadius: '4px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' },
+    tipologiaInput: { padding: '6px', border: '1px solid #ccc', borderRadius: '3px', flexGrow: 1, minWidth: '150px' },
+    tipologiaButton: { padding: '4px 8px', fontSize: '0.9em' }
 };
 
 // NOTE: Keep initialFormState keys in English
-const initialFormState = { name: '', description: '', number_of_modules: 1 };
+const initialHouseTypeFormState = { name: '', description: '', number_of_modules: 1 };
+const initialTipologiaFormState = { name: '', description: '' };
 
 function HouseTypesManager() {
     const [houseTypes, setHouseTypes] = useState([]);
     const [allParameters, setAllParameters] = useState([]); // All defined HouseParameters
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false); // General loading for house types list/main form
+    const [error, setError] = useState(''); // General error for house types list/main form
     const [editMode, setEditMode] = useState(null); // null or house_type_id for basic editing
-    const [formData, setFormData] = useState(initialFormState);
+    const [formData, setFormData] = useState(initialHouseTypeFormState);
 
     // State for the parameter editor
     const [editingParamsFor, setEditingParamsFor] = useState(null); // null or houseType object
@@ -144,8 +209,16 @@ function HouseTypesManager() {
     // State for the panels modal
     const [editingPanelsFor, setEditingPanelsFor] = useState(null); // null or houseType object
 
-    const fetchData = useCallback(async () => {
-        setIsLoading(true);
+    // State for Tipologias
+    const [houseTypeTipologias, setHouseTypeTipologias] = useState([]);
+    const [tipologiaFormData, setTipologiaFormData] = useState(initialTipologiaFormState);
+    const [editingTipologiaId, setEditingTipologiaId] = useState(null); // null or tipologia_id
+    const [tipologiaLoading, setTipologiaLoading] = useState(false);
+    const [tipologiaError, setTipologiaError] = useState('');
+
+
+    const fetchHouseTypesAndParams = useCallback(async () => {
+        setIsLoading(true); // Loading for the main list
         setError('');
         try {
             // Fetch both house types and all possible parameters
@@ -156,15 +229,32 @@ function HouseTypesManager() {
             setHouseTypes(typesData);
             setAllParameters(paramsData);
         } catch (err) {
-            setError(err.message || 'Failed to fetch data');
+            setError(err.message || 'Error al obtener tipos de vivienda o parámetros');
         } finally {
             setIsLoading(false);
         }
     }, []);
 
+    // Fetch Tipologias for a specific House Type
+    const fetchTipologias = useCallback(async (houseTypeId) => {
+        if (!houseTypeId) return;
+        setTipologiaLoading(true);
+        setTipologiaError('');
+        try {
+            const data = await adminService.getHouseTypeTipologias(houseTypeId);
+            setHouseTypeTipologias(data);
+        } catch (err) {
+            setTipologiaError(err.message || 'Error al obtener las tipologías');
+            setHouseTypeTipologias([]); // Clear on error
+        } finally {
+            setTipologiaLoading(false);
+        }
+    }, []);
+
+
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        fetchHouseTypesAndParams();
+    }, [fetchHouseTypesAndParams]);
 
     const handleInputChange = (e) => {
         const { name, value, type } = e.target;
@@ -172,6 +262,15 @@ function HouseTypesManager() {
             ...prev,
             [name]: type === 'number' ? parseInt(value, 10) || 1 : value // Ensure number_of_modules is integer >= 1
         }));
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'number' ? parseInt(value, 10) || 1 : value // Ensure number_of_modules is integer >= 1
+        }));
+    };
+
+    const handleTipologiaInputChange = (e) => {
+        const { name, value } = e.target;
+        setTipologiaFormData(prev => ({ ...prev, [name]: value }));
     };
 
     const handleEdit = (houseType) => {
@@ -181,14 +280,22 @@ function HouseTypesManager() {
             description: houseType.description || '',
             number_of_modules: houseType.number_of_modules || 1
         });
-        setEditingParamsFor(null); // Close parameter editor if open
+        setEditingParamsFor(null); // Close parameter editor
+        setEditingPanelsFor(null); // Close panels modal
+        fetchTipologias(houseType.house_type_id); // Fetch tipologias for the selected house type
+        setEditingTipologiaId(null); // Reset tipologia edit mode
+        setTipologiaFormData(initialTipologiaFormState); // Reset tipologia form
         window.scrollTo(0, 0);
     };
 
     const handleCancelEdit = () => {
         setEditMode(null);
-        setFormData(initialFormState);
+        setFormData(initialHouseTypeFormState);
         setError('');
+        setHouseTypeTipologias([]); // Clear tipologias
+        setTipologiaError('');
+        setEditingTipologiaId(null);
+        setTipologiaFormData(initialTipologiaFormState);
     };
 
     const handleSubmit = async (e) => {
@@ -206,12 +313,17 @@ function HouseTypesManager() {
             } else {
                 await adminService.addHouseType(formData);
             }
+            const newOrUpdatedId = editMode || (await adminService.getHouseTypes()).find(ht => ht.name === formData.name)?.house_type_id; // Re-fetch or get from response if API returns it
             handleCancelEdit();
-            await fetchData(); // Refresh list
+            await fetchHouseTypesAndParams(); // Refresh list
+            if (!editMode && newOrUpdatedId) { // If adding, open the new one for editing tipologias
+                const newHouseType = houseTypes.find(ht => ht.house_type_id === newOrUpdatedId) || { house_type_id: newOrUpdatedId, ...formData }; // Find or construct
+                 if (newHouseType) handleEdit(newHouseType);
+            }
         } catch (err) {
             setError(err.message || `Error al ${editMode ? 'guardar' : 'añadir'} el tipo de vivienda`);
         } finally {
-            setIsLoading(false);
+            setIsLoading(false); // Stop main form loading
         }
     };
 
@@ -219,11 +331,12 @@ function HouseTypesManager() {
         // Confirmation dialog in Spanish
         if (window.confirm('¿Está seguro de que desea eliminar este tipo de vivienda? Esto eliminará los módulos asociados, parámetros y podría afectar las definiciones de tareas.')) {
             setError('');
-            setIsLoading(true);
+            setIsLoading(true); // Use general loading indicator
             try {
                 await adminService.deleteHouseType(id);
-                await fetchData(); // Refresh list
+                await fetchHouseTypesAndParams(); // Refresh list
                 setEditingParamsFor(null); // Close editor if deleting the edited type
+                handleCancelEdit(); // Also reset main form if deleting the edited type
             } catch (err) {
                 setError(err.message || 'Error al eliminar el tipo de vivienda');
             } finally {
@@ -232,17 +345,71 @@ function HouseTypesManager() {
         }
     };
 
+    // --- Tipologia Handlers ---
+    const handleEditTipologia = (tipologia) => {
+        setEditingTipologiaId(tipologia.tipologia_id);
+        setTipologiaFormData({ name: tipologia.name, description: tipologia.description || '' });
+        setTipologiaError('');
+    };
+
+    const handleCancelEditTipologia = () => {
+        setEditingTipologiaId(null);
+        setTipologiaFormData(initialTipologiaFormState);
+        setTipologiaError('');
+    };
+
+    const handleTipologiaSubmit = async (e) => {
+        e.preventDefault();
+        if (!tipologiaFormData.name || !editMode) {
+            setTipologiaError('El nombre de la tipología es obligatorio.');
+            return;
+        }
+        setTipologiaLoading(true);
+        setTipologiaError('');
+        try {
+            if (editingTipologiaId) {
+                await adminService.updateHouseTypeTipologia(editingTipologiaId, tipologiaFormData);
+            } else {
+                await adminService.addHouseTypeTipologia(editMode, tipologiaFormData);
+            }
+            handleCancelEditTipologia();
+            await fetchTipologias(editMode); // Refresh tipologias list
+        } catch (err) {
+            setTipologiaError(err.message || `Error al ${editingTipologiaId ? 'actualizar' : 'añadir'} la tipología`);
+        } finally {
+            setTipologiaLoading(false);
+        }
+    };
+
+    const handleDeleteTipologia = async (tipologiaId) => {
+        if (window.confirm('¿Está seguro de que desea eliminar esta tipología? Esto eliminará los valores de parámetros específicos asociados.')) {
+            setTipologiaLoading(true);
+            setTipologiaError('');
+            try {
+                await adminService.deleteHouseTypeTipologia(tipologiaId);
+                await fetchTipologias(editMode); // Refresh tipologias list
+                handleCancelEditTipologia(); // Ensure edit form is closed if deleting the edited one
+            } catch (err) {
+                setTipologiaError(err.message || 'Error al eliminar la tipología');
+            } finally {
+                setTipologiaLoading(false);
+            }
+        }
+    };
+
+
     // --- Panel Modal Handlers ---
     const handleOpenPanelsModal = (houseType) => {
         setEditingPanelsFor(houseType);
-        setEditMode(null); // Close main edit form if open
-        setEditingParamsFor(null); // Close parameter editor if open
+        setEditMode(null); // Close main edit form
+        setEditingParamsFor(null); // Close parameter editor
+        setHouseTypeTipologias([]); // Clear tipologias
     };
 
     const handleClosePanelsModal = () => {
         setEditingPanelsFor(null);
         // Optionally refetch data if panels might affect other parts, though unlikely here
-        // fetchData();
+        // fetchHouseTypesAndParams();
     };
 
     // --- Parameter Editor Logic ---
@@ -252,12 +419,22 @@ function HouseTypesManager() {
         setParamEditorLoading(true);
         setParamEditorError('');
         setEditMode(null); // Close main edit form
-        setFormData(initialFormState);
+        setFormData(initialHouseTypeFormState);
+        setEditingPanelsFor(null); // Close panels modal
+        setHouseTypeTipologias([]); // Clear tipologias first
+
         try {
-            const values = await adminService.getParametersForHouseType(houseType.house_type_id);
+            // Fetch both parameters and tipologias needed for the editor
+            const [values, tipologiasData] = await Promise.all([
+                adminService.getParametersForHouseType(houseType.house_type_id),
+                adminService.getHouseTypeTipologias(houseType.house_type_id)
+            ]);
             setExistingParamValues(values);
+            setHouseTypeTipologias(tipologiasData); // Set tipologias for the editor
         } catch (err) {
-            setParamEditorError(err.message || 'Error al cargar los valores de parámetros existentes.');
+            setParamEditorError(err.message || 'Error al cargar datos para el editor de parámetros.');
+            setExistingParamValues([]);
+            setHouseTypeTipologias([]);
         } finally {
             setParamEditorLoading(false);
         }
@@ -267,36 +444,54 @@ function HouseTypesManager() {
         setEditingParamsFor(null);
         setExistingParamValues([]);
         setParamEditorError('');
+        setHouseTypeTipologias([]); // Clear tipologias when closing editor
     };
 
     const handleSaveParameterValues = async (changes) => {
         if (!editingParamsFor || changes.length === 0) {
-            // No changes detected or editor not open
-             handleCancelParameterEditor(); // Close editor even if no changes
+            handleCancelParameterEditor();
             return;
         }
         setParamEditorLoading(true);
         setParamEditorError('');
         let success = true;
+        let requiresRefetch = false;
 
         try {
-            // Sequentially save each change (or use Promise.all)
-            for (const change of changes) {
-                await adminService.setHouseTypeParameter(
-                    editingParamsFor.house_type_id,
-                    change.parameter_id,
-                    change.module_sequence_number,
-                    change.value
-                );
-            }
+            // Use Promise.all to run saves/deletes concurrently
+            await Promise.all(changes.map(change => {
+                if (change.action === 'set') {
+                    requiresRefetch = true;
+                    return adminService.setHouseTypeParameter(
+                        editingParamsFor.house_type_id,
+                        change.parameter_id,
+                        change.module_sequence_number,
+                        change.value,
+                        change.tipologia_id // Pass tipologia_id (can be null)
+                    );
+                } else if (change.action === 'delete') {
+                    requiresRefetch = true;
+                    return adminService.deleteParameterFromHouseTypeModule(
+                        editingParamsFor.house_type_id,
+                        change.parameter_id,
+                        change.module_sequence_number,
+                        change.tipologia_id // Pass tipologia_id (can be null)
+                    );
+                }
+                return Promise.resolve(); // Should not happen
+            }));
         } catch (err) {
             success = false;
-            setParamEditorError(err.message || 'Error al guardar uno o más valores de parámetros.');
+            setParamEditorError(err.message || 'Error al guardar uno o más cambios de parámetros.');
         } finally {
             setParamEditorLoading(false);
             if (success) {
                 handleCancelParameterEditor(); // Close editor on success
-                // Optionally re-fetch data if needed, but not strictly necessary here
+                if (requiresRefetch) {
+                    // Re-fetch main data if parameters were actually changed
+                    // This ensures the main table display is updated
+                    fetchHouseTypesAndParams();
+                }
             }
         }
     };
@@ -308,7 +503,7 @@ function HouseTypesManager() {
             {error && <p style={styles.error}>{error}</p>}
 
             {/* Form for Adding/Editing House Type basic info */}
-            {!editingParamsFor && ( // Only show form if not editing parameters
+            {!editingParamsFor && !editingPanelsFor && ( // Only show form if not editing parameters or panels
                 <form onSubmit={handleSubmit} style={styles.form}>
                     <h3>{editMode ? 'Editar Tipo de Vivienda' : 'Añadir Nuevo Tipo de Vivienda'}</h3>
                     <div style={styles.formRow}>
@@ -334,11 +529,80 @@ function HouseTypesManager() {
                 </form>
             )}
 
+            {/* Tipologia Management Section - Shown only when editing a House Type */}
+            {editMode && !editingParamsFor && !editingPanelsFor && (
+                <div style={styles.tipologiaSection}>
+                    <h4>Gestionar Tipologías para: {formData.name}</h4>
+                    {tipologiaError && <p style={styles.error}>{tipologiaError}</p>}
+
+                    {/* Form for Adding/Editing Tipologia */}
+                    <form onSubmit={handleTipologiaSubmit} style={styles.tipologiaForm}>
+                        <h5>{editingTipologiaId ? 'Editar Tipología' : 'Añadir Nueva Tipología'}</h5>
+                        <input
+                            type="text"
+                            name="name"
+                            placeholder="Nombre Tipología (ej: Single, Duplex)"
+                            value={tipologiaFormData.name}
+                            onChange={handleTipologiaInputChange}
+                            required
+                            style={styles.tipologiaInput}
+                            disabled={tipologiaLoading}
+                        />
+                        <input
+                            type="text"
+                            name="description"
+                            placeholder="Descripción (Opcional)"
+                            value={tipologiaFormData.description}
+                            onChange={handleTipologiaInputChange}
+                            style={styles.tipologiaInput}
+                            disabled={tipologiaLoading}
+                        />
+                        <button type="submit" disabled={tipologiaLoading} style={{...styles.button, ...styles.tipologiaButton}}>
+                            {tipologiaLoading ? 'Guardando...' : (editingTipologiaId ? 'Actualizar' : 'Añadir')}
+                        </button>
+                        {editingTipologiaId && (
+                            <button type="button" onClick={handleCancelEditTipologia} style={{...styles.button, ...styles.tipologiaButton}} disabled={tipologiaLoading}>
+                                Cancelar Edición
+                            </button>
+                        )}
+                    </form>
+
+                    {/* Table of Existing Tipologias */}
+                    {tipologiaLoading && <p style={styles.loading}>Cargando tipologías...</p>}
+                    {!tipologiaLoading && houseTypeTipologias.length > 0 && (
+                        <table style={styles.tipologiaTable}>
+                            <thead>
+                                <tr>
+                                    <th style={styles.tipologiaTh}>Nombre</th>
+                                    <th style={styles.tipologiaTh}>Descripción</th>
+                                    <th style={styles.tipologiaTh}>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {houseTypeTipologias.map(t => (
+                                    <tr key={t.tipologia_id}>
+                                        <td style={styles.tipologiaTd}>{t.name}</td>
+                                        <td style={styles.tipologiaTd}>{t.description || '-'}</td>
+                                        <td style={styles.tipologiaTd}>
+                                            <button onClick={() => handleEditTipologia(t)} style={{...styles.button, ...styles.tipologiaButton}} disabled={tipologiaLoading || !!editingTipologiaId}>Editar</button>
+                                            <button onClick={() => handleDeleteTipologia(t.tipologia_id)} style={{...styles.button, ...styles.tipologiaButton}} disabled={tipologiaLoading || !!editingTipologiaId}>Eliminar</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                     {!tipologiaLoading && houseTypeTipologias.length === 0 && <p>Este tipo de vivienda no tiene tipologías definidas.</p>}
+                </div>
+            )}
+
+
              {/* Parameter Editor Section */}
              {editingParamsFor && (
                 <ParameterEditor
                     houseType={editingParamsFor}
                     parameters={allParameters}
+                    tipologias={houseTypeTipologias} // Pass tipologias down
                     existingValues={existingParamValues}
                     onSave={handleSaveParameterValues}
                     onCancel={handleCancelParameterEditor}
@@ -359,49 +623,77 @@ function HouseTypesManager() {
             {isLoading && !houseTypes.length ? <p style={styles.loading}>Cargando tipos de vivienda...</p> : (
                 <table style={styles.table}>
                     <thead>
-                        <tr><th style={styles.th}>Nombre</th><th style={styles.th}>Descripción</th><th style={styles.th}>Módulos</th><th style={styles.th}>Parámetros</th>{/* Added Parameters column */}<th style={styles.th}>Acciones</th></tr>
+                        <tr>
+                            <th style={styles.th}>Nombre</th>
+                            <th style={styles.th}>Descripción</th>
+                            <th style={styles.th}>Módulos</th>
+                            <th style={styles.th}>Tipologías</th>
+                            <th style={styles.th}>Parámetros</th>
+                            <th style={styles.th}>Acciones</th>
+                        </tr>
                     </thead>
                     <tbody>
                         {houseTypes.map((ht) => {
-                            // Group parameters by module sequence number for display
-                            const paramsByModule = (ht.parameters || []).reduce((acc, param) => {
-                                const moduleNum = param.module_sequence_number;
-                                if (!acc[moduleNum]) {
-                                    acc[moduleNum] = [];
+                            // Group parameters by module and then by tipologia for display
+                            const paramsGrouped = (ht.parameters || []).reduce((acc, param) => {
+                                const modKey = `mod_${param.module_sequence_number}`;
+                                const tipoKey = param.tipologia_id === null ? 'general' : `tipo_${param.tipologia_id}`;
+                                if (!acc[modKey]) acc[modKey] = { module_sequence_number: param.module_sequence_number, tipologias: {} };
+                                if (!acc[modKey].tipologias[tipoKey]) {
+                                    acc[modKey].tipologias[tipoKey] = {
+                                        tipologia_id: param.tipologia_id,
+                                        tipologia_name: param.tipologia_name, // Assuming backend provides this
+                                        params: []
+                                    };
                                 }
-                                acc[moduleNum].push(param);
+                                acc[modKey].tipologias[tipoKey].params.push(param);
                                 return acc;
                             }, {});
+
+                            // Sort modules
+                            const sortedModules = Object.values(paramsGrouped).sort((a, b) => a.module_sequence_number - b.module_sequence_number);
 
                             return (
                                 <tr key={ht.house_type_id}>
                                     <td style={styles.td}>{ht.name}</td>
-                                    <td style={styles.td}>{ht.description}</td>
+                                    <td style={styles.td}>{ht.description || '-'}</td>
                                     <td style={styles.td}>{ht.number_of_modules}</td>
+                                    <td style={styles.td}> {/* Tipologias Cell */}
+                                        {(ht.tipologias && ht.tipologias.length > 0)
+                                            ? ht.tipologias.map(t => t.name).join(', ')
+                                            : <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguna</span>
+                                        }
+                                    </td>
                                     <td style={styles.td}> {/* Parameters Cell */}
-                                        {Object.entries(paramsByModule).sort(([a], [b]) => a - b).map(([moduleNum, params]) => (
-                                            <div key={moduleNum} style={{ marginBottom: '5px', borderBottom: Object.keys(paramsByModule).length > 1 ? '1px dashed #eee' : 'none', paddingBottom: '3px' }}>
-                                                <strong>Módulo {moduleNum}:</strong>
-                                                {params.length > 0 ? (
-                                                    <ul style={{ margin: '2px 0 2px 15px', padding: 0, listStyleType: 'disc' }}>
-                                                        {params.map(p => (
-                                                            <li key={p.parameter_id} style={{ fontSize: '0.9em' }}>
-                                                                {p.parameter_name} ({p.parameter_unit || 'N/A'}): {p.value}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                ) : (
-                                                    <span style={{ fontStyle: 'italic', marginLeft: '5px' }}>Sin parámetros definidos</span>
-                                                )}
+                                        {sortedModules.length === 0 && <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>}
+                                        {sortedModules.map(modGroup => (
+                                            <div key={modGroup.module_sequence_number} style={{ marginBottom: '8px', borderBottom: sortedModules.length > 1 ? '1px dashed #eee' : 'none', paddingBottom: '5px' }}>
+                                                <strong>Módulo {modGroup.module_sequence_number}:</strong>
+                                                {Object.values(modGroup.tipologias).sort((a,b) => (a.tipologia_id === null ? -1 : b.tipologia_id === null ? 1 : a.tipologia_name.localeCompare(b.tipologia_name))).map(tipoGroup => (
+                                                    <div key={tipoGroup.tipologia_id ?? 'general'} style={{ marginLeft: '10px', marginTop: '3px' }}>
+                                                        <em style={{ fontSize: '0.95em' }}>{tipoGroup.tipologia_id === null ? 'General' : tipoGroup.tipologia_name || `Tipología ID: ${tipoGroup.tipologia_id}`}:</em>
+                                                        {tipoGroup.params.length > 0 ? (
+                                                            <ul style={{ margin: '2px 0 2px 15px', padding: 0, listStyleType: 'disc' }}>
+                                                                {tipoGroup.params.sort((a,b) => a.parameter_name.localeCompare(b.parameter_name)).map(p => (
+                                                                    <li key={p.parameter_id} style={{ fontSize: '0.9em' }}>
+                                                                        {p.parameter_name} ({p.parameter_unit || 'N/A'}): {p.value}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        ) : (
+                                                            <span style={{ fontStyle: 'italic', marginLeft: '5px', fontSize: '0.9em' }}> (Sin valores específicos)</span>
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </div>
                                         ))}
-                                        {(!ht.parameters || ht.parameters.length === 0) && <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>}
                                     </td>
                                     <td style={styles.td}>
-                                        <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Editar Info</button>
-                                        <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Editar Parámetros</button>
-                                        <button onClick={() => handleOpenPanelsModal(ht)} style={{...styles.button, backgroundColor: '#17a2b8', color: 'white'}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Paneles</button> {/* Added Panels Button */}
-                                        <button onClick={() => handleDelete(ht.house_type_id)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor}>Eliminar</button>
+                                        {/* Disable buttons based on current mode */}
+                                        <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Editar Info/Tipologías</button>
+                                        <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Editar Parámetros</button>
+                                        <button onClick={() => handleOpenPanelsModal(ht)} style={{...styles.button, backgroundColor: '#17a2b8', color: 'white'}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Paneles</button>
+                                        <button onClick={() => handleDelete(ht.house_type_id)} style={{...styles.button, backgroundColor: '#dc3545', color: 'white'}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Eliminar</button>
                                     </td>
                                 </tr>
                             );
