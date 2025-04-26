@@ -43,12 +43,38 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
     };
 
     const handleGenericChange = (parameterId, moduleSequence, checked) => {
-        const key = `${parameterId}_${moduleSequence}`;
-        setIsGeneric(prev => ({ ...prev, [key]: checked }));
-        // Optional: Clear values when switching modes?
-        // If switching TO generic, clear specific tipologia values?
-        // If switching FROM generic, clear general value?
-        // Let's handle this during save for now.
+        const genericStateKey = `${parameterId}_${moduleSequence}`;
+        setIsGeneric(prev => ({ ...prev, [genericStateKey]: checked }));
+
+        // Clear values for the mode being switched *away* from
+        setValues(prevValues => {
+            const newValues = { ...prevValues };
+            const hasTipologias = tipologias && tipologias.length > 0;
+
+            if (checked) {
+                // Switched TO Generic: Clear specific tipologia values
+                if (hasTipologias) {
+                    tipologias.forEach(t => {
+                        const specificValueKey = `${parameterId}_${moduleSequence}_${t.tipologia_id}`;
+                        // Check if the key exists before deleting to avoid unnecessary updates if already empty
+                        if (newValues[specificValueKey] !== undefined) {
+                             // Set to empty string to clear the input field visually
+                            newValues[specificValueKey] = '';
+                            // Alternatively, delete the key: delete newValues[specificValueKey];
+                            // Using '' ensures the input field clears if it was controlled.
+                        }
+                    });
+                }
+            } else {
+                // Switched FROM Generic: Clear the general value
+                const generalValueKey = `${parameterId}_${moduleSequence}_null`;
+                 if (newValues[generalValueKey] !== undefined) {
+                    newValues[generalValueKey] = '';
+                    // delete newValues[generalValueKey];
+                }
+            }
+            return newValues;
+        });
     };
 
 
