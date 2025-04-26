@@ -24,8 +24,13 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
         setValues(prev => ({
             ...prev,
             [`${parameterId}_${moduleSequence}_${tipologiaKey}`]: value
-        }));
+        setIsGeneric(prev => ({ ...prev, [key]: checked }));
+        // Optional: Clear values when switching modes?
+        // If switching TO generic, clear specific tipologia values?
+        // If switching FROM generic, clear general value?
+        // Let's handle this during save for now.
     };
+
 
     const handleSave = () => {
         const changes = []; // { action: 'set'/'delete', parameter_id, module_sequence_number, tipologia_id, value? }
@@ -33,57 +38,106 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
 
         parameters.forEach(param => {
             for (let modSeq = 1; modSeq <= houseType.number_of_modules; modSeq++) {
-                const processValue = (tipologiaId) => {
-                    const tipologiaKey = tipologiaId === null ? 'null' : tipologiaId;
-                    const key = `${param.parameter_id}_${modSeq}_${tipologiaKey}`;
-                    const currentValue = values[key];
-                    const originalValueObj = existingValues.find(ev =>
+                const genericKey = `${param.parameter_id}_${modSeq}`;
+                const isParamGeneric = isGeneric[genericKey];
+
+                // Helper to find original value
+                const findOriginalValue = (tipologiaId) => {
+                    return existingValues.find(ev =>
                         ev.parameter_id === param.parameter_id &&
                         ev.module_sequence_number === modSeq &&
                         ev.tipologia_id === tipologiaId
-                    );
-                    const originalValue = originalValueObj?.value;
+                    )?.value;
+                };
+
+                // Helper to process a single value (general or specific)
+                const processSingleValue = (tipologiaId) => {
+                    const tipologiaKey = tipologiaId === null ? 'null' : tipologiaId;
+                    const valueKey = `${param.parameter_id}_${modSeq}_${tipologiaKey}`;
+                    const currentValue = values[valueKey];
+                    const originalValue = findOriginalValue(tipologiaId);
 
                     const isNumeric = currentValue !== undefined && currentValue !== null && currentValue !== '' && !isNaN(parseFloat(currentValue)) && isFinite(currentValue);
                     const isEmpty = currentValue === undefined || currentValue === null || currentValue === '';
 
                     if (isNumeric) {
                         const numericValue = parseFloat(currentValue);
-                        if (numericValue != originalValue) { // Use != to handle type differences if originalValue was string/number
+                        // Use != to handle type differences if originalValue was string/number from DB
+                        if (numericValue != originalValue) {
                             changes.push({
-                                action: 'set',
-                                parameter_id: param.parameter_id,
-                                module_sequence_number: modSeq,
-                                tipologia_id: tipologiaId,
-                                value: numericValue
+                                action: 'set', parameter_id: param.parameter_id, module_sequence_number: modSeq,
+                                tipologia_id: tipologiaId, value: numericValue
                             });
                         }
                     } else if (isEmpty && originalValue !== undefined) {
                         // Value was cleared, and there was an original value -> delete it
                         changes.push({
-                            action: 'delete',
-                            parameter_id: param.parameter_id,
-                            module_sequence_number: modSeq,
+                            action: 'delete', parameter_id: param.parameter_id, module_sequence_number: modSeq,
                             tipologia_id: tipologiaId
                         });
                     } else if (!isEmpty && !isNumeric) {
                         // Invalid input, log warning but don't save/delete
                         console.warn(`Invalid number format for ${param.name} - Module ${modSeq} - Tipologia ${tipologiaKey}: ${currentValue}`);
+                        // Optionally set an error state here to inform the user
                     }
                 };
 
-                if (hasTipologias) {
-                    // Process general value (null tipologia_id)
-                    processValue(null);
-                    // Process each specific tipologia value
-                    tipologias.forEach(t => processValue(t.tipologia_id));
+                if (isParamGeneric || !hasTipologias) {
+                    // --- Handle Generic Case ---
+                    // Process the general value (tipologia_id = null)
+                    processSingleValue(null);
+
+                    // Delete any existing specific tipologia values for this param/module if we are in generic mode
+                    if (hasTipologias) {
+                        tipologias.forEach(t => {
+                            const originalSpecificValue = findOriginalValue(t.tipologia_id);
+                            if (originalSpecificValue !== undefined) {
+                                changes.push({
+                                    action: 'delete', parameter_id: param.parameter_id, module_sequence_number: modSeq,
+                                    tipologia_id: t.tipologia_id
+                                });
+                            }
+                        });
+                    }
                 } else {
-                    // No tipologias, only process general value (null tipologia_id)
-                    processValue(null);
+                    // --- Handle Specific Tipologias Case ---
+                    // Delete the general value if it exists
+                    const originalGeneralValue = findOriginalValue(null);
+                    if (originalGeneralValue !== undefined) {
+                        changes.push({
+                            action: 'delete', parameter_id: param.parameter_id, module_sequence_number: modSeq,
+                            tipologia_id: null
+                        });
+                    }
+
+                    // Process each specific tipologia value
+                    tipologias.forEach(t => {
+                        processSingleValue(t.tipologia_id);
+                    });
                 }
             }
         });
-        onSave(changes);
+
+        // Filter out potential duplicate delete actions before saving
+        const uniqueChanges = changes.reduce((acc, current) => {
+            const existingIndex = acc.findIndex(item =>
+                item.action === current.action &&
+                item.parameter_id === current.parameter_id &&
+                item.module_sequence_number === current.module_sequence_number &&
+                item.tipologia_id === current.tipologia_id
+            );
+            if (existingIndex === -1) {
+                acc.push(current);
+            } else if (current.action === 'set') {
+                // If a 'set' action duplicates an existing action, replace the old one
+                acc[existingIndex] = current;
+            }
+            // If a 'delete' action duplicates, just keep the first one found
+            return acc;
+        }, []);
+
+
+        onSave(uniqueChanges);
     };
 
     // Basic styling for the editor modal/section
@@ -91,12 +145,13 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
         container: { marginTop: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px', background: '#f9f9f9' },
         moduleSection: { marginBottom: '15px', paddingBottom: '10px', borderBottom: '1px solid #eee' },
         paramRow: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '5px' },
-        paramLabel: { minWidth: '150px', textAlign: 'right', fontWeight: 'bold', alignSelf: 'start', paddingTop: '5px' }, // Adjusted alignment
-        paramUnit: { minWidth: '50px', color: '#666', alignSelf: 'start', paddingTop: '5px' }, // Adjusted alignment
-        input: { padding: '5px', border: '1px solid #ccc', borderRadius: '3px', width: '100px', marginBottom: '3px' }, // Added margin bottom
-        inputGroup: { display: 'flex', flexDirection: 'column', gap: '2px' }, // Group inputs for a parameter
-        tipologiaInputRow: { display: 'flex', gap: '5px', alignItems: 'center', marginLeft: '20px' }, // Indent tipologia inputs
+        paramLabel: { minWidth: '150px', textAlign: 'right', fontWeight: 'bold', alignSelf: 'start', paddingTop: '5px' },
+        paramUnit: { minWidth: '50px', color: '#666', alignSelf: 'start', paddingTop: '5px' },
+        input: { padding: '5px', border: '1px solid #ccc', borderRadius: '3px', width: '100px', marginBottom: '3px' },
+        inputGroup: { display: 'flex', flexDirection: 'column', gap: '2px' },
+        tipologiaInputRow: { display: 'flex', gap: '5px', alignItems: 'center', marginLeft: '20px' },
         tipologiaLabel: { fontSize: '0.9em', color: '#555', minWidth: '80px' },
+        genericCheckboxContainer: { display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px', marginLeft: '10px' }, // Style for checkbox
         actions: { marginTop: '15px' },
         error: { color: 'red', marginBottom: '10px' }
     };
@@ -113,37 +168,63 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                 <div key={moduleSeq} style={editorStyles.moduleSection}>
                     <h5>Módulo {moduleSeq}</h5>
                     {parameters.map(param => {
-                        const renderInput = (tipologiaId, label) => {
-                            const tipologiaKey = tipologiaId === null ? 'null' : tipologiaId;
-                            const key = `${param.parameter_id}_${moduleSeq}_${tipologiaKey}`;
-                            return (
-                                <div key={key} style={hasTipologias ? editorStyles.tipologiaInputRow : {}}>
-                                    {hasTipologias && <label style={editorStyles.tipologiaLabel} htmlFor={key}>{label}:</label>}
-                                    <input
-                                        id={key}
-                                        type="number"
-                                        step="any"
-                                        style={editorStyles.input}
-                                        value={values[key] || ''}
-                                        onChange={(e) => handleValueChange(param.parameter_id, moduleSeq, tipologiaId, e.target.value)}
-                                        placeholder="Valor"
-                                    />
-                                </div>
-                            );
-                        };
+                        const genericKey = `${param.parameter_id}_${moduleSeq}`;
+                        const isParamGeneric = isGeneric[genericKey];
+                        const generalValueKey = `${param.parameter_id}_${moduleSeq}_null`;
 
                         return (
-                            <div key={`${param.parameter_id}_${moduleSeq}`} style={editorStyles.paramRow}>
+                            <div key={genericKey} style={{...editorStyles.paramRow, alignItems: 'flex-start', borderBottom: '1px dotted #ccc', paddingBottom: '10px', marginBottom: '10px'}}>
                                 <label style={editorStyles.paramLabel}>{param.name}:</label>
-                                <div style={editorStyles.inputGroup}>
-                                    {hasTipologias ? (
-                                        <>
-                                            {renderInput(null, 'General')}
-                                            {tipologias.map(t => renderInput(t.tipologia_id, t.name))}
-                                        </>
-                                    ) : (
-                                        renderInput(null, '') // Render single input if no tipologias
+                                <div style={{ flexGrow: 1 }}> {/* Container for checkbox and inputs */}
+                                    {hasTipologias && (
+                                        <div style={editorStyles.genericCheckboxContainer}>
+                                            <input
+                                                type="checkbox"
+                                                id={`generic_${genericKey}`}
+                                                checked={isParamGeneric}
+                                                onChange={(e) => handleGenericChange(param.parameter_id, moduleSeq, e.target.checked)}
+                                            />
+                                            <label htmlFor={`generic_${genericKey}`}>Valor Genérico</label>
+                                        </div>
                                     )}
+
+                                    <div style={editorStyles.inputGroup}>
+                                        {/* Show General input if generic is checked OR if there are no tipologias */}
+                                        {(isParamGeneric || !hasTipologias) && (
+                                            <div key={generalValueKey} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                {!hasTipologias && <label style={{...editorStyles.tipologiaLabel, minWidth: 0}}>Valor:</label>}
+                                                {hasTipologias && <label style={editorStyles.tipologiaLabel} htmlFor={generalValueKey}>General:</label>}
+                                                <input
+                                                    id={generalValueKey}
+                                                    type="number"
+                                                    step="any"
+                                                    style={editorStyles.input}
+                                                    value={values[generalValueKey] || ''}
+                                                    onChange={(e) => handleValueChange(param.parameter_id, moduleSeq, null, e.target.value)}
+                                                    placeholder="Valor"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Show Tipologia inputs if generic is NOT checked AND there are tipologias */}
+                                        {!isParamGeneric && hasTipologias && tipologias.map(t => {
+                                            const tipologiaValueKey = `${param.parameter_id}_${moduleSeq}_${t.tipologia_id}`;
+                                            return (
+                                                <div key={tipologiaValueKey} style={editorStyles.tipologiaInputRow}>
+                                                    <label style={editorStyles.tipologiaLabel} htmlFor={tipologiaValueKey}>{t.name}:</label>
+                                                    <input
+                                                        id={tipologiaValueKey}
+                                                        type="number"
+                                                        step="any"
+                                                        style={editorStyles.input}
+                                                        value={values[tipologiaValueKey] || ''}
+                                                        onChange={(e) => handleValueChange(param.parameter_id, moduleSeq, t.tipologia_id, e.target.value)}
+                                                        placeholder="Valor"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                                 <span style={editorStyles.paramUnit}>({param.unit || 'N/A'})</span>
                             </div>
