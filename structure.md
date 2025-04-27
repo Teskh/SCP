@@ -4,7 +4,7 @@
 ├── backend                                                                   # Root directory for the Flask backend application
 │   ├── app                                                                   # Main application package for the backend
 │   │   ├── api                                                               # Contains Flask Blueprints defining API endpoints
-│   │   │   ├── admin_definitions.py                                          # API routes for managing definitions (House Types, Parameters, Panels, Multiwalls, Task
+│   │   │   ├── admin_definitions.py                                          # API routes for managing definitions (House Types, Parameters, Panels, Multiwalls, Task Definitions Stations)
 │   │   │   ├── admin_personnel.py                                            # API routes for managing personnel (Workers, Specialties, Admin Team)
 │   │   │   ├── admin_projects.py                                             # API routes for managing projects and the production plan/status
 │   │   │   └── __init__.py                                                   # Makes the 'api' directory a Python package
@@ -16,8 +16,7 @@
 │   │   ├── main                                                              # Placeholder for core application logic (if needed beyond APIs) - Currently empty
 │   │   ├── services                                                          # Placeholder for business logic services (if needed) - Currently empty
 │   │   ├── utils                                                             # Placeholder for utility functions (if needed) - Currently empty
-│   │   └── __init__.py                                                       # Application factory (__init__.py): Creates and configures the Flask app instance, registers     
-blueprints, sets up DB
+│   │   └── __init__.py                                                       # Application factory (__init__.py): Creates and configures the Flask app instance, registers blueprints, setsup DB
 ├── config.py                                                                 # Defines configuration classes for the Flask application (e.g., database URI, secret key)
 ├── requirements.txt                                                          # Lists Python dependencies for the backend
 └── run.py                                                                    # Entry point script to run the Flask development server
@@ -30,7 +29,6 @@ blueprints, sets up DB
 │   ├── package-lock.json                                                     # Records exact versions of frontend dependencies
 │   ├── package.json                                                          # Defines frontend project metadata, dependencies, and scripts (npm/yarn)
 │   ├── public                                                                # Contains static assets served directly by the webserver
-│   │   ├── favicon.ico
 │   │   ├── index.html                                                        # The main HTML template for the React SPA
 │   │   ├── manifest.json                                                     # Web app manifest file (PWA features)
 │   │   └── robots.txt                                                        # Instructions for web crawlers
