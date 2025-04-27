@@ -103,6 +103,10 @@ const selectedListItemStyle = {
 
 const draggingListItemStyle = {
     backgroundColor: '#e6f7ff', // Light blue background when dragging
+    boxShadow: '0 4px 8px rgba(0,0,0,0.2)', // Add a shadow for a "lifted" effect
+    opacity: 0.9, // Slightly reduce opacity
+    cursor: 'grabbing', // Change cursor during drag
+    zIndex: 100, // Ensure dragged item is visually on top
 };
 
 const dragHandleStyle = { // Optional: Style for a dedicated drag handle
@@ -176,35 +180,27 @@ function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick, on
         isDragging,
     } = useSortable({ id });
 
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        ...upcomingItemStyle, // Base style
-        ...(isSelected && !isDragging ? selectedListItemStyle : {}), // Apply selected style if selected and not dragging
-        ...(isDragging ? draggingListItemStyle : {}), // Apply dragging style (overrides selected style visually during drag)
-        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected ? selectedListItemStyle.border : upcomingItemStyle.border), // Keep border consistent
-        marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom,
-        zIndex: isDragging ? 1 : 'auto',
-        zIndex: isDragging ? 1 : 'auto',
-        position: 'relative',
-        // Removed display:flex and alignment from the outer container
-    };
-
-    // Style for the draggable part of the item
-    const draggableContentStyle = {
-        ...upcomingItemStyle, // Base style from original upcomingItemStyle
-        ...(isSelected && !isDragging ? selectedListItemStyle : {}), // Apply selected style if selected and not dragging
-        ...(isDragging ? draggingListItemStyle : {}), // Apply dragging style
-        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected ? selectedListItemStyle.border : upcomingItemStyle.border),
-        marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom,
+    // Combine base, conditional, and dnd-kit styles for the draggable element
+    const draggableElementStyle = {
+        ...upcomingItemStyle, // Start with base item style
+        ...(isDragging
+            ? draggingListItemStyle // Apply dragging style if dragging
+            : (isSelected ? selectedListItemStyle : {})), // Otherwise, apply selected style if selected
+        transform: CSS.Transform.toString(transform), // Apply dnd-kit transform
+        transition, // Apply dnd-kit transition
+        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected && !isDragging ? selectedListItemStyle.border : upcomingItemStyle.border), // Adjust border based on state
+        marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom, // Keep margin consistent
         display: 'flex',
         alignItems: 'center',
-        padding: '8px', // Reset padding if needed
-        flexGrow: 1, // Allow draggable content to take available space
-        marginRight: '10px', // Space between draggable content and line indicators
+        padding: '8px',
+        flexGrow: 1,
+        marginRight: '10px',
+        position: 'relative', // Needed for zIndex from draggingListItemStyle
+        // Ensure zIndex is applied correctly when dragging
+        zIndex: isDragging ? draggingListItemStyle.zIndex : 'auto',
     };
 
-    // Style for the container holding the line indicators
+    // Style for the container holding the line indicators (remains the same)
     const lineIndicatorContainerStyle = {
         display: 'flex',
         flexDirection: 'row',
@@ -224,8 +220,8 @@ function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick, on
     return (
         // Outer container - NOT draggable, holds both parts
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: upcomingItemStyle.marginBottom }}>
-            {/* Draggable Content */}
-            <div ref={setNodeRef} style={draggableContentStyle} {...attributes} {...listeners} {...combinedListeners}>
+            {/* Draggable Content - Apply the combined style here */}
+            <div ref={setNodeRef} style={draggableElementStyle} {...attributes} {...listeners} {...combinedListeners}>
                  {/* Sequence Number - Placed inside draggable part */}
                  <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
                  {/* Main text content */}
