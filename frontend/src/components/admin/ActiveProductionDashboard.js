@@ -167,10 +167,30 @@ const LineIndicator = ({ line, isActive, isClickable, onClick }) => {
     );
 };
 
+// --- Helper Function to get unique projects from items ---
+const getUniqueProjects = (items) => {
+    const projects = new Map();
+    items.forEach(item => {
+        if (!projects.has(item.project_id)) {
+            projects.set(item.project_id, {
+                id: item.project_id,
+                name: item.project_name,
+                // Collect all unique module sequences for this project from the items
+                moduleSequences: new Set(items.filter(i => i.project_id === item.project_id).map(i => i.module_sequence_in_house))
+            });
+        }
+    });
+    // Convert map values to array and sort sequences numerically within each project
+    return Array.from(projects.values()).map(proj => ({
+        ...proj,
+        moduleSequences: Array.from(proj.moduleSequences).sort((a, b) => a - b)
+    })).sort((a, b) => a.name.localeCompare(b.name)); // Sort projects by name
+};
+
 
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick, onChangeLine }) { // Added onChangeLine prop
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator }) { // Added showProjectSeparator, removed isFirstInProjectGroup
     const {
         attributes,
         listeners, // These are for drag-and-drop - apply ONLY to the draggable part
@@ -188,8 +208,9 @@ function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick, on
             : (isSelected ? selectedListItemStyle : {})), // Otherwise, apply selected style if selected
         transform: CSS.Transform.toString(transform), // Apply dnd-kit transform
         transition, // Apply dnd-kit transition
-        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected && !isDragging ? selectedListItemStyle.border : upcomingItemStyle.border), // Adjust border based on state
-        marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom, // Keep margin consistent
+        // Add top border/margin if it's the start of a new project in the flat list
+        borderTop: showProjectSeparator ? '2px solid #ccc' : (isSelected && !isDragging ? selectedListItemStyle.border : upcomingItemStyle.border),
+        marginTop: showProjectSeparator ? '10px' : upcomingItemStyle.marginBottom,
         display: 'flex',
         alignItems: 'center',
         padding: '8px',
@@ -261,7 +282,7 @@ function ActiveProductionDashboard() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [lastUpdated, setLastUpdated] = useState(null);
-    const [collapsedProjects, setCollapsedProjects] = useState({}); // State for collapsed projects { projectId: true/false }
+    // Removed collapsedProjects state
     const [selectedItemIds, setSelectedItemIds] = useState(new Set()); // State for selected item IDs
     const [lastClickedItemId, setLastClickedItemId] = useState(null); // State for shift-click logic
     const [draggedItemIds, setDraggedItemIds] = useState(null); // State to hold IDs being dragged (single or group)
@@ -292,39 +313,9 @@ function ActiveProductionDashboard() {
         }
     }, []);
 
-    // --- Helper Functions (defined within component scope) ---
-    // Group upcoming items by project ID for display purposes
-    const groupItemsByProject = (items) => {
-       return items.reduce((acc, item) => {
-            const projectId = item.project_id;
-            if (!acc[projectId]) {
-                acc[projectId] = {
-                    projectName: item.project_name,
-                    items: []
-                };
-            }
-            acc[projectId].items.push(item);
-            return acc;
-        }, {});
-    };
-
-    // Sort projects based on the sequence of their first item
-    const getSortedProjectIds = (groupedItems) => {
-        return Object.keys(groupedItems).sort((a, b) => {
-            const firstItemSeqA = groupedItems[a].items[0]?.planned_sequence || 0;
-            const firstItemSeqB = groupedItems[b].items[0]?.planned_sequence || 0;
-            // If sequences are the same, maintain stable sort by project ID
-            if (firstItemSeqA === firstItemSeqB) {
-                return parseInt(a) - parseInt(b);
-            }
-            return firstItemSeqA - firstItemSeqB;
-        });
-    };
-
-    // Memoize grouped items and sorted IDs to avoid recalculation on every render
-    const groupedUpcomingItems = React.useMemo(() => groupItemsByProject(upcomingItems), [upcomingItems]);
-    const sortedProjectIds = React.useMemo(() => getSortedProjectIds(groupedUpcomingItems), [groupedUpcomingItems]);
-
+    // --- Derived State ---
+    // Get unique project details from the flat upcomingItems list
+    const uniqueProjects = React.useMemo(() => getUniqueProjects(upcomingItems), [upcomingItems]);
 
     useEffect(() => {
         fetchData();
@@ -333,12 +324,7 @@ function ActiveProductionDashboard() {
         return () => clearInterval(intervalId); // Cleanup on unmount
     }, [fetchData]);
 
-    const toggleProjectCollapse = (projectId) => {
-        setCollapsedProjects(prev => ({
-            ...prev,
-            [projectId]: !prev[projectId]
-        }));
-    };
+    // Removed toggleProjectCollapse function
 
     // --- dnd-kit Setup ---
     const sensors = useSensors(
@@ -478,8 +464,8 @@ function ActiveProductionDashboard() {
             const newSelectedIds = new Set(prevSelectedIds);
 
             if (isShiftPressed && lastClickedItemId && lastClickedItemId !== clickedItemId) {
-                // Shift + Click: Select range
-                const itemsInOrder = sortedProjectIds.flatMap(pid => groupedUpcomingItems[pid]?.items || []);
+                // Shift + Click: Select range using the flat upcomingItems list
+                const itemsInOrder = upcomingItems; // Use the flat list directly
                 const lastClickedIndex = itemsInOrder.findIndex(item => item.plan_id === lastClickedItemId);
                 const currentClickedIndex = itemsInOrder.findIndex(item => item.plan_id === clickedItemId);
 
@@ -517,10 +503,10 @@ function ActiveProductionDashboard() {
             setLastClickedItemId(clickedItemId);
         }
 
-    }, [lastClickedItemId, sortedProjectIds, groupedUpcomingItems]); // Dependencies for selection logic
+    }, [lastClickedItemId, upcomingItems]); // Updated dependencies for selection logic
 
     const handleDeselectAll = (event) => {
-        // Check if the click target is NOT within a sortable item or the project header
+        // Check if the click target is NOT within a sortable item or the project header container
         // This is a simple check; more robust might involve checking class names or data attributes
         if (!event.target.closest('[role="button"]')) { // Assuming SortableItem's div gets role="button" via attributes
              // Check if the click is not on a project header either
@@ -604,15 +590,11 @@ function ActiveProductionDashboard() {
 
     // --- Select Module Sequence Logic ---
     const handleSelectModuleSequenceInProject = useCallback((event, projectId, targetSequence) => {
-        event.stopPropagation(); // Prevent triggering collapse/expand
+        event.stopPropagation(); // Prevent triggering other clicks
 
-        if (!groupedUpcomingItems[projectId] || !groupedUpcomingItems[projectId].items) {
-            return; // No items in this project
-        }
-
-        const itemsInProject = groupedUpcomingItems[projectId].items;
-        const idsToSelect = itemsInProject
-            .filter(item => item.module_sequence_in_house === targetSequence)
+        // Filter the flat upcomingItems list
+        const idsToSelect = upcomingItems
+            .filter(item => item.project_id === projectId && item.module_sequence_in_house === targetSequence)
             .map(item => item.plan_id);
 
         if (idsToSelect.length > 0) {
@@ -625,7 +607,7 @@ function ActiveProductionDashboard() {
             // setLastClickedItemId(idsToSelect[idsToSelect.length - 1]); // Select the last one as anchor? Or keep existing?
         }
 
-    }, [groupedUpcomingItems]); // Dependency: grouped items
+    }, [upcomingItems]); // Dependency: flat upcomingItems list
     // --- End Select Module Sequence Logic ---
 
     const renderStation = (stationId) => {
@@ -698,8 +680,39 @@ function ActiveProductionDashboard() {
                 </div>
             </div>
 
-            {/* Upcoming Items - Sortable List using dnd-kit */}
-            <div style={{ marginTop: '30px' }}>
+            {/* Project Headers Section */}
+            <div style={{ marginTop: '30px' }} data-project-header-container="true"> {/* Added data attribute */}
+                <h3 style={styles.header}>Proyectos Pendientes</h3>
+                {uniqueProjects.length > 0 ? (
+                    uniqueProjects.map(project => (
+                        <div key={project.id} style={{ marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px', padding: '8px 12px', backgroundColor: '#f8f8f8' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                                <span>{project.name}</span>
+                                {project.moduleSequences.length > 0 && (
+                                    <div style={styles.moduleSelectContainer}>
+                                        <span style={styles.moduleSelectLabel}>Seleccionar:</span>
+                                        {project.moduleSequences.map(sequence => (
+                                            <button
+                                                key={sequence}
+                                                style={styles.moduleSelectButton}
+                                                title={`Seleccionar todos los módulos #${sequence} en este proyecto`}
+                                                onClick={(e) => handleSelectModuleSequenceInProject(e, project.id, sequence)}
+                                            >
+                                                [M{sequence}]
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <p>No hay proyectos con elementos pendientes en el plan.</p>
+                )}
+            </div>
+
+            {/* Upcoming Items - Single Sortable List using dnd-kit */}
+            <div style={{ marginTop: '20px' }}>
                 <h3 style={styles.header}>Plan de Producción Pendiente ({upcomingItems.length} items)</h3>
                 <DndContext
                     sensors={sensors}
@@ -714,73 +727,21 @@ function ActiveProductionDashboard() {
                     >
                         <div style={upcomingListStyle}>
                             {upcomingItems.length > 0 ? (
-                                sortedProjectIds.map(projectId => {
-                                    const group = groupedUpcomingItems[projectId];
-                                    const isCollapsed = collapsedProjects[projectId];
-                                    const firstItemIdInGroup = group.items[0]?.plan_id; // Needed for SortableItem check
+                                upcomingItems.map((item, index) => {
+                                    // Determine if this item starts a new project visually compared to the previous one
+                                    const prevItem = index > 0 ? upcomingItems[index - 1] : null;
+                                    const showProjectSeparator = !prevItem || prevItem.project_id !== item.project_id;
 
                                     return (
-                                        <div key={projectId} style={{ marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px' }}>
-                                            <div
-                                                style={{
-                                                    padding: '8px 12px',
-                                                    backgroundColor: '#f0f0f0',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center',
-                                                    borderBottom: isCollapsed ? 'none' : '1px solid #ddd',
-                                                    fontWeight: 'bold',
-                                                }}
-                                                // onClick removed, handled by inner span now
-                                                data-project-header="true" // Add attribute for deselection check
-                                            >
-                                                <div style={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}> {/* Container for name and select buttons */}
-                                                    <span>{group.projectName} ({group.items.length} módulos)</span>
-                                                    {group.items.length > 0 && ( // Only show selector if there are items
-                                                        <div style={styles.moduleSelectContainer}>
-                                                            <span style={styles.moduleSelectLabel}>Seleccionar:</span>
-                                                            {/* Calculate unique, sorted module sequences */}
-                                                            {[...new Set(group.items.map(item => item.module_sequence_in_house))]
-                                                                .sort((a, b) => a - b) // Sort numerically
-                                                                .map(sequence => (
-                                                                    <button
-                                                                        key={sequence}
-                                                                        style={styles.moduleSelectButton}
-                                                                        title={`Seleccionar todos los módulos #${sequence} en este proyecto`}
-                                                                        onClick={(e) => handleSelectModuleSequenceInProject(e, projectId, sequence)}
-                                                                    >
-                                                                        [M{sequence}]
-                                                                    </button>
-                                                                ))
-                                                            }
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <span onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(projectId); }} style={{ cursor: 'pointer', marginLeft: '10px' }}> {/* Ensure span is clickable and spaced */}
-                                                    {isCollapsed ? '▼ Expandir' : '▲ Contraer'}
-                                                </span>
-                                            </div>
-                                            {!isCollapsed && (
-                                                <div style={{ padding: '5px' }}>
-                                                    {group.items.map((item, index) => {
-                                                        // Determine if this item starts a new project group visually (always true for the first item in the rendered group)
-                                                        const isFirstInDisplayedGroup = index === 0;
-                                                        return (
-                                                            <SortableItem
-                                                                key={item.plan_id}
-                                                                id={item.plan_id}
-                                                                item={item}
-                                                               isFirstInProjectGroup={item.plan_id === firstItemIdInGroup}
-                                                               isSelected={selectedItemIds.has(item.plan_id)} // Pass selection state
-                                                               onClick={handleItemClick} // Pass click handler for selection
-                                                               onChangeLine={handleChangeAssemblyLine} // Pass line change handler
-                                                           />
-                                                       );
-                                                   })}
-                                                </div>
-                                            )}
-                                        </div>
+                                        <SortableItem
+                                            key={item.plan_id}
+                                            id={item.plan_id}
+                                            item={item}
+                                            isSelected={selectedItemIds.has(item.plan_id)} // Pass selection state
+                                            onClick={handleItemClick} // Pass click handler for selection
+                                            onChangeLine={handleChangeAssemblyLine} // Pass line change handler
+                                            showProjectSeparator={showProjectSeparator} // Pass separator flag
+                                        />
                                     );
                                 })
                             ) : (
