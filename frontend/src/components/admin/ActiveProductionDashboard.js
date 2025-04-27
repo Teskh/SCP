@@ -506,15 +506,10 @@ function ActiveProductionDashboard() {
     }, [lastClickedItemId, upcomingItems]); // Updated dependencies for selection logic
 
     const handleDeselectAll = (event) => {
-        // Check if the click target is NOT within a sortable item or the project header container
-        // This is a simple check; more robust might involve checking class names or data attributes
-        if (!event.target.closest('[role="button"]')) { // Assuming SortableItem's div gets role="button" via attributes
-             // Check if the click is not on a project header either
-             const projectHeader = event.target.closest('[data-project-header]');
-             if (!projectHeader) {
-                setSelectedItemIds(new Set());
-                setLastClickedItemId(null);
-             }
+        // Check if the click target is NOT within a sortable item OR the project header container
+        if (!event.target.closest('[role="button"]') && !event.target.closest('[data-project-header-container]')) {
+            setSelectedItemIds(new Set());
+            setLastClickedItemId(null);
         }
     };
     // --- End Selection Logic ---
