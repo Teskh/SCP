@@ -14,3 +14,5 @@ __pycache__/
 node_modules/
 frontend/public/
 frontend/build/
+*dump.sql
+*data_dump_excluding_stations.sql
