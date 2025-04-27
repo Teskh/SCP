@@ -243,8 +243,30 @@ def update_production_plan_item_line(plan_id, new_line):
     except sqlite3.Error as e:
         print(f"Error updating production plan item line: {e}") # Replace with logging
         # Rollback might happen automatically depending on connection settings, but good practice to handle
-        db.rollback()
-        return False
+def update_production_plan_items_line_bulk(plan_ids, new_line):
+    """Updates the planned_assembly_line for a list of production plan items."""
+    db = get_db()
+    allowed_lines = ['A', 'B', 'C']
+    if new_line not in allowed_lines:
+        raise ValueError(f"Invalid assembly line specified: {new_line}. Must be one of {allowed_lines}")
+    if not plan_ids:
+        return 0 # Nothing to update
+
+    # Create placeholders for the IN clause
+    placeholders = ','.join('?' * len(plan_ids))
+    sql = f"UPDATE ProductionPlan SET planned_assembly_line = ? WHERE plan_id IN ({placeholders})"
+    params = [new_line] + plan_ids # Combine parameters
+
+    try:
+        with db: # Use transaction
+            cursor = db.execute(sql, params)
+            updated_count = cursor.rowcount
+        print(f"Updated assembly line to '{new_line}' for {updated_count} plan items.") # Replace with logging
+        return updated_count # Return the number of rows affected
+    except sqlite3.Error as e:
+        print(f"Error updating bulk production plan item lines: {e}") # Replace with logging
+        # Transaction ensures rollback
+        raise e # Re-raise the exception to be handled by the API layer
 
 
 def delete_project(project_id):

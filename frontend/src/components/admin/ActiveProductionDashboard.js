@@ -534,44 +534,72 @@ function ActiveProductionDashboard() {
     // --- End Selection Logic ---
 
     // --- Line Change Logic ---
-    const handleChangeAssemblyLine = useCallback(async (planId, newLine) => {
+    const handleChangeAssemblyLine = useCallback(async (clickedPlanId, newLine) => {
         // Prevent changing line if already updating or dragging
         if (isUpdatingLine || draggedItemIds) return;
 
         const originalItems = [...upcomingItems];
-        const itemIndex = originalItems.findIndex(item => item.plan_id === planId);
-        if (itemIndex === -1) return; // Item not found
+        const itemsToUpdateIds = [];
+        let isBulkUpdate = false;
 
-        // Avoid API call if the line is already the target line
-        if (originalItems[itemIndex].planned_assembly_line === newLine) {
-            return;
+        // Determine if this is a bulk update based on selection
+        if (selectedItemIds.size > 1 && selectedItemIds.has(clickedPlanId)) {
+            isBulkUpdate = true;
+            selectedItemIds.forEach(id => itemsToUpdateIds.push(id));
+        } else {
+            // Single item update (or clicked item not in multi-selection)
+            itemsToUpdateIds.push(clickedPlanId);
         }
 
-        // Optimistic UI Update
-        const updatedItems = originalItems.map(item =>
-            item.plan_id === planId ? { ...item, planned_assembly_line: newLine } : item
+        // Filter out items that already have the target line
+        const actualIdsToUpdate = itemsToUpdateIds.filter(id => {
+            const item = originalItems.find(i => i.plan_id === id);
+            return item && item.planned_assembly_line !== newLine;
+        });
+
+        if (actualIdsToUpdate.length === 0) {
+            console.log("No items need line change.");
+            return; // All items already have the target line or no valid items found
+        }
+
+        // Optimistic UI Update for all items being changed
+        const updatedItemsOptimistic = originalItems.map(item =>
+            actualIdsToUpdate.includes(item.plan_id)
+                ? { ...item, planned_assembly_line: newLine }
+                : item
         );
-        setUpcomingItems(updatedItems);
+        setUpcomingItems(updatedItemsOptimistic);
         setIsUpdatingLine(true);
         setError('');
 
         try {
-            // Call API
-            const updatedItem = await adminService.changeProductionPlanItemLine(planId, newLine);
-            // Update local state with potentially more complete data from backend (if needed)
-            setUpcomingItems(prevItems => prevItems.map(item =>
-                item.plan_id === planId ? updatedItem : item
-            ));
+            if (isBulkUpdate) {
+                // Call Bulk API
+                const response = await adminService.changeProductionPlanItemsLineBulk(actualIdsToUpdate, newLine);
+                console.log(`Bulk line change response: ${response.message}`);
+                // Optional: Refetch or update based on response if needed, but optimistic update is done
+            } else {
+                // Call Single API (only one ID in actualIdsToUpdate)
+                const singlePlanId = actualIdsToUpdate[0];
+                const updatedItem = await adminService.changeProductionPlanItemLine(singlePlanId, newLine);
+                // Update local state with potentially more complete data from backend (if needed)
+                // This might overwrite other optimistic updates if bulk was intended but only one needed changing.
+                // Consider refetching after bulk OR trust optimistic update. Let's trust optimistic for now.
+                // setUpcomingItems(prevItems => prevItems.map(item =>
+                //     item.plan_id === singlePlanId ? updatedItem : item
+                // ));
+            }
             setLastUpdated(new Date());
         } catch (err) {
-            setError(`Error changing line for item ${planId}: ${err.message}. Reverting.`);
+            const errorMsg = `Error changing line for item(s) ${actualIdsToUpdate.join(', ')}: ${err.message}. Reverting.`;
+            setError(errorMsg);
             console.error("Line change error:", err);
             // Revert optimistic update on error
             setUpcomingItems(originalItems);
         } finally {
             setIsUpdatingLine(false);
         }
-    }, [upcomingItems, isUpdatingLine, draggedItemIds]); // Dependencies for line change logic
+    }, [upcomingItems, isUpdatingLine, draggedItemIds, selectedItemIds]); // Added selectedItemIds dependency
     // --- End Line Change Logic ---
 
     // --- Select Module Sequence Logic ---

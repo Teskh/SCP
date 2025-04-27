@@ -517,7 +517,15 @@ export const changeProductionPlanItemLine = async (planId, newLine) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_line: newLine }),
     });
-    return handleResponse(response); // Returns the updated plan item on success
+// Change the planned assembly line for multiple plan items
+export const changeProductionPlanItemsLineBulk = async (planIds, newLine) => {
+    const response = await fetch(`${API_BASE_URL}/production_plan/change_line_bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_ids: planIds, new_line: newLine }),
+    });
+    // Expects a 200 OK with a message and count on success
+    return handleResponse(response);
 };
 
 
