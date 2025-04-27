@@ -188,10 +188,12 @@ const getUniqueProjects = (items) => {
 };
 
 // --- Helper Function to generate a random color suitable for text ---
-const generateRandomColor = () => {
-    const hue = Math.floor(Math.random() * 360);
-    const saturation = 60 + Math.floor(Math.random() * 20); // 60-80% saturation
-    const lightness = 35 + Math.floor(Math.random() * 15); // 35-50% lightness (dark enough for text)
+const generateDeterministicColor = (projectId) => {
+    // Use a prime number to distribute hues across the spectrum
+    const prime = 1117; // A prime number
+    const hue = (projectId * prime) % 360;
+    const saturation = 70; // Keep saturation constant for consistency
+    const lightness = 40; // Keep lightness constant for readability
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
@@ -333,7 +335,7 @@ function ActiveProductionDashboard() {
             let updated = false;
             uniqueProjects.forEach(project => {
                 if (!newMap.has(project.id)) {
-                    newMap.set(project.id, generateRandomColor());
+                    newMap.set(project.id, generateDeterministicColor(project.id)); // Use deterministic color
                     updated = true;
                 }
             });
