@@ -252,6 +252,12 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                 {...attributes}
                 {...listeners} // Apply drag listeners directly
                 onClick={(e) => onClick(e, id)} // Apply click handler (selection logic gated by Shift in handler)
+                onPointerDown={(e) => {
+                    // Prevent dnd-kit drag initiation if Shift is pressed
+                    if (e.shiftKey) {
+                        e.stopPropagation();
+                    }
+                }}
             >
                 {/* Sequence Number - Placed inside draggable part */}
                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
