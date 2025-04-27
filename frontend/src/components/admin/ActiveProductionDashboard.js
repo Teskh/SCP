@@ -187,10 +187,27 @@ const getUniqueProjects = (items) => {
     })).sort((a, b) => a.name.localeCompare(b.name)); // Sort projects by name
 };
 
+// --- Helper Function to generate distinct color based on ID ---
+const generateProjectColor = (projectId) => {
+    // Simple hash function to get a number from the ID
+    let hash = 0;
+    const idStr = String(projectId); // Ensure it's a string
+    for (let i = 0; i < idStr.length; i++) {
+        hash = idStr.charCodeAt(i) + ((hash << 5) - hash);
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    // Use the hash to generate a hue (0-360)
+    const hue = hash % 360;
+    // Use higher saturation and moderate lightness for more distinct text color
+    const saturation = 75; // Increased saturation
+    const lightness = 45;  // Darker for text visibility on light background
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
+
 
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator }) { // Added showProjectSeparator, removed isFirstInProjectGroup
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor }) { // Added projectColor prop
     const {
         attributes,
         listeners, // These are for drag-and-drop - apply ONLY to the draggable part
@@ -229,9 +246,6 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         minWidth: '100px', // Ensure enough space for indicators
     };
 
-    // Display text generation - REMOVED Line Info and sequence number (sequence handled by order)
-    const displayText = `[${item.project_name}] ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`;
-
     // Combine drag listeners and click handler
     const combinedListeners = {
         ...listeners, // Spread the drag listeners from useSortable
@@ -243,13 +257,16 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: upcomingItemStyle.marginBottom }}>
             {/* Draggable Content - Apply the combined style here */}
             <div ref={setNodeRef} style={draggableElementStyle} {...attributes} {...listeners} {...combinedListeners}>
-                 {/* Sequence Number - Placed inside draggable part */}
-                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
-                 {/* Main text content */}
-                 <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} dangerouslySetInnerHTML={{ __html: displayText }} />
-            </div>
+                {/* Sequence Number - Placed inside draggable part */}
+                <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
+                {/* Main text content - Now using JSX with colored project name */}
+                <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: projectColor, fontWeight: 'bold' }}>[{item.project_name}]</span>
+                    {` ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`}
+                </span>
+           </div>
 
-            {/* Line Indicator Container - NOT draggable */}
+           {/* Line Indicator Container - NOT draggable */}
             <div style={lineIndicatorContainerStyle}>
                 <LineIndicator
                     line="A"
@@ -736,6 +753,7 @@ function ActiveProductionDashboard() {
                                             onClick={handleItemClick} // Pass click handler for selection
                                             onChangeLine={handleChangeAssemblyLine} // Pass line change handler
                                             showProjectSeparator={showProjectSeparator} // Pass separator flag
+                                            projectColor={generateProjectColor(item.project_id)} // Pass generated color
                                         />
                                     );
                                 })
