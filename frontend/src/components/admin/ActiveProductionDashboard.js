@@ -704,7 +704,7 @@ function ActiveProductionDashboard() {
                                                     borderBottom: isCollapsed ? 'none' : '1px solid #ddd',
                                                     fontWeight: 'bold',
                                                 }}
-                                                onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(projectId); }} // Stop propagation
+                                                // onClick removed, handled by inner span now
                                                 data-project-header="true" // Add attribute for deselection check
                                             >
                                                 <div> {/* Wrap project name and new button */}
