@@ -187,20 +187,11 @@ const getUniqueProjects = (items) => {
     })).sort((a, b) => a.name.localeCompare(b.name)); // Sort projects by name
 };
 
-// --- Helper Function to generate distinct color based on ID ---
-const generateProjectColor = (projectId) => {
-    // Simple hash function to get a number from the ID
-    let hash = 0;
-    const idStr = String(projectId); // Ensure it's a string
-    for (let i = 0; i < idStr.length; i++) {
-        hash = idStr.charCodeAt(i) + ((hash << 5) - hash);
-        hash = hash & hash; // Convert to 32bit integer
-    }
-    // Use the hash to generate a hue (0-360)
-    const hue = hash % 360;
-    // Use higher saturation and moderate lightness for more distinct text color
-    const saturation = 75; // Increased saturation
-    const lightness = 45;  // Darker for text visibility on light background
+// --- Helper Function to generate a random color suitable for text ---
+const generateRandomColor = () => {
+    const hue = Math.floor(Math.random() * 360);
+    const saturation = 60 + Math.floor(Math.random() * 20); // 60-80% saturation
+    const lightness = 35 + Math.floor(Math.random() * 15); // 35-50% lightness (dark enough for text)
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
@@ -304,6 +295,7 @@ function ActiveProductionDashboard() {
     const [lastClickedItemId, setLastClickedItemId] = useState(null); // State for shift-click logic
     const [draggedItemIds, setDraggedItemIds] = useState(null); // State to hold IDs being dragged (single or group)
     const [isUpdatingLine, setIsUpdatingLine] = useState(false); // State to track line update API call
+    const [projectColorMap, setProjectColorMap] = useState(new Map()); // State to store project colors
 
     const fetchData = useCallback(async () => {
         // Preserve selection if items still exist after fetch? For now, clear on fetch.
@@ -333,6 +325,21 @@ function ActiveProductionDashboard() {
     // --- Derived State ---
     // Get unique project details from the flat upcomingItems list
     const uniqueProjects = React.useMemo(() => getUniqueProjects(upcomingItems), [upcomingItems]);
+
+    // Effect to assign random colors to projects when uniqueProjects changes
+    useEffect(() => {
+        setProjectColorMap(prevMap => {
+            const newMap = new Map(prevMap);
+            let updated = false;
+            uniqueProjects.forEach(project => {
+                if (!newMap.has(project.id)) {
+                    newMap.set(project.id, generateRandomColor());
+                    updated = true;
+                }
+            });
+            return updated ? newMap : prevMap; // Only update state if changes were made
+        });
+    }, [uniqueProjects]); // Dependency: uniqueProjects
 
     useEffect(() => {
         fetchData();
@@ -753,7 +760,7 @@ function ActiveProductionDashboard() {
                                             onClick={handleItemClick} // Pass click handler for selection
                                             onChangeLine={handleChangeAssemblyLine} // Pass line change handler
                                             showProjectSeparator={showProjectSeparator} // Pass separator flag
-                                            projectColor={generateProjectColor(item.project_id)} // Pass generated color
+                                            projectColor={projectColorMap.get(item.project_id) || '#000000'} // Get color from map, default black
                                         />
                                     );
                                 })
