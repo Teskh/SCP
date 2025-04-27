@@ -252,12 +252,6 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                 {...attributes}
                 {...listeners} // Apply drag listeners directly
                 onClick={(e) => onClick(e, id)} // Apply click handler (selection logic gated by Shift in handler)
-                onPointerDown={(e) => {
-                    // Prevent dnd-kit drag initiation if Shift is pressed
-                    if (e.shiftKey) {
-                        e.stopPropagation();
-                    }
-                }}
             >
                 {/* Sequence Number - Placed inside draggable part */}
                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
@@ -363,7 +357,21 @@ function ActiveProductionDashboard() {
 
     // --- dnd-kit Setup ---
     const sensors = useSensors(
-        useSensor(PointerSensor),
+        useSensor(PointerSensor, {
+            // Prevent drag activation if Shift key is pressed, allowing Shift+Click for selection only
+            activationConstraint: {
+                // distance: 5, // Default is 0, uncomment/adjust if needed
+                // delay: 100, // Default is 0 (PointerSensor), 250 (MouseSensor), uncomment/adjust if needed
+                shouldActivate: (event) => {
+                    // Activate drag ONLY if Shift key is NOT pressed
+                    if (event.nativeEvent && typeof event.nativeEvent.shiftKey !== 'undefined') {
+                        return !event.nativeEvent.shiftKey;
+                    }
+                    // Fallback: allow activation if we can't detect shiftKey
+                    return true;
+                }
+            }
+        }),
         useSensor(KeyboardSensor, {
             coordinateGetter: sortableKeyboardCoordinates,
         })
