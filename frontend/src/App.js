@@ -53,7 +53,8 @@ function App() {
             {/* Admin Route - Now uses nested routes */}
             <Route path="/admin" element={<AdminDashboard />}>
                  {/* Child routes rendered by Outlet in AdminDashboard */}
-                 <Route path="definitions" element={<DefinitionsManager />} />
+                 {/* Route now points directly to TaskDefinitionManager */}
+                 <Route path="definitions" element={<TaskDefinitionManager />} />
                  <Route path="workers" element={<WorkersManager />} />
                  <Route path="house-types" element={<HouseTypesManager />} />
                  <Route path="house-parameters" element={<HouseParametersManager />} />
