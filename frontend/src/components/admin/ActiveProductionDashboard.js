@@ -231,7 +231,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         zIndex: isDragging ? draggingListItemStyle.zIndex : 'auto',
     };
 
-    // Style for the container holding the line indicators (remains the same)
+    // Style for the container holding the line indicators
     const lineIndicatorContainerStyle = {
         display: 'flex',
         flexDirection: 'row',
@@ -239,17 +239,19 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         minWidth: '100px', // Ensure enough space for indicators
     };
 
-    // Combine drag listeners and click handler
-    const combinedListeners = {
-        ...listeners, // Spread the drag listeners from useSortable
-        onClick: (e) => onClick(e, id), // Add the onClick handler for selection
-    };
-
+    // Apply drag listeners and onClick handler to the draggable element
+    // onClick logic is now gated by Shift key inside handleItemClick
     return (
         // Outer container - NOT draggable, holds both parts
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: upcomingItemStyle.marginBottom }}>
-            {/* Draggable Content - Apply the combined style here */}
-            <div ref={setNodeRef} style={draggableElementStyle} {...attributes} {...listeners} {...combinedListeners}>
+            {/* Draggable Content - Apply styles, ref, attributes, listeners, and onClick */}
+            <div
+                ref={setNodeRef}
+                style={draggableElementStyle}
+                {...attributes}
+                {...listeners} // Apply drag listeners directly
+                onClick={(e) => onClick(e, id)} // Apply click handler (selection logic gated by Shift in handler)
+            >
                 {/* Sequence Number - Placed inside draggable part */}
                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
                 {/* Main text content - Now using JSX with colored project name */}
@@ -492,10 +494,19 @@ function ActiveProductionDashboard() {
 
         const isShiftPressed = event.nativeEvent.shiftKey; // Check if Shift key was held
 
+        // --- Only perform selection/deselection if Shift key is pressed ---
+        if (!isShiftPressed) {
+            // If Shift is not pressed, do nothing regarding selection.
+            // This allows normal click-and-drag without affecting selection.
+            return;
+        }
+
+        // --- Proceed with selection logic only if Shift is pressed ---
         setSelectedItemIds(prevSelectedIds => {
             const newSelectedIds = new Set(prevSelectedIds);
 
-            if (isShiftPressed && lastClickedItemId && lastClickedItemId !== clickedItemId) {
+            // Check if it's a range selection (Shift + Click on a different item than the last anchor)
+            if (lastClickedItemId && lastClickedItemId !== clickedItemId) {
                 // Shift + Click: Select range using the flat upcomingItems list
                 const itemsInOrder = upcomingItems; // Use the flat list directly
                 const lastClickedIndex = itemsInOrder.findIndex(item => item.plan_id === lastClickedItemId);
@@ -530,12 +541,10 @@ function ActiveProductionDashboard() {
             return newSelectedIds;
         });
 
-        // Update last clicked item ID *unless* shift was pressed (keep the anchor)
-        if (!isShiftPressed) {
-            setLastClickedItemId(clickedItemId);
-        }
+        // Update the anchor point for future Shift+Click range selections
+        setLastClickedItemId(clickedItemId);
 
-    }, [lastClickedItemId, upcomingItems]); // Updated dependencies for selection logic
+    }, [lastClickedItemId, upcomingItems]); // Dependencies for selection logic
 
     const handleDeselectAll = (event) => {
         // Check if the click target is NOT within a sortable item OR the project header container
