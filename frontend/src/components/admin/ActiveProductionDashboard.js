@@ -531,7 +531,8 @@ function ActiveProductionDashboard() {
                     }
                 }
             } else {
-                // Normal Click (or first click in a shift-select sequence)
+                // Shift + Click on a single item (or the first item in a potential range)
+                // Toggles the selection state of the clicked item.
                 if (newSelectedIds.has(clickedItemId)) {
                     newSelectedIds.delete(clickedItemId);
                 } else {
