@@ -203,7 +203,7 @@ const generateDeterministicColor = (projectId) => {
 function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled }) { // Added disabled prop
     const {
         attributes,
-        listeners, // These are for drag-and-drop - apply ALWAYS to the draggable part
+        listeners: dndListeners, // Original dnd-kit listeners
         setNodeRef,
         transform,
         transition,
@@ -212,6 +212,8 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         id,
         disabled // Pass the disabled prop to useSortable hook
     });
+    // Extract the pointerDown handler for merging selection logic
+    const { onPointerDown: dndOnPointerDown, ...listeners } = dndListeners;
 
     // Combine base, conditional, and dnd-kit styles for the draggable element
     const draggableElementStyle = {
@@ -254,8 +256,17 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                 ref={setNodeRef}
                 style={draggableElementStyle}
                 {...attributes}
-                {...listeners} // Apply drag listeners directly
-                onClick={(e) => onClick(e, id)} // Apply click handler (selection logic gated by Shift in handler)
+                {...listeners} // Apply drag-kit listeners directly
+                onPointerDown={(e) => {
+                    // Single left-click with Shift selects item
+                    if (e.nativeEvent.shiftKey && e.nativeEvent.button === 0) {
+                        onClick(e, id);
+                    }
+                    // Then always invoke dnd-kit pointerDown for drag (if allowed)
+                    if (dndOnPointerDown) {
+                        dndOnPointerDown(e);
+                    }
+                }}
             >
                 {/* Sequence Number - Placed inside draggable part */}
                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
