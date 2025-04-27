@@ -1,9 +1,6 @@
 import React from 'react';
 import { Routes, Route, Link, Navigate, Outlet } from 'react-router-dom'; // Import Outlet
 import './App.css';
-import React from 'react';
-import { Routes, Route, Link, Navigate, Outlet } from 'react-router-dom'; // Import Outlet
-import './App.css';
 import AdminDashboard from './pages/AdminDashboard';
 // DefinitionsManager is no longer needed as TaskDefinitionManager is routed directly
 import TaskDefinitionManager from './components/admin/TaskDefinitionManager'; // Import TaskDefinitionManager
