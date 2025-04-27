@@ -707,19 +707,29 @@ function ActiveProductionDashboard() {
                                                 // onClick removed, handled by inner span now
                                                 data-project-header="true" // Add attribute for deselection check
                                             >
-                                                <div> {/* Wrap project name and new button */}
+                                                <div style={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}> {/* Container for name and select buttons */}
                                                     <span>{group.projectName} ({group.items.length} módulos)</span>
-                                                    {group.items.length > 0 && ( // Only show button if there are items
-                                                        <button
-                                                            style={styles.selectSequenceButton}
-                                                            title={`Seleccionar todos los módulos #${group.items[0].module_sequence_in_house} en este proyecto`}
-                                                            onClick={(e) => handleSelectModuleSequenceInProject(e, projectId, group.items[0].module_sequence_in_house)}
-                                                        >
-                                                            Sel. M{group.items[0].module_sequence_in_house}
-                                                        </button>
+                                                    {group.items.length > 0 && ( // Only show selector if there are items
+                                                        <div style={styles.moduleSelectContainer}>
+                                                            <span style={styles.moduleSelectLabel}>Seleccionar:</span>
+                                                            {/* Calculate unique, sorted module sequences */}
+                                                            {[...new Set(group.items.map(item => item.module_sequence_in_house))]
+                                                                .sort((a, b) => a - b) // Sort numerically
+                                                                .map(sequence => (
+                                                                    <button
+                                                                        key={sequence}
+                                                                        style={styles.moduleSelectButton}
+                                                                        title={`Seleccionar todos los módulos #${sequence} en este proyecto`}
+                                                                        onClick={(e) => handleSelectModuleSequenceInProject(e, projectId, sequence)}
+                                                                    >
+                                                                        [M{sequence}]
+                                                                    </button>
+                                                                ))
+                                                            }
+                                                        </div>
                                                     )}
                                                 </div>
-                                                <span onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(projectId); }}> {/* Make only the toggle clickable for collapse */}
+                                                <span onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(projectId); }} style={{ cursor: 'pointer', marginLeft: '10px' }}> {/* Ensure span is clickable and spaced */}
                                                     {isCollapsed ? '▼ Expandir' : '▲ Contraer'}
                                                 </span>
                                             </div>

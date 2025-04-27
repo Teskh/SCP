@@ -103,16 +103,28 @@ const styles = {
         borderRadius: '4px',
         backgroundColor: '#ffebeb',
     },
-    selectSequenceButton: { // Style for the new button
-        backgroundColor: '#17a2b8', // Info blue color
+    moduleSelectContainer: { // Container for the "Seleccionar: [M1] [M2]" part
+        display: 'inline-flex', // Align items horizontally
+        alignItems: 'center',
+        marginLeft: '15px', // Space from project name
+        verticalAlign: 'middle', // Align with text/icons
+    },
+    moduleSelectLabel: { // Style for the "Seleccionar:" text
+        marginRight: '5px',
+        fontSize: '0.9em',
+        color: '#555',
+        fontWeight: 'normal', // Label doesn't need to be bold
+    },
+    moduleSelectButton: { // Style for the individual [Mx] buttons
+        backgroundColor: '#6c757d', // Grey color, can adjust
         color: 'white',
-        padding: '3px 8px',
-        fontSize: '0.8em',
+        padding: '2px 6px', // Slightly smaller padding
+        fontSize: '0.8em', // Keep font size small
         border: 'none',
         borderRadius: '3px',
         cursor: 'pointer',
-        marginLeft: '10px', // Space it from other elements
-        verticalAlign: 'middle', // Align with text/icons
+        marginLeft: '4px', // Space between buttons
+        // verticalAlign: 'middle', // Inherited from container
     },
     // Add more shared styles as needed
 };
