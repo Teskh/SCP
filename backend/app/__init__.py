@@ -65,8 +65,15 @@ def create_app(config_class=AppConfig):
     connection.init_app(app) # Registers init_db_command for CLI and close_db
 
     # Register blueprints
-    from .api.admin import admin_bp
-    app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    # Import the individual blueprints from their respective files
+    from .api.admin_personnel import admin_personnel_bp
+    from .api.admin_projects import admin_projects_bp
+    from .api.admin_definitions import admin_definitions_bp
+
+    # Register each blueprint with the same URL prefix
+    app.register_blueprint(admin_personnel_bp, url_prefix='/api/admin')
+    app.register_blueprint(admin_projects_bp, url_prefix='/api/admin')
+    app.register_blueprint(admin_definitions_bp, url_prefix='/api/admin')
     # Add other blueprints here later (auth, worker, etc.)
 
     # Serve React App
