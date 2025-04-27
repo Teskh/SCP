@@ -97,18 +97,18 @@ def update_house_type(house_type_id):
             else:
                 return jsonify(error="House type update failed for an unknown reason"), 500
     except sqlite3.IntegrityError as ie:
-         if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
-             # Check if the conflict is with itself or another house type
-             # Assuming a query like get_house_type_by_name exists
-             existing = queries.get_house_type_by_name(name) # This query needs to exist in queries.py
-             if existing and existing['house_type_id'] != house_type_id:
-                 return jsonify(error="House type name already exists"), 409 # Conflict
-             else: # If name didn't change or conflict is with self, it's another error
-                 logger.error(f"Integrity error updating house type {house_type_id}: {ie}", exc_info=True)
-                 return jsonify(error="Database integrity error"), 409
-         else:
-             logger.error(f"Integrity error updating house type {house_type_id}: {ie}", exc_info=True)
-             return jsonify(error="Database integrity error"), 409
+        if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
+            # Check if the conflict is with itself or another house type
+            # Assuming a query like get_house_type_by_name exists
+            existing = queries.get_house_type_by_name(name) # This query needs to exist in queries.py
+            if existing and existing['house_type_id'] != house_type_id:
+                return jsonify(error="House type name already exists"), 409 # Conflict
+            else: # If name didn't change or conflict is with self, it's another error
+                logger.error(f"Integrity error updating house type {house_type_id}: {ie}", exc_info=True)
+                return jsonify(error="Database integrity error"), 409
+        else:
+            logger.error(f"Integrity error updating house type {house_type_id}: {ie}", exc_info=True)
+            return jsonify(error="Database integrity error"), 409
     except Exception as e:
         logger.error(f"Error in update_house_type {house_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to update house type"), 500

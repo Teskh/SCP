@@ -13,6 +13,7 @@ env/
 .aider.input.history
 .aider.tags.cache.v3/
 .aider.chat.history.md
+*.txt
 
 # Python cache files
 __pycache__/
