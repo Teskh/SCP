@@ -1120,7 +1120,7 @@ def get_station_status_and_upcoming(upcoming_count=5):
         JOIN Projects p ON pp.project_id = p.project_id
         JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
         WHERE pp.status IN ('Planned', 'Scheduled')
-        ORDER BY pp.project_id, pp.planned_sequence ASC, pp.planned_start_datetime ASC -- Order by project first, then sequence
+        ORDER BY pp.planned_sequence ASC, pp.planned_start_datetime ASC -- Sort strictly by sequence, then start time
         -- Removed LIMIT clause to fetch all items
     """
     upcoming_cursor = db.execute(upcoming_query) # Removed upcoming_count parameter
