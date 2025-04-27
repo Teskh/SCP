@@ -53,35 +53,64 @@ function AdminDashboard() {
             <nav style={navStyles}>
                 <h2 style={{...styles.header, borderBottom: 'none', marginBottom: '20px'}}>Menú Admin</h2>
                 <ul style={navListStyles}>
-                    <li style={navItemStyles}>
-                        <Link
-                            to="/admin/definitions"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/definitions') ? navLinkActiveStyles : {})
-                            }}
-                        >
-                            Definiciones
-                        </Link>
+                    {/* Personal Section */}
+                    <li style={{...navItemStyles, marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #ddd'}}>
+                        <strong style={{ display: 'block', padding: '8px 12px', color: '#555' }}>Personal</strong>
                     </li>
                     <li style={navItemStyles}>
                         <Link
                             to="/admin/workers"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/workers') ? navLinkActiveStyles : {})
-                            }}
+                            style={{ ...navLinkStyles, ...(isActive('/admin/workers') ? navLinkActiveStyles : {}) }}
                         >
                             Trabajadores
                         </Link>
                     </li>
+                    <li style={navItemStyles}>
+                        <Link
+                            to="/admin/specialties"
+                            style={{ ...navLinkStyles, ...(isActive('/admin/specialties') ? navLinkActiveStyles : {}) }}
+                        >
+                            Especialidades
+                        </Link>
+                    </li>
+                    <li style={navItemStyles}>
+                        <Link
+                            to="/admin/admin-team"
+                            style={{ ...navLinkStyles, ...(isActive('/admin/admin-team') ? navLinkActiveStyles : {}) }}
+                        >
+                            Equipo Admin
+                        </Link>
+                    </li>
+
+                    {/* Proyectos Section */}
+                    <li style={{...navItemStyles, marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #ddd'}}>
+                        <strong style={{ display: 'block', padding: '8px 12px', color: '#555' }}>Proyectos</strong>
+                    </li>
+                    <li style={navItemStyles}>
+                        <Link
+                            to="/admin/projects"
+                            style={{ ...navLinkStyles, ...(isActive('/admin/projects') ? navLinkActiveStyles : {}) }}
+                        >
+                            Gestionar Proyectos
+                        </Link>
+                    </li>
+                    <li style={navItemStyles}>
+                        <Link
+                            to="/admin/production-status"
+                            style={{ ...navLinkStyles, ...(isActive('/admin/production-status') ? navLinkActiveStyles : {}) }}
+                        >
+                            Estado Producción
+                        </Link>
+                    </li>
+
+                    {/* Definiciones Section */}
+                    <li style={{...navItemStyles, marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #ddd'}}>
+                        <strong style={{ display: 'block', padding: '8px 12px', color: '#555' }}>Definiciones</strong>
+                    </li>
                      <li style={navItemStyles}>
                         <Link
                             to="/admin/house-types"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/house-types') ? navLinkActiveStyles : {})
-                            }}
+                            style={{ ...navLinkStyles, ...(isActive('/admin/house-types') ? navLinkActiveStyles : {}) }}
                         >
                             Tipos de Vivienda
                         </Link>
@@ -89,60 +118,20 @@ function AdminDashboard() {
                      <li style={navItemStyles}>
                         <Link
                             to="/admin/house-parameters"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/house-parameters') ? navLinkActiveStyles : {})
-                            }}
+                            style={{ ...navLinkStyles, ...(isActive('/admin/house-parameters') ? navLinkActiveStyles : {}) }}
                         >
                             Parámetros Vivienda
                         </Link>
                     </li>
                     <li style={navItemStyles}>
                         <Link
-                            to="/admin/specialties"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/specialties') ? navLinkActiveStyles : {})
-                            }}
+                            to="/admin/definitions" // Keep path for now, will adjust in next step
+                            style={{ ...navLinkStyles, ...(isActive('/admin/definitions') ? navLinkActiveStyles : {}) }}
                         >
-                            Especialidades
+                            Definiciones de Tareas
                         </Link>
                     </li>
-                     <li style={navItemStyles}>
-                        <Link
-                            to="/admin/admin-team"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/admin-team') ? navLinkActiveStyles : {})
-                            }}
-                        >
-                            Equipo Admin
-                        </Link>
-                    </li>
-                     <li style={navItemStyles}>
-                        <Link
-                            to="/admin/projects"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/projects') ? navLinkActiveStyles : {})
-                            }}
-                        >
-                            Proyectos
-                        </Link>
-                    </li>
-                     {/* Removed Production Plan link */}
-                     <li style={navItemStyles}>
-                        <Link
-                            to="/admin/production-status"
-                            style={{
-                                ...navLinkStyles,
-                                ...(isActive('/admin/production-status') ? navLinkActiveStyles : {})
-                            }}
-                        >
-                            Estado Producción
-                        </Link>
-                    </li>
-                    {/* Add links for other features later */}
+                    {/* Add links for Stations etc. under Definitions if needed later */}
                 </ul>
             </nav>
             <main style={contentStyles}>
