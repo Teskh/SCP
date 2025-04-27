@@ -55,9 +55,9 @@ def add_house_type():
             # Assuming a query like get_house_type_by_name exists
             existing = queries.get_house_type_by_name(name) # This query needs to exist in queries.py
             if existing:
-                 return jsonify(error="House type name already exists"), 409 # Conflict
-             else:
-                 return jsonify(error="Failed to add house type for an unknown reason"), 500
+                return jsonify(error="House type name already exists"), 409 # Conflict
+            else:
+                return jsonify(error="Failed to add house type for an unknown reason"), 500
     except sqlite3.IntegrityError as ie:
         if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
             return jsonify(error="House type name already exists"), 409 # Conflict
@@ -93,9 +93,9 @@ def update_house_type(house_type_id):
             # Check if house type exists first
             existing = queries.get_house_type_by_id(house_type_id) # This query needs to exist in queries.py
             if not existing:
-                 return jsonify(error="House type not found"), 404
+                return jsonify(error="House type not found"), 404
             else:
-                 return jsonify(error="House type update failed for an unknown reason"), 500
+                return jsonify(error="House type update failed for an unknown reason"), 500
     except sqlite3.IntegrityError as ie:
          if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
              # Check if the conflict is with itself or another house type
