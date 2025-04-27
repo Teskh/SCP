@@ -112,12 +112,64 @@ const dragHandleStyle = { // Optional: Style for a dedicated drag handle
     color: '#aaa',
 };
 
+// --- Line Indicator Component ---
+// Extracted for clarity and reusability
+const LineIndicator = ({ line, isActive, isClickable, onClick }) => {
+    const baseStyle = {
+        display: 'inline-block',
+        padding: '3px 6px',
+        borderRadius: '4px',
+        fontWeight: 'bold',
+        fontSize: '0.8em',
+        minWidth: '20px',
+        textAlign: 'center',
+        margin: '0 2px', // Add small horizontal margin between indicators
+        border: '1px solid transparent', // Placeholder for border consistency
+    };
+
+    const activeStyle = {
+        color: 'white',
+        backgroundColor: line === 'A' ? '#dc3545' : line === 'B' ? '#28a745' : '#007bff', // Red, Green, Blue
+    };
+
+    const inactiveClickableStyle = {
+        color: '#aaa',
+        backgroundColor: '#f0f0f0',
+        cursor: 'pointer',
+        border: '1px solid #ccc',
+        '&:hover': { // Note: Pseudo-classes need specific handling in React (e.g., state or styled-components)
+            backgroundColor: '#e0e0e0',
+        }
+    };
+
+    // Basic hover effect using inline style state (more advanced with libraries)
+    const [isHovering, setIsHovering] = React.useState(false);
+
+    const combinedStyle = {
+        ...baseStyle,
+        ...(isActive ? activeStyle : (isClickable ? inactiveClickableStyle : {})),
+        ...(isClickable && !isActive && isHovering ? { backgroundColor: '#e0e0e0' } : {}) // Apply hover style
+    };
+
+    return (
+        <div
+            style={combinedStyle}
+            onClick={isClickable && !isActive ? onClick : undefined} // Only trigger onClick if clickable and not active
+            onMouseEnter={() => isClickable && !isActive && setIsHovering(true)}
+            onMouseLeave={() => setIsHovering(false)}
+        >
+            {line}
+        </div>
+    );
+};
+
+
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick }) { // Added isSelected and onClick props
+function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick, onChangeLine }) { // Added onChangeLine prop
     const {
         attributes,
-        listeners, // These are for drag-and-drop
+        listeners, // These are for drag-and-drop - apply ONLY to the draggable part
         setNodeRef,
         transform,
         transition,
@@ -133,60 +185,73 @@ function SortableItem({ id, item, isFirstInProjectGroup, isSelected, onClick }) 
         borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected ? selectedListItemStyle.border : upcomingItemStyle.border), // Keep border consistent
         marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom,
         zIndex: isDragging ? 1 : 'auto',
+        zIndex: isDragging ? 1 : 'auto',
         position: 'relative',
-        display: 'flex', // Arrange children horizontally
-        alignItems: 'center', // Vertically align items in the center
-        paddingRight: '5px', // Add some padding so indicators don't touch edge
+        // Removed display:flex and alignment from the outer container
     };
 
-    // Display text generation - REMOVED Line Info
-    const displayText = `<strong>#${item.planned_sequence}:</strong> [${item.project_name}] ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`;
+    // Style for the draggable part of the item
+    const draggableContentStyle = {
+        ...upcomingItemStyle, // Base style from original upcomingItemStyle
+        ...(isSelected && !isDragging ? selectedListItemStyle : {}), // Apply selected style if selected and not dragging
+        ...(isDragging ? draggingListItemStyle : {}), // Apply dragging style
+        borderTop: isFirstInProjectGroup ? '2px solid #ccc' : (isSelected ? selectedListItemStyle.border : upcomingItemStyle.border),
+        marginTop: isFirstInProjectGroup ? '10px' : upcomingItemStyle.marginBottom,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '8px', // Reset padding if needed
+        flexGrow: 1, // Allow draggable content to take available space
+        marginRight: '10px', // Space between draggable content and line indicators
+    };
+
+    // Style for the container holding the line indicators
+    const lineIndicatorContainerStyle = {
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        minWidth: '100px', // Ensure enough space for indicators
+    };
+
+    // Display text generation - REMOVED Line Info and sequence number (sequence handled by order)
+    const displayText = `[${item.project_name}] ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`;
 
     // Combine drag listeners and click handler
     const combinedListeners = {
         ...listeners, // Spread the drag listeners from useSortable
-        onClick: (e) => onClick(e, id), // Add the onClick handler passed from parent
+        onClick: (e) => onClick(e, id), // Add the onClick handler for selection
     };
-
-    // Styles for the line indicator columns and the indicator itself
-    const lineIndicatorColumnStyle = {
-        minWidth: '40px', // Fixed width for each line column
-        textAlign: 'center',
-        padding: '0 5px', // Add some horizontal padding within columns
-    };
-    const lineIndicatorStyle = {
-        display: 'inline-block',
-        padding: '3px 6px', // Smaller padding
-        borderRadius: '4px',
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: '0.8em', // Smaller font size
-        minWidth: '20px',
-        textAlign: 'center',
-    };
-
 
     return (
-        // Apply combined listeners and attributes to the main div
-        <div ref={setNodeRef} style={style} {...attributes} {...combinedListeners}>
-            {/* Main text content - takes up remaining space */}
-            <span style={{ flexGrow: 1, marginRight: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} dangerouslySetInnerHTML={{ __html: displayText }} />
+        // Outer container - NOT draggable, holds both parts
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: upcomingItemStyle.marginBottom }}>
+            {/* Draggable Content */}
+            <div ref={setNodeRef} style={draggableContentStyle} {...attributes} {...listeners} {...combinedListeners}>
+                 {/* Sequence Number - Placed inside draggable part */}
+                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
+                 {/* Main text content */}
+                 <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} dangerouslySetInnerHTML={{ __html: displayText }} />
+            </div>
 
-            {/* Line Indicator Columns */}
-            <div style={lineIndicatorColumnStyle}>
-                {item.planned_assembly_line === 'A' && (
-                    <div style={{...lineIndicatorStyle, backgroundColor: '#dc3545'}}>A</div> // Red
-                )}
-            </div>
-            <div style={lineIndicatorColumnStyle}>
-                {item.planned_assembly_line === 'B' && (
-                    <div style={{...lineIndicatorStyle, backgroundColor: '#28a745'}}>B</div> // Green
-                )}
-            </div>
-            <div style={lineIndicatorColumnStyle}>
-                {item.planned_assembly_line === 'C' && (
-                    <div style={{...lineIndicatorStyle, backgroundColor: '#007bff'}}>C</div> // Blue
-                )}
+            {/* Line Indicator Container - NOT draggable */}
+            <div style={lineIndicatorContainerStyle}>
+                <LineIndicator
+                    line="A"
+                    isActive={item.planned_assembly_line === 'A'}
+                    isClickable={true}
+                    onClick={() => onChangeLine(id, 'A')}
+                />
+                <LineIndicator
+                    line="B"
+                    isActive={item.planned_assembly_line === 'B'}
+                    isClickable={true}
+                    onClick={() => onChangeLine(id, 'B')}
+                />
+                <LineIndicator
+                    line="C"
+                    isActive={item.planned_assembly_line === 'C'}
+                    isClickable={true}
+                    onClick={() => onChangeLine(id, 'C')}
+                />
             </div>
         </div>
     );
@@ -204,6 +269,7 @@ function ActiveProductionDashboard() {
     const [selectedItemIds, setSelectedItemIds] = useState(new Set()); // State for selected item IDs
     const [lastClickedItemId, setLastClickedItemId] = useState(null); // State for shift-click logic
     const [draggedItemIds, setDraggedItemIds] = useState(null); // State to hold IDs being dragged (single or group)
+    const [isUpdatingLine, setIsUpdatingLine] = useState(false); // State to track line update API call
 
     const fetchData = useCallback(async () => {
         // Preserve selection if items still exist after fetch? For now, clear on fetch.
@@ -398,7 +464,7 @@ function ActiveProductionDashboard() {
                 setIsLoading(false);
             }
         }
-    }, [upcomingItems, fetchData, draggedItemIds]); // Add draggedItemIds dependency
+    }, [upcomingItems, draggedItemIds]); // Removed fetchData dependency to prevent loop, rely on manual refresh or interval
 
      const handleDragCancel = useCallback(() => {
         // Reset dragged items state if drag is cancelled
@@ -470,6 +536,47 @@ function ActiveProductionDashboard() {
         }
     };
     // --- End Selection Logic ---
+
+    // --- Line Change Logic ---
+    const handleChangeAssemblyLine = useCallback(async (planId, newLine) => {
+        // Prevent changing line if already updating or dragging
+        if (isUpdatingLine || draggedItemIds) return;
+
+        const originalItems = [...upcomingItems];
+        const itemIndex = originalItems.findIndex(item => item.plan_id === planId);
+        if (itemIndex === -1) return; // Item not found
+
+        // Avoid API call if the line is already the target line
+        if (originalItems[itemIndex].planned_assembly_line === newLine) {
+            return;
+        }
+
+        // Optimistic UI Update
+        const updatedItems = originalItems.map(item =>
+            item.plan_id === planId ? { ...item, planned_assembly_line: newLine } : item
+        );
+        setUpcomingItems(updatedItems);
+        setIsUpdatingLine(true);
+        setError('');
+
+        try {
+            // Call API
+            const updatedItem = await adminService.changeProductionPlanItemLine(planId, newLine);
+            // Update local state with potentially more complete data from backend (if needed)
+            setUpcomingItems(prevItems => prevItems.map(item =>
+                item.plan_id === planId ? updatedItem : item
+            ));
+            setLastUpdated(new Date());
+        } catch (err) {
+            setError(`Error changing line for item ${planId}: ${err.message}. Reverting.`);
+            console.error("Line change error:", err);
+            // Revert optimistic update on error
+            setUpcomingItems(originalItems);
+        } finally {
+            setIsUpdatingLine(false);
+        }
+    }, [upcomingItems, isUpdatingLine, draggedItemIds]); // Dependencies for line change logic
+    // --- End Line Change Logic ---
 
 
     const renderStation = (stationId) => {
@@ -592,12 +699,13 @@ function ActiveProductionDashboard() {
                                                                 key={item.plan_id}
                                                                 id={item.plan_id}
                                                                 item={item}
-                                                                isFirstInProjectGroup={item.plan_id === firstItemIdInGroup}
-                                                                isSelected={selectedItemIds.has(item.plan_id)} // Pass selection state
-                                                                onClick={handleItemClick} // Pass click handler
-                                                            />
-                                                        );
-                                                    })}
+                                                               isFirstInProjectGroup={item.plan_id === firstItemIdInGroup}
+                                                               isSelected={selectedItemIds.has(item.plan_id)} // Pass selection state
+                                                               onClick={handleItemClick} // Pass click handler for selection
+                                                               onChangeLine={handleChangeAssemblyLine} // Pass line change handler
+                                                           />
+                                                       );
+                                                   })}
                                                 </div>
                                             )}
                                         </div>

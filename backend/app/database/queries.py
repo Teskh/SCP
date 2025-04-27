@@ -226,7 +226,24 @@ def update_project(project_id, name, description, status, house_types_data):
         raise e # Re-raise
     except Exception as e: # Catch generation/removal errors too
         print(f"Error updating project: {e}") # Replace with logging
-        # Transaction ensures rollback on error
+def update_production_plan_item_line(plan_id, new_line):
+    """Updates only the planned_assembly_line for a specific production plan item."""
+    db = get_db()
+    allowed_lines = ['A', 'B', 'C']
+    if new_line not in allowed_lines:
+        raise ValueError(f"Invalid assembly line specified: {new_line}. Must be one of {allowed_lines}")
+
+    try:
+        cursor = db.execute(
+            "UPDATE ProductionPlan SET planned_assembly_line = ? WHERE plan_id = ?",
+            (new_line, plan_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0 # True if update occurred, False if plan_id not found
+    except sqlite3.Error as e:
+        print(f"Error updating production plan item line: {e}") # Replace with logging
+        # Rollback might happen automatically depending on connection settings, but good practice to handle
+        db.rollback()
         return False
 
 

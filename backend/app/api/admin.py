@@ -1235,6 +1235,34 @@ def reorder_production_plan():
         current_app.logger.error(f"Error in reorder_production_plan: {e}", exc_info=True)
         return jsonify(error="An internal error occurred during reordering"), 500
 
+@admin_bp.route('/production_plan/<int:plan_id>/change_line', methods=['PUT'])
+def change_production_plan_line(plan_id):
+    """Updates the planned assembly line for a specific production plan item."""
+    data = request.get_json()
+    if not data or 'new_line' not in data:
+        return jsonify(error="Missing 'new_line' in request data"), 400
+
+    new_line = data['new_line']
+
+    try:
+        success = queries.update_production_plan_item_line(plan_id, new_line)
+        if success:
+            # Fetch the updated item to return it
+            updated_item = queries.get_production_plan_item_by_id(plan_id)
+            if updated_item:
+                return jsonify(updated_item), 200
+            else:
+                # Should not happen if update succeeded, but handle defensively
+                return jsonify(error="Item updated but failed to retrieve"), 500
+        else:
+            # Could be plan_id not found or DB error during update
+            return jsonify(error="Production plan item not found or update failed"), 404
+    except ValueError as ve: # Catch invalid line error from query
+        return jsonify(error=str(ve)), 400
+    except Exception as e:
+        current_app.logger.error(f"Error changing line for plan item {plan_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to change production plan line"), 500
+
 
 # Removed PUT and DELETE endpoints for /production_plan/<plan_id>
 

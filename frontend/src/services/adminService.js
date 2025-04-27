@@ -510,6 +510,16 @@ export const getProductionPlan = async (params = {}) => {
     return handleResponse(response);
 };
 
+// Change the planned assembly line for a specific plan item
+export const changeProductionPlanItemLine = async (planId, newLine) => {
+    const response = await fetch(`${API_BASE_URL}/production_plan/${planId}/change_line`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_line: newLine }),
+    });
+    return handleResponse(response); // Returns the updated plan item on success
+};
+
 
 // === Production Status Dashboard ===
 
