@@ -452,9 +452,15 @@ function ActiveProductionDashboard() {
             }
 
             // --- Apply Changes (Optimistic Update & Backend Call) ---
-            setUpcomingItems(reorderedItems); // Update local state immediately
+            // Update planned_sequence locally for immediate visual feedback
+            const itemsWithUpdatedSequence = reorderedItems.map((item, index) => ({
+                ...item,
+                planned_sequence: index + 1, // Update sequence based on new position (1-based)
+            }));
 
-            const orderedPlanIds = reorderedItems.map(item => item.plan_id);
+            setUpcomingItems(itemsWithUpdatedSequence); // Update local state immediately with new sequence numbers
+
+            const orderedPlanIds = itemsWithUpdatedSequence.map(item => item.plan_id);
 
             try {
                 setIsLoading(true);
