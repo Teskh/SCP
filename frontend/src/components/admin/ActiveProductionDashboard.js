@@ -200,15 +200,18 @@ const generateDeterministicColor = (projectId) => {
 
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor }) { // Added projectColor prop
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled }) { // Added disabled prop
     const {
         attributes,
-        listeners, // These are for drag-and-drop - apply ONLY to the draggable part
+        listeners, // These are for drag-and-drop - apply ALWAYS to the draggable part
         setNodeRef,
         transform,
         transition,
         isDragging,
-    } = useSortable({ id });
+    } = useSortable({
+        id,
+        disabled // Pass the disabled prop to useSortable hook
+    });
 
     // Combine base, conditional, and dnd-kit styles for the draggable element
     const draggableElementStyle = {
@@ -230,6 +233,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         // Ensure zIndex is applied correctly when dragging
         zIndex: isDragging ? draggingListItemStyle.zIndex : 'auto',
         outline: 'none', // Remove default browser focus outline
+        cursor: disabled ? 'pointer' : (isDragging ? 'grabbing' : 'grab'), // Change cursor based on disabled/dragging state
     };
 
     // Style for the container holding the line indicators
@@ -301,6 +305,7 @@ function ActiveProductionDashboard() {
     const [draggedItemIds, setDraggedItemIds] = useState(null); // State to hold IDs being dragged (single or group)
     const [isUpdatingLine, setIsUpdatingLine] = useState(false); // State to track line update API call
     const [projectColorMap, setProjectColorMap] = useState(new Map()); // State to store project colors
+    const [isShiftKeyDown, setIsShiftKeyDown] = useState(false); // State to track Shift key globally
 
     const fetchData = useCallback(async () => {
         // Preserve selection if items still exist after fetch? For now, clear on fetch.
@@ -794,6 +799,7 @@ function ActiveProductionDashboard() {
                                             onChangeLine={handleChangeAssemblyLine} // Pass line change handler
                                             showProjectSeparator={showProjectSeparator} // Pass separator flag
                                             projectColor={projectColorMap.get(item.project_id) || '#000000'} // Get color from map, default black
+                                            disabled={isShiftKeyDown} // Pass the disabled state
                                         />
                                     );
                                 })
