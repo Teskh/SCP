@@ -229,6 +229,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         position: 'relative', // Needed for zIndex from draggingListItemStyle
         // Ensure zIndex is applied correctly when dragging
         zIndex: isDragging ? draggingListItemStyle.zIndex : 'auto',
+        outline: 'none', // Remove default browser focus outline
     };
 
     // Style for the container holding the line indicators
