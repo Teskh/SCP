@@ -59,11 +59,11 @@ def add_house_type():
              else:
                  return jsonify(error="Failed to add house type for an unknown reason"), 500
     except sqlite3.IntegrityError as ie:
-         if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
-             return jsonify(error="House type name already exists"), 409 # Conflict
-         else:
-             logger.error(f"Integrity error adding house type: {ie}", exc_info=True)
-             return jsonify(error="Database integrity error"), 409
+        if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
+            return jsonify(error="House type name already exists"), 409 # Conflict
+        else:
+            logger.error(f"Integrity error adding house type: {ie}", exc_info=True)
+            return jsonify(error="Database integrity error"), 409
     except Exception as e:
         logger.error(f"Error in add_house_type: {e}", exc_info=True)
         return jsonify(error="Failed to add house type"), 500
