@@ -103,6 +103,17 @@ const styles = {
         borderRadius: '4px',
         backgroundColor: '#ffebeb',
     },
+    selectSequenceButton: { // Style for the new button
+        backgroundColor: '#17a2b8', // Info blue color
+        color: 'white',
+        padding: '3px 8px',
+        fontSize: '0.8em',
+        border: 'none',
+        borderRadius: '3px',
+        cursor: 'pointer',
+        marginLeft: '10px', // Space it from other elements
+        verticalAlign: 'middle', // Align with text/icons
+    },
     // Add more shared styles as needed
 };
 

@@ -574,6 +574,31 @@ function ActiveProductionDashboard() {
     }, [upcomingItems, isUpdatingLine, draggedItemIds]); // Dependencies for line change logic
     // --- End Line Change Logic ---
 
+    // --- Select Module Sequence Logic ---
+    const handleSelectModuleSequenceInProject = useCallback((event, projectId, targetSequence) => {
+        event.stopPropagation(); // Prevent triggering collapse/expand
+
+        if (!groupedUpcomingItems[projectId] || !groupedUpcomingItems[projectId].items) {
+            return; // No items in this project
+        }
+
+        const itemsInProject = groupedUpcomingItems[projectId].items;
+        const idsToSelect = itemsInProject
+            .filter(item => item.module_sequence_in_house === targetSequence)
+            .map(item => item.plan_id);
+
+        if (idsToSelect.length > 0) {
+            setSelectedItemIds(prevSelectedIds => {
+                const newSelectedIds = new Set(prevSelectedIds);
+                idsToSelect.forEach(id => newSelectedIds.add(id));
+                return newSelectedIds;
+            });
+            // Optionally, update lastClickedItemId if needed for subsequent shift-clicks
+            // setLastClickedItemId(idsToSelect[idsToSelect.length - 1]); // Select the last one as anchor? Or keep existing?
+        }
+
+    }, [groupedUpcomingItems]); // Dependency: grouped items
+    // --- End Select Module Sequence Logic ---
 
     const renderStation = (stationId) => {
         const station = stationStatus[stationId];
@@ -682,8 +707,21 @@ function ActiveProductionDashboard() {
                                                 onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(projectId); }} // Stop propagation
                                                 data-project-header="true" // Add attribute for deselection check
                                             >
-                                                <span>{group.projectName} ({group.items.length} módulos)</span>
-                                                <span>{isCollapsed ? '▼ Expandir' : '▲ Contraer'}</span>
+                                                <div> {/* Wrap project name and new button */}
+                                                    <span>{group.projectName} ({group.items.length} módulos)</span>
+                                                    {group.items.length > 0 && ( // Only show button if there are items
+                                                        <button
+                                                            style={styles.selectSequenceButton}
+                                                            title={`Seleccionar todos los módulos #${group.items[0].module_sequence_in_house} en este proyecto`}
+                                                            onClick={(e) => handleSelectModuleSequenceInProject(e, projectId, group.items[0].module_sequence_in_house)}
+                                                        >
+                                                            Sel. M{group.items[0].module_sequence_in_house}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <span onClick={(e) => { e.stopPropagation(); toggleProjectCollapse(projectId); }}> {/* Make only the toggle clickable for collapse */}
+                                                    {isCollapsed ? '▼ Expandir' : '▲ Contraer'}
+                                                </span>
                                             </div>
                                             {!isCollapsed && (
                                                 <div style={{ padding: '5px' }}>
