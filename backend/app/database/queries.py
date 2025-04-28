@@ -329,6 +329,7 @@ def generate_production_plan_for_project(project_id, project_name, house_types_d
                     current_sequence,
                     planned_start_datetime_str,
                     planned_assembly_line,
+                    None, # tipologia_id - Set to NULL initially
                     'Planned' # Default status
                 ))
                 current_sequence += 1
@@ -916,10 +917,10 @@ def add_bulk_production_plan_items(items_data):
     """Adds multiple items to the production plan using executemany."""
     db = get_db()
     # items_data should be a list of tuples/lists matching the order of columns in the INSERT statement
-    # e.g., [(proj_id, ht_id, identifier, module_seq, planned_seq, start_dt, line, status), ...]
+    # e.g., [(proj_id, ht_id, identifier, module_seq, planned_seq, start_dt, line, tipologia_id, status), ...]
     sql = """INSERT INTO ProductionPlan
-             (project_id, house_type_id, house_identifier, module_sequence_in_house, planned_sequence, planned_start_datetime, planned_assembly_line, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""" # Added module_sequence_in_house
+             (project_id, house_type_id, house_identifier, module_sequence_in_house, planned_sequence, planned_start_datetime, planned_assembly_line, tipologia_id, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""" # Added tipologia_id
     try:
         with db: # Use transaction
             db.executemany(sql, items_data)
@@ -940,10 +941,12 @@ def get_production_plan(filters=None, sort_by='planned_sequence', sort_order='AS
             pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
             pp.house_identifier, pp.module_sequence_in_house, -- Added module sequence
             pp.planned_sequence, pp.planned_start_datetime,
-            pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at
+            pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at,
+            pp.tipologia_id, htt.name as tipologia_name -- Added tipologia info
         FROM ProductionPlan pp
         JOIN Projects p ON pp.project_id = p.project_id
         JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseTypeTipologias htt ON pp.tipologia_id = htt.tipologia_id -- Join to get tipologia name
     """
     where_clauses = []
     params = []
@@ -964,13 +967,16 @@ def get_production_plan(filters=None, sort_by='planned_sequence', sort_order='AS
         if filters.get('start_date_after'): # Example filter
             where_clauses.append("pp.planned_start_datetime >= ?")
             params.append(filters['start_date_after'])
+        if filters.get('tipologia_id'):
+            where_clauses.append("pp.tipologia_id = ?")
+            params.append(filters['tipologia_id'])
         # Add more filters as needed
 
     if where_clauses:
         base_query += " WHERE " + " AND ".join(where_clauses)
 
     # Validate sort_by and sort_order to prevent SQL injection
-    allowed_sort_columns = ['plan_id', 'project_name', 'house_type_name', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status', 'created_at', 'updated_at']
+    allowed_sort_columns = ['plan_id', 'project_name', 'house_type_name', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status', 'created_at', 'updated_at', 'tipologia_name'] # Added tipologia_name
     if sort_by not in allowed_sort_columns:
         sort_by = 'planned_sequence' # Default sort
     if sort_order.upper() not in ['ASC', 'DESC']:
@@ -997,10 +1003,12 @@ def get_production_plan_item_by_id(plan_id):
             pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
             pp.house_identifier, pp.module_sequence_in_house, -- Added module sequence
             pp.planned_sequence, pp.planned_start_datetime,
-            pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at
+            pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at,
+            pp.tipologia_id, htt.name as tipologia_name -- Added tipologia info
         FROM ProductionPlan pp
         JOIN Projects p ON pp.project_id = p.project_id
         JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseTypeTipologias htt ON pp.tipologia_id = htt.tipologia_id -- Join to get tipologia name
         WHERE pp.plan_id = ?
     """
     cursor = db.execute(query, (plan_id,))
@@ -1010,7 +1018,7 @@ def get_production_plan_item_by_id(plan_id):
 def update_production_plan_item(plan_id, updates):
     """Updates specific fields of a production plan item."""
     db = get_db()
-    allowed_fields = ['project_id', 'house_type_id', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status']
+    allowed_fields = ['project_id', 'house_type_id', 'house_identifier', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status', 'tipologia_id'] # Added tipologia_id
     set_clauses = []
     params = []
 
@@ -1098,12 +1106,14 @@ def get_station_status_and_upcoming(upcoming_count=5):
             m.module_id, m.house_type_id, ht.name as house_type_name,
             m.module_sequence_in_house, ht.number_of_modules,
             m.project_id, p.name as project_name,
-            m.plan_id, pp.house_identifier -- Include plan details if module is linked
+            m.plan_id, pp.house_identifier, -- Include plan details if module is linked
+            pp.tipologia_id, htt.name as house_type_typology -- Added tipologia info from ProductionPlan
         FROM Stations s
         LEFT JOIN Modules m ON s.station_id = m.current_station_id AND m.status = 'In Progress' -- Only show active modules at stations
         LEFT JOIN HouseTypes ht ON m.house_type_id = ht.house_type_id
         LEFT JOIN Projects p ON m.project_id = p.project_id
-        LEFT JOIN ProductionPlan pp ON m.plan_id = pp.plan_id -- Join to get house_identifier
+        LEFT JOIN ProductionPlan pp ON m.plan_id = pp.plan_id -- Join to get house_identifier and tipologia_id
+        LEFT JOIN HouseTypeTipologias htt ON pp.tipologia_id = htt.tipologia_id -- Join to get tipologia name
         ORDER BY s.sequence_order, s.line_type -- Ensure consistent station order
     """
     station_cursor = db.execute(station_query)
@@ -1116,10 +1126,12 @@ def get_station_status_and_upcoming(upcoming_count=5):
             pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
             pp.house_identifier, pp.module_sequence_in_house, -- Added module sequence
             pp.planned_sequence, pp.planned_start_datetime,
-            pp.planned_assembly_line, pp.status
+            pp.planned_assembly_line, pp.status,
+            pp.tipologia_id, htt.name as tipologia_name -- Added tipologia info
         FROM ProductionPlan pp
         JOIN Projects p ON pp.project_id = p.project_id
         JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseTypeTipologias htt ON pp.tipologia_id = htt.tipologia_id -- Join to get tipologia name
         WHERE pp.status IN ('Planned', 'Scheduled')
         ORDER BY pp.planned_sequence ASC, pp.planned_start_datetime ASC -- Sort strictly by sequence, then start time
         -- Removed LIMIT clause to fetch all items
