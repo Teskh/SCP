@@ -228,7 +228,7 @@ const generateDeterministicColor = (projectId) => {
 
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick }) { // Added formatPlannedDate prop
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick }) { // Added onDateTimeBadgeClick prop
     const {
         attributes,
         listeners: dndListeners, // Original dnd-kit listeners
@@ -320,7 +320,21 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                         [{item.house_type_name}]
                         {item.tipologia_name && `[${item.tipologia_name}]`} {/* Use tipologia_name from item */}
                     </span>
-                    {` - ${formatPlannedDate(item.planned_start_datetime)}`}
+                    {/* Make date clickable */}
+                    <span
+                        style={{ cursor: 'pointer', textDecoration: 'underline', marginLeft: '5px' }}
+                        data-datetime-badge="true" // Add data attribute
+                        onPointerDown={e => {
+                            // Stop propagation immediately on pointer down to prevent drag sensor activation
+                            e.stopPropagation();
+                        }}
+                        onClick={e => {
+                            // Call the handler passed from the parent
+                            onDateTimeBadgeClick(item.plan_id, item.planned_start_datetime);
+                        }}
+                    >
+                        {` - ${formatPlannedDate(item.planned_start_datetime)}`}
+                    </span>
                 </span>
            </div>
 
@@ -370,8 +384,13 @@ function ActiveProductionDashboard() {
     const [tipologiaHouseTypeName, setTipologiaHouseTypeName] = useState(''); // Store name for display
     const [tipologiaPlanIds, setTipologiaPlanIds] = useState([]);
     const [availableTipologias, setAvailableTipologias] = useState(null); // Store fetched tipologias
-    const [currentTipologiaId, setCurrentTipologiaId] = useState(undefined); // Store current common tipologia (if any)
     const [isLoadingTipologias, setIsLoadingTipologias] = useState(false);
+    // --- Set DateTime Modal State & Handlers ---
+    const [dateTimeModalOpen, setDateTimeModalOpen] = useState(false);
+    const [dateTimePlanIds, setDateTimePlanIds] = useState([]);
+    const [dateTimeCurrentValue, setDateTimeCurrentValue] = useState(null); // Store current datetime for pre-fill
+    const [isSavingDateTime, setIsSavingDateTime] = useState(false); // Separate loading state for saving datetime
+
 
     const handleOpenTipologiaModal = async (houseTypeId, houseTypeName, planId) => {
         setIsLoadingTipologias(true);
@@ -1018,11 +1037,13 @@ function ActiveProductionDashboard() {
                                             projectColor={projectColorMap.get(item.project_id) || '#000000'} // Get color from map, default black
                                             disabled={isShiftKeyDown} // Pass the disabled state
                                             formatPlannedDate={formatPlannedDate} // Pass the formatting function
-                                            // Pass house type name as well
-                                            onHouseTypeBadgeClick={() => handleOpenTipologiaModal(item.house_type_id, item.house_type_name, item.plan_id)}
-                                        />
-                                    );
-                                })
+                                           // Pass house type name as well
+                                           onHouseTypeBadgeClick={() => handleOpenTipologiaModal(item.house_type_id, item.house_type_name, item.plan_id)}
+                                           // Pass datetime click handler
+                                           onDateTimeBadgeClick={handleOpenDateTimeModal}
+                                       />
+                                   );
+                               })
                             ) : (
                                 <p>No hay elementos planeados o programados en el plan de producción.</p>
                             )}

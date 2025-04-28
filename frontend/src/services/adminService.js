@@ -543,6 +543,18 @@ export const setProductionPlanItemsTipologiaBulk = async (planIds, tipologiaId) 
     return handleResponse(response);
 };
 
+// Set the planned start datetime for multiple plan items
+export const setProductionPlanItemsDateTimeBulk = async (planIds, newDateTime) => {
+    // newDateTime should be in 'YYYY-MM-DD HH:MM:SS' format
+    const response = await fetch(`${API_BASE_URL}/production_plan/set_datetime_bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_ids: planIds, new_datetime: newDateTime }),
+    });
+    // Expects a 200 OK with a message and count on success
+    return handleResponse(response);
+};
+
 
 // === Production Status Dashboard ===
 

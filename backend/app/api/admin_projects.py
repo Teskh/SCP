@@ -341,6 +341,40 @@ def set_production_plan_tipologia_bulk():
         return jsonify(error="Failed to set production plan tipologias in bulk"), 500
 
 
+@admin_projects_bp.route('/production_plan/set_datetime_bulk', methods=['POST'])
+def set_production_plan_datetime_bulk():
+    """Updates the planned_start_datetime for multiple production plan items."""
+    data = request.get_json()
+    if not data or 'plan_ids' not in data or 'new_datetime' not in data:
+        return jsonify(error="Missing 'plan_ids' or 'new_datetime' in request data"), 400
+    if not isinstance(data['plan_ids'], list):
+        return jsonify(error="'plan_ids' must be a list"), 400
+
+    plan_ids = data['plan_ids']
+    new_datetime_str = data['new_datetime'] # Expecting 'YYYY-MM-DD HH:MM:SS'
+
+    # Basic validation
+    try:
+        plan_ids = [int(pid) for pid in plan_ids]
+        # Validate datetime format (optional but recommended)
+        # datetime.strptime(new_datetime_str, '%Y-%m-%d %H:%M:%S') # Raises ValueError if format is wrong
+    except (ValueError, TypeError):
+        return jsonify(error="All items in 'plan_ids' must be integers, and 'new_datetime' must be a valid string"), 400
+    except ValueError:
+         return jsonify(error="Invalid 'new_datetime' format. Expected 'YYYY-MM-DD HH:MM:SS'"), 400
+
+
+    if not plan_ids:
+        return jsonify(message="No plan IDs provided, nothing updated"), 200
+
+    try:
+        updated_count = queries.update_production_plan_items_datetime_bulk(plan_ids, new_datetime_str)
+        return jsonify(message=f"Successfully updated datetime for {updated_count} items.", updated_count=updated_count), 200
+    except Exception as e:
+        logger.error(f"Error setting datetime bulk for plan items: {e}", exc_info=True)
+        return jsonify(error="Failed to set production plan datetimes in bulk"), 500
+
+
 @admin_projects_bp.route('/production_plan/<int:plan_id>/change_line', methods=['PUT'])
 def change_production_plan_line(plan_id):
     """Updates the planned assembly line for a specific production plan item."""

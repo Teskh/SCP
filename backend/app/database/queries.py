@@ -294,6 +294,31 @@ def update_production_plan_items_tipologia_bulk(plan_ids, tipologia_id):
         raise e # Re-raise the exception
 
 
+def update_production_plan_items_datetime_bulk(plan_ids, new_datetime_str):
+    """Updates the planned_start_datetime for a list of production plan items."""
+    db = get_db()
+    if not plan_ids:
+        return 0 # Nothing to update
+
+    # Optional: Validate datetime format again at DB level if needed, though API layer should catch it.
+
+    # Create placeholders for the IN clause
+    placeholders = ','.join('?' * len(plan_ids))
+    sql = f"UPDATE ProductionPlan SET planned_start_datetime = ? WHERE plan_id IN ({placeholders})"
+    params = [new_datetime_str] + plan_ids # Combine parameters
+
+    try:
+        with db: # Use transaction
+            cursor = db.execute(sql, params)
+            updated_count = cursor.rowcount
+        print(f"Updated planned_start_datetime to '{new_datetime_str}' for {updated_count} plan items.") # Replace with logging
+        return updated_count # Return the number of rows affected
+    except sqlite3.Error as e:
+        print(f"Error updating bulk production plan item datetimes: {e}") # Replace with logging
+        # Transaction ensures rollback
+        raise e # Re-raise the exception
+
+
 def delete_project(project_id):
     """Deletes a project. Cascading delete handles ProjectModules."""
     db = get_db()
