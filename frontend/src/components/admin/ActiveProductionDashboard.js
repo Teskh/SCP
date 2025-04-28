@@ -938,23 +938,35 @@ function ActiveProductionDashboard() {
 
     // --- Date Formatting Helper ---
     const formatPlannedDate = (dateString) => {
-        if (!dateString) return '';
+        if (!dateString) return '🗓 --'; // Return placeholder if no date
         try {
+            // Replace space with 'T' for better ISO 8601 compatibility if needed, though 'YYYY-MM-DD HH:MM:SS' usually works
+            // const compatibleDateString = dateString.replace(' ', 'T');
             const date = new Date(dateString);
+
+            // Check if the date object is valid
+            if (isNaN(date.getTime())) {
+                console.error("Invalid Date object created from:", dateString);
+                return `🗓 ErrorFecha`; // Indicate invalid date
+            }
+
             const currentYear = new Date().getFullYear();
             const year = date.getFullYear();
-            const month = date.toLocaleString('default', { month: 'long' }); // Get full month name
+            // Use a specific locale for month name consistency
+            const month = date.toLocaleString('es-ES', { month: 'long' });
             const day = date.getDate();
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
 
+            // Capitalize the first letter of the month
+            const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+
             const yearString = year !== currentYear ? `${year} ` : ''; // Only show year if different from current
 
-            // Changed icon from □ to 🗓
-            return `🗓 ${yearString}${month} ${day} ${hours}:${minutes}`;
+            return `🗓 ${yearString}${capitalizedMonth} ${day}, ${hours}:${minutes}`; // Adjusted format slightly
         } catch (e) {
             console.error("Error formatting date:", dateString, e);
-            return `🗓 ${dateString}`; // Fallback to original string with icon
+            return `🗓 Error`; // Fallback indicating an error occurred
         }
     };
     // --- End Date Formatting Helper ---
