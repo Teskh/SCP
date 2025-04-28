@@ -974,7 +974,8 @@ function ActiveProductionDashboard() {
 
     const renderStation = (stationId) => {
         const station = stationStatus[stationId];
-        if (!station) return <div style={stationBoxStyle}>Error: Station {stationId} not found</div>;
+        // Add key to the error div
+        if (!station) return <div key={`error-${stationId}`} style={stationBoxStyle}>Error: Station {stationId} not found</div>;
 
         const modulePresent = station.module_id;
 
@@ -982,7 +983,8 @@ function ActiveProductionDashboard() {
             <div key={stationId} style={stationBoxStyle}>
                 <div style={stationTitleStyle}>{station.station_name} ({stationId})</div>
                 {modulePresent ? (
-                    <div style={moduleInfoStyle}>
+                    // Add key to the div when module is present
+                    <div key={`${stationId}-content`} style={moduleInfoStyle}>
                         <div><strong>ID Casa:</strong> {station.house_identifier || 'N/A'}</div>
                         {/* Replaced "Tipo: ..." with House Type Badge */}
                         <div>
@@ -997,7 +999,8 @@ function ActiveProductionDashboard() {
                         <div>(ID Mod: {station.module_id})</div>
                     </div>
                 ) : (
-                    <div style={{...moduleInfoStyle, ...emptyStationStyle}}>(Vacío)</div>
+                    // Add key to the div when module is not present (empty)
+                    <div key={`${stationId}-empty`} style={{...moduleInfoStyle, ...emptyStationStyle}}>(Vacío)</div>
                 )}
             </div>
         );
