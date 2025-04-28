@@ -531,6 +531,18 @@ export const changeProductionPlanItemsLineBulk = async (planIds, newLine) => {
     return handleResponse(response);
 };
 
+// Set the tipologia for multiple plan items
+export const setProductionPlanItemsTipologiaBulk = async (planIds, tipologiaId) => {
+    // tipologiaId can be null to clear the tipologia
+    const response = await fetch(`${API_BASE_URL}/production_plan/set_tipologia_bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_ids: planIds, tipologia_id: tipologiaId }),
+    });
+    // Expects a 200 OK with a message and count on success
+    return handleResponse(response);
+};
+
 
 // === Production Status Dashboard ===
 

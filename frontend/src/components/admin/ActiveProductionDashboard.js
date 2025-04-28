@@ -364,23 +364,123 @@ function ActiveProductionDashboard() {
     const [isUpdatingLine, setIsUpdatingLine] = useState(false); // State to track line update API call
     const [projectColorMap, setProjectColorMap] = useState(new Map()); // State to store project colors
     const [isShiftKeyDown, setIsShiftKeyDown] = useState(false); // State to track Shift key globally
-    // --- House Type Definition Modal State & Handlers ---
-    const [definitionModalOpen, setDefinitionModalOpen] = useState(false);
-    const [definitionHouseTypeId, setDefinitionHouseTypeId] = useState(null);
-    const [definitionPlanIds, setDefinitionPlanIds] = useState([]);
-    const handleOpenDefinitionModal = (houseTypeId, planId) => {
+    // --- Set Tipologia Modal State & Handlers ---
+    const [tipologiaModalOpen, setTipologiaModalOpen] = useState(false);
+    const [tipologiaHouseTypeId, setTipologiaHouseTypeId] = useState(null);
+    const [tipologiaHouseTypeName, setTipologiaHouseTypeName] = useState(''); // Store name for display
+    const [tipologiaPlanIds, setTipologiaPlanIds] = useState([]);
+    const [availableTipologias, setAvailableTipologias] = useState(null); // Store fetched tipologias
+    const [currentTipologiaId, setCurrentTipologiaId] = useState(undefined); // Store current common tipologia (if any)
+    const [isLoadingTipologias, setIsLoadingTipologias] = useState(false);
+
+    const handleOpenTipologiaModal = async (houseTypeId, houseTypeName, planId) => {
+        setIsLoadingTipologias(true);
+        setTipologiaModalOpen(true);
+        setTipologiaHouseTypeId(houseTypeId);
+        setTipologiaHouseTypeName(houseTypeName);
+
+        // Determine which plan IDs to affect
         const ids = (selectedItemIds.size > 0 && selectedItemIds.has(planId))
             ? Array.from(selectedItemIds)
             : [planId];
-        setDefinitionHouseTypeId(houseTypeId);
-        setDefinitionPlanIds(ids);
-        setDefinitionModalOpen(true);
+        setTipologiaPlanIds(ids);
+
+        // Check if all selected items belong to the *same* houseTypeId
+        let allSameHouseType = true;
+        let firstTipologiaId = undefined;
+        let commonTipologiaFound = true;
+
+        if (ids.length > 0) {
+            const firstItem = upcomingItems.find(item => item.plan_id === ids[0]);
+            if (!firstItem || firstItem.house_type_id !== houseTypeId) {
+                allSameHouseType = false; // Should not happen if logic is correct, but check
+            } else {
+                firstTipologiaId = firstItem.tipologia_id; // Initialize with the first item's tipologia
+            }
+
+            for (let i = 1; i < ids.length; i++) {
+                const currentItem = upcomingItems.find(item => item.plan_id === ids[i]);
+                if (!currentItem || currentItem.house_type_id !== houseTypeId) {
+                    allSameHouseType = false;
+                    break;
+                }
+                // Check if tipologia is the same as the first one
+                if (currentItem.tipologia_id !== firstTipologiaId) {
+                    commonTipologiaFound = false;
+                    // Don't break here, continue checking house type consistency
+                }
+            }
+        } else {
+             allSameHouseType = false; // No items selected/passed
+        }
+
+
+        if (!allSameHouseType) {
+            setError("Error: Los elementos seleccionados deben pertenecer al mismo Tipo de Casa para establecer la tipología.");
+            handleCloseTipologiaModal(); // Close modal immediately
+            return;
+        }
+
+        // Set current tipologia for pre-selection only if it's common among all selected items
+        setCurrentTipologiaId(commonTipologiaFound ? firstTipologiaId : undefined);
+
+
+        // Fetch available tipologias for this house type
+        try {
+            setError(''); // Clear previous errors
+            const tipologiasData = await adminService.getHouseTypeTipologias(houseTypeId);
+            setAvailableTipologias(tipologiasData || []); // Ensure it's an array
+        } catch (err) {
+            setError(`Error cargando tipologías: ${err.message}`);
+            setAvailableTipologias([]); // Set empty on error
+            console.error(err);
+        } finally {
+            setIsLoadingTipologias(false);
+        }
     };
-    const handleCloseDefinitionModal = () => {
-        setDefinitionModalOpen(false);
-        setDefinitionHouseTypeId(null);
-        setDefinitionPlanIds([]);
+
+    const handleCloseTipologiaModal = () => {
+        setTipologiaModalOpen(false);
+        setTipologiaHouseTypeId(null);
+        setTipologiaHouseTypeName('');
+        setTipologiaPlanIds([]);
+        setAvailableTipologias(null); // Clear fetched data
+        setCurrentTipologiaId(undefined); // Clear current selection
+        setError(''); // Clear modal-specific errors
     };
+
+    // Handler for saving the tipologia from the modal
+    const handleSetTipologia = async (planIdsToUpdate, newTipologiaId) => {
+        // Optimistic UI update (optional, but good for responsiveness)
+        const originalItems = [...upcomingItems];
+        const updatedItemsOptimistic = originalItems.map(item => {
+            if (planIdsToUpdate.includes(item.plan_id)) {
+                // Find the name of the new tipologia (if not null)
+                const newTipologia = availableTipologias?.find(t => t.tipologia_id === newTipologiaId);
+                return {
+                    ...item,
+                    tipologia_id: newTipologiaId,
+                    tipologia_name: newTipologia ? newTipologia.name : null // Update name locally
+                };
+            }
+            return item;
+        });
+        setUpcomingItems(updatedItemsOptimistic);
+
+        try {
+            await adminService.setProductionPlanItemsTipologiaBulk(planIdsToUpdate, newTipologiaId);
+            // Success! Data is already updated optimistically. Maybe show a success message briefly?
+            setLastUpdated(new Date()); // Update timestamp
+            // Optional: Refetch data to ensure consistency? Or trust optimistic update.
+            // await fetchData(); // Uncomment to refetch after save
+        } catch (err) {
+            // Revert optimistic update on error
+            setUpcomingItems(originalItems);
+            // Re-throw the error so the modal can display it
+            throw err;
+        }
+    };
+
 
     const fetchData = useCallback(async () => {
         // Preserve selection if items still exist after fetch? For now, clear on fetch.
@@ -918,7 +1018,8 @@ function ActiveProductionDashboard() {
                                             projectColor={projectColorMap.get(item.project_id) || '#000000'} // Get color from map, default black
                                             disabled={isShiftKeyDown} // Pass the disabled state
                                             formatPlannedDate={formatPlannedDate} // Pass the formatting function
-                                            onHouseTypeBadgeClick={handleOpenDefinitionModal}
+                                            // Pass house type name as well
+                                            onHouseTypeBadgeClick={() => handleOpenTipologiaModal(item.house_type_id, item.house_type_name, item.plan_id)}
                                         />
                                     );
                                 })
@@ -928,14 +1029,17 @@ function ActiveProductionDashboard() {
                         </div>
                     </SortableContext>
                 </DndContext>
-                {definitionModalOpen && (
-                    <HouseTypeDefinitionModal
-                        houseTypeId={definitionHouseTypeId}
-                        planIds={definitionPlanIds}
-                        onClose={handleCloseDefinitionModal}
+                {tipologiaModalOpen && (
+                    <SetTipologiaModal
+                        houseTypeName={tipologiaHouseTypeName}
+                        planIds={tipologiaPlanIds}
+                        availableTipologias={availableTipologias}
+                        currentTipologiaId={currentTipologiaId}
+                        onSave={handleSetTipologia} // Pass the save handler
+                        onClose={handleCloseTipologiaModal}
+                        isLoading={isLoadingTipologias} // Pass loading state
                     />
                 )}
-
             </div>
         </div>
     );

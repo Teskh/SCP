@@ -309,6 +309,38 @@ def change_production_plan_line_bulk():
         logger.error(f"Error changing line bulk for plan items: {e}", exc_info=True)
         return jsonify(error="Failed to change production plan lines in bulk"), 500
 
+@admin_projects_bp.route('/production_plan/set_tipologia_bulk', methods=['POST'])
+def set_production_plan_tipologia_bulk():
+    """Updates the tipologia_id for multiple production plan items."""
+    data = request.get_json()
+    if not data or 'plan_ids' not in data or 'tipologia_id' not in data: # tipologia_id can be null
+        return jsonify(error="Missing 'plan_ids' or 'tipologia_id' in request data"), 400
+    if not isinstance(data['plan_ids'], list):
+        return jsonify(error="'plan_ids' must be a list"), 400
+
+    plan_ids = data['plan_ids']
+    tipologia_id = data['tipologia_id'] # Can be None/null
+
+    # Basic validation
+    try:
+        plan_ids = [int(pid) for pid in plan_ids]
+        if tipologia_id is not None:
+            tipologia_id = int(tipologia_id) # Ensure tipologia_id is int if not null
+    except (ValueError, TypeError):
+        return jsonify(error="All items in 'plan_ids' must be integers, and 'tipologia_id' must be an integer or null"), 400
+
+    if not plan_ids:
+        return jsonify(message="No plan IDs provided, nothing updated"), 200
+
+    try:
+        updated_count = queries.update_production_plan_items_tipologia_bulk(plan_ids, tipologia_id)
+        # Fetch the updated items? Maybe not necessary, frontend can refetch or update locally.
+        return jsonify(message=f"Successfully updated tipologia for {updated_count} items.", updated_count=updated_count), 200
+    except Exception as e:
+        logger.error(f"Error setting tipologia bulk for plan items: {e}", exc_info=True)
+        return jsonify(error="Failed to set production plan tipologias in bulk"), 500
+
+
 @admin_projects_bp.route('/production_plan/<int:plan_id>/change_line', methods=['PUT'])
 def change_production_plan_line(plan_id):
     """Updates the planned assembly line for a specific production plan item."""

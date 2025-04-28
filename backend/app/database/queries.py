@@ -268,6 +268,31 @@ def update_production_plan_items_line_bulk(plan_ids, new_line):
         # Transaction ensures rollback
         raise e # Re-raise the exception to be handled by the API layer
 
+def update_production_plan_items_tipologia_bulk(plan_ids, tipologia_id):
+    """Updates the tipologia_id for a list of production plan items."""
+    db = get_db()
+    if not plan_ids:
+        return 0 # Nothing to update
+
+    # Validate tipologia_id exists if not None? Optional, depends on requirements.
+    # If tipologia_id is None, we are clearing the tipologia.
+
+    # Create placeholders for the IN clause
+    placeholders = ','.join('?' * len(plan_ids))
+    sql = f"UPDATE ProductionPlan SET tipologia_id = ? WHERE plan_id IN ({placeholders})"
+    params = [tipologia_id] + plan_ids # Combine parameters
+
+    try:
+        with db: # Use transaction
+            cursor = db.execute(sql, params)
+            updated_count = cursor.rowcount
+        print(f"Updated tipologia_id to '{tipologia_id}' for {updated_count} plan items.") # Replace with logging
+        return updated_count # Return the number of rows affected
+    except sqlite3.Error as e:
+        print(f"Error updating bulk production plan item tipologias: {e}") # Replace with logging
+        # Transaction ensures rollback
+        raise e # Re-raise the exception
+
 
 def delete_project(project_id):
     """Deletes a project. Cascading delete handles ProjectModules."""
