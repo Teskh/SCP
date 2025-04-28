@@ -1034,15 +1034,16 @@ function ActiveProductionDashboard() {
             {/* Assembly Lines (A, B, C) */}
             <h3>Líneas de Ensamblaje</h3>
             <div style={assemblyLinesContainer}>
-                <div style={{ flex: 1, marginRight: '10px' }}>
+                {/* Add unique keys to the direct children divs representing each line */}
+                <div key="line-A-wrapper" style={{ flex: 1, marginRight: '10px' }}>
                     <h4>Línea A</h4>
                     {stationLayout['A'].map(stationId => renderStation(stationId))}
                 </div>
-                <div style={{ flex: 1, marginRight: '10px' }}>
+                <div key="line-B-wrapper" style={{ flex: 1, marginRight: '10px' }}>
                     <h4>Línea B</h4>
                     {stationLayout['B'].map(stationId => renderStation(stationId))}
                 </div>
-                <div style={{ flex: 1 }}>
+                <div key="line-C-wrapper" style={{ flex: 1 }}>
                     <h4>Línea C</h4>
                     {stationLayout['C'].map(stationId => renderStation(stationId))}
                 </div>
