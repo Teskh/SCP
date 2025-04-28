@@ -213,7 +213,7 @@ const generateDeterministicColor = (projectId) => {
 
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled }) { // Added disabled prop
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate }) { // Added formatPlannedDate prop
     const {
         attributes,
         listeners: dndListeners, // Original dnd-kit listeners
@@ -288,7 +288,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                     <span style={{ color: projectColor, fontWeight: 'bold' }}>[{item.project_name}]</span>
                     {` ${item.house_identifier} `}
                     <span style={moduleBadgeStyle}>MD{item.module_sequence_in_house}</span>
-                    {` - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`}
+                    {` - Tipo: ${item.house_type_name} - ${formatPlannedDate(item.planned_start_datetime)}`}
                 </span>
            </div>
 
@@ -693,6 +693,28 @@ function ActiveProductionDashboard() {
     }, [upcomingItems]); // Dependency: flat upcomingItems list
     // --- End Select Module Sequence Logic ---
 
+    // --- Date Formatting Helper ---
+    const formatPlannedDate = (dateString) => {
+        if (!dateString) return '';
+        try {
+            const date = new Date(dateString);
+            const currentYear = new Date().getFullYear();
+            const year = date.getFullYear();
+            const month = date.toLocaleString('default', { month: 'long' }); // Get full month name
+            const day = date.getDate();
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+
+            const yearString = year !== currentYear ? `${year} ` : ''; // Only show year if different from current
+
+            return `📅 ${yearString}${month} ${day} ${hours}:${minutes}`;
+        } catch (e) {
+            console.error("Error formatting date:", dateString, e);
+            return `📅 ${dateString}`; // Fallback to original string with icon
+        }
+    };
+    // --- End Date Formatting Helper ---
+
     const renderStation = (stationId) => {
         const station = stationStatus[stationId];
         if (!station) return <div style={stationBoxStyle}>Error: Station {stationId} not found</div>;
@@ -826,6 +848,7 @@ function ActiveProductionDashboard() {
                                             showProjectSeparator={showProjectSeparator} // Pass separator flag
                                             projectColor={projectColorMap.get(item.project_id) || '#000000'} // Get color from map, default black
                                             disabled={isShiftKeyDown} // Pass the disabled state
+                                            formatPlannedDate={formatPlannedDate} // Pass the formatting function
                                         />
                                     );
                                 })
