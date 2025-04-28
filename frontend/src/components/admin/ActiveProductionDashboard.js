@@ -386,6 +386,7 @@ function ActiveProductionDashboard() {
     const [tipologiaPlanIds, setTipologiaPlanIds] = useState([]);
     const [availableTipologias, setAvailableTipologias] = useState(null); // Store fetched tipologias
     const [isLoadingTipologias, setIsLoadingTipologias] = useState(false);
+    const [currentTipologiaId, setCurrentTipologiaId] = useState(undefined); // State for pre-selecting in modal
     // --- Set DateTime Modal State & Handlers ---
     const [dateTimeModalOpen, setDateTimeModalOpen] = useState(false);
     const [dateTimePlanIds, setDateTimePlanIds] = useState([]);
