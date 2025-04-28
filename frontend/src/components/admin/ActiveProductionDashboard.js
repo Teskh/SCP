@@ -15,6 +15,7 @@ import {
     useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities'; // For transform/transition styles
+import HouseTypeDefinitionModal from './HouseTypeDefinitionModal';
 import * as adminService from '../../services/adminService';
 import styles from './AdminComponentStyles'; // Assuming shared styles
 
@@ -303,7 +304,13 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                     {` ${item.house_identifier} `}
                     <span style={moduleBadgeStyle}>MD{item.module_sequence_in_house}</span>
                     {/* House Type Badge */}
-                    <span style={houseTypeBadgeStyle}>
+                    <span
+                        style={houseTypeBadgeStyle}
+                        onClick={e => {
+                            e.stopPropagation();
+                            onHouseTypeBadgeClick(item.house_type_id, item.plan_id);
+                        }}
+                    >
                         [{item.house_type_name}]
                         {item.house_type_typology && `[${item.house_type_typology}]`} {/* Add typology if it exists */}
                     </span>
@@ -351,6 +358,23 @@ function ActiveProductionDashboard() {
     const [isUpdatingLine, setIsUpdatingLine] = useState(false); // State to track line update API call
     const [projectColorMap, setProjectColorMap] = useState(new Map()); // State to store project colors
     const [isShiftKeyDown, setIsShiftKeyDown] = useState(false); // State to track Shift key globally
+    // --- House Type Definition Modal State & Handlers ---
+    const [definitionModalOpen, setDefinitionModalOpen] = useState(false);
+    const [definitionHouseTypeId, setDefinitionHouseTypeId] = useState(null);
+    const [definitionPlanIds, setDefinitionPlanIds] = useState([]);
+    const handleOpenDefinitionModal = (houseTypeId, planId) => {
+        const ids = (selectedItemIds.size > 0 && selectedItemIds.has(planId))
+            ? Array.from(selectedItemIds)
+            : [planId];
+        setDefinitionHouseTypeId(houseTypeId);
+        setDefinitionPlanIds(ids);
+        setDefinitionModalOpen(true);
+    };
+    const handleCloseDefinitionModal = () => {
+        setDefinitionModalOpen(false);
+        setDefinitionHouseTypeId(null);
+        setDefinitionPlanIds([]);
+    };
 
     const fetchData = useCallback(async () => {
         // Preserve selection if items still exist after fetch? For now, clear on fetch.
@@ -877,6 +901,7 @@ function ActiveProductionDashboard() {
                                             projectColor={projectColorMap.get(item.project_id) || '#000000'} // Get color from map, default black
                                             disabled={isShiftKeyDown} // Pass the disabled state
                                             formatPlannedDate={formatPlannedDate} // Pass the formatting function
+                                            onHouseTypeBadgeClick={handleOpenDefinitionModal}
                                         />
                                     );
                                 })
@@ -886,6 +911,13 @@ function ActiveProductionDashboard() {
                         </div>
                     </SortableContext>
                 </DndContext>
+                {definitionModalOpen && (
+                    <HouseTypeDefinitionModal
+                        houseTypeId={definitionHouseTypeId}
+                        planIds={definitionPlanIds}
+                        onClose={handleCloseDefinitionModal}
+                    />
+                )}
 
             </div>
         </div>
