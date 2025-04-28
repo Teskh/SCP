@@ -228,7 +228,7 @@ const generateDeterministicColor = (projectId) => {
 
 // --- Sortable Item Component (for dnd-kit) ---
 // Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate }) { // Added formatPlannedDate prop
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick }) { // Added formatPlannedDate prop
     const {
         attributes,
         listeners: dndListeners, // Original dnd-kit listeners
