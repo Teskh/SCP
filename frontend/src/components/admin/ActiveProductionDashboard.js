@@ -306,14 +306,19 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                     {/* House Type Badge */}
                     <span
                         style={houseTypeBadgeStyle}
-                        data-house-type-badge="true" // Added data attribute
+                        data-house-type-badge="true" // Keep data attribute for clarity/potential future use
+                        onPointerDown={e => {
+                            // Stop propagation immediately on pointer down to prevent drag sensor activation
+                            e.stopPropagation();
+                        }}
                         onClick={e => {
-                            e.stopPropagation(); // Keep stopPropagation
+                            // No need to stop propagation here again, but keep for modal logic
+                            // e.stopPropagation(); // Can be removed if onPointerDown handles it
                             onHouseTypeBadgeClick(item.house_type_id, item.plan_id);
                         }}
                     >
                         [{item.house_type_name}]
-                        {item.house_type_typology && `[${item.house_type_typology}]`} {/* Add typology if it exists */}
+                        {item.tipologia_name && `[${item.tipologia_name}]`} {/* Use tipologia_name from item */}
                     </span>
                     {` - ${formatPlannedDate(item.planned_start_datetime)}`}
                 </span>
