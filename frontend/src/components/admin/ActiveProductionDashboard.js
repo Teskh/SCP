@@ -707,11 +707,11 @@ function ActiveProductionDashboard() {
 
             const yearString = year !== currentYear ? `${year} ` : ''; // Only show year if different from current
 
-            // Changed icon from 📅 to □
-            return `□ ${yearString}${month} ${day} ${hours}:${minutes}`;
+            // Changed icon from □ to 🗓
+            return `🗓 ${yearString}${month} ${day} ${hours}:${minutes}`;
         } catch (e) {
             console.error("Error formatting date:", dateString, e);
-            return `□ ${dateString}`; // Fallback to original string with icon
+            return `🗓 ${dateString}`; // Fallback to original string with icon
         }
     };
     // --- End Date Formatting Helper ---
