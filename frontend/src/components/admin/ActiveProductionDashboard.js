@@ -116,6 +116,19 @@ const dragHandleStyle = { // Optional: Style for a dedicated drag handle
     color: '#aaa',
 };
 
+// Style for the module sequence badge
+const moduleBadgeStyle = {
+    display: 'inline-block',
+    padding: '2px 5px',
+    borderRadius: '3px',
+    backgroundColor: '#6c757d', // Bootstrap secondary color (grey)
+    color: 'white',
+    fontSize: '0.8em',
+    fontWeight: 'bold',
+    marginRight: '5px', // Add some space after the badge
+    verticalAlign: 'middle', // Align badge nicely with text
+};
+
 // --- Line Indicator Component ---
 // Extracted for clarity and reusability
 const LineIndicator = ({ line, isActive, isClickable, onClick }) => {
@@ -270,10 +283,12 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
             >
                 {/* Sequence Number - Placed inside draggable part */}
                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
-                {/* Main text content - Now using JSX with colored project name */}
+                {/* Main text content - Now using JSX with colored project name and module badge */}
                 <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <span style={{ color: projectColor, fontWeight: 'bold' }}>[{item.project_name}]</span>
-                    {` ${item.house_identifier} (Módulo ${item.module_sequence_in_house}/${item.number_of_modules}) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`}
+                    {` ${item.house_identifier} `}
+                    <span style={moduleBadgeStyle}>MD{item.module_sequence_in_house}</span>
+                    {`(${item.number_of_modules} total) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`}
                 </span>
            </div>
 
@@ -691,7 +706,7 @@ function ActiveProductionDashboard() {
                     <div style={moduleInfoStyle}>
                         <div><strong>ID Casa:</strong> {station.house_identifier || 'N/A'}</div>
                         <div><strong>Tipo:</strong> {station.house_type_name}</div>
-                        <div><strong>Módulo:</strong> {station.module_sequence_in_house}/{station.number_of_modules}</div>
+                        <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{station.module_sequence_in_house}</span> ({station.number_of_modules} total)</div>
                         <div><strong>Proyecto:</strong> {station.project_name}</div>
                         <div>(ID Mod: {station.module_id})</div>
                     </div>
