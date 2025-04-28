@@ -334,7 +334,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                             onDateTimeBadgeClick(item.plan_id, item.planned_start_datetime);
                         }}
                     >
-                        {` - ${formatPlannedDate(item.planned_start_datetime)}`}
+                        {formatPlannedDate(item.planned_start_datetime)}
                     </span>
                 </span>
            </div>
