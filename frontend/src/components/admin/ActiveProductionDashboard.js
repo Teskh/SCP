@@ -1002,8 +1002,9 @@ function ActiveProductionDashboard() {
         );
     };
 
+    // Add key prop directly to the returned div based on lineKey
     const renderLine = (lineKey) => (
-        <div style={lineStyles}>
+        <div key={`line-${lineKey}`} style={lineStyles}>
             {stationLayout[lineKey].map(stationId => renderStation(stationId))}
         </div>
     );
