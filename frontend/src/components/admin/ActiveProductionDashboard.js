@@ -15,7 +15,8 @@ import {
     useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities'; // For transform/transition styles
-import SetTipologiaModal from './SetTipologiaModal'; // Updated import
+import SetTipologiaModal from './SetTipologiaModal';
+import SetDateTimeModal from './SetDateTimeModal'; // Import the new modal
 import * as adminService from '../../services/adminService';
 import styles from './AdminComponentStyles'; // Assuming shared styles
 
@@ -499,6 +500,67 @@ function ActiveProductionDashboard() {
             throw err;
         }
     };
+    // --- End Tipologia Modal Handlers ---
+
+    // --- Set DateTime Modal Handlers ---
+    const handleOpenDateTimeModal = (planId, currentDateTime) => {
+        // Determine which plan IDs to affect
+        const ids = (selectedItemIds.size > 0 && selectedItemIds.has(planId))
+            ? Array.from(selectedItemIds)
+            : [planId];
+        setDateTimePlanIds(ids);
+
+        // Determine the datetime to pre-fill
+        // If multiple items are selected, use the datetime of the first one in the current list order
+        let dateTimeToPreFill = null;
+        if (ids.length > 0) {
+            // Find the item corresponding to the *first* ID in the selection list `ids`
+            const firstItemId = ids[0];
+            const firstItem = upcomingItems.find(item => item.plan_id === firstItemId);
+            dateTimeToPreFill = firstItem ? firstItem.planned_start_datetime : null;
+        }
+        setDateTimeCurrentValue(dateTimeToPreFill);
+
+        setDateTimeModalOpen(true);
+        setError(''); // Clear general errors when opening modal
+    };
+
+    const handleCloseDateTimeModal = () => {
+        setDateTimeModalOpen(false);
+        setDateTimePlanIds([]);
+        setDateTimeCurrentValue(null);
+        setError(''); // Clear modal-specific errors
+    };
+
+    const handleSetDateTime = async (planIdsToUpdate, newDateTimeString) => {
+        // Optimistic UI update
+        const originalItems = [...upcomingItems];
+        const updatedItemsOptimistic = originalItems.map(item => {
+            if (planIdsToUpdate.includes(item.plan_id)) {
+                return { ...item, planned_start_datetime: newDateTimeString };
+            }
+            return item;
+        });
+        // Sort optimistically based on the new date? Maybe not, backend reorder is separate.
+        // Let's just update the date visually for now. Re-fetch or manual reorder might be needed.
+        setUpcomingItems(updatedItemsOptimistic);
+        setIsSavingDateTime(true); // Use dedicated saving state
+
+        try {
+            await adminService.setProductionPlanItemsDateTimeBulk(planIdsToUpdate, newDateTimeString);
+            setLastUpdated(new Date());
+            // Optional: Refetch data to get potentially re-ordered list if backend adjusts sequence based on time
+            // await fetchData(); // Uncomment to refetch after save
+        } catch (err) {
+            // Revert optimistic update on error
+            setUpcomingItems(originalItems);
+            // Re-throw the error so the modal can display it
+            throw err;
+        } finally {
+            setIsSavingDateTime(false);
+        }
+    };
+    // --- End DateTime Modal Handlers ---
 
 
     const fetchData = useCallback(async () => {
@@ -573,9 +635,10 @@ function ActiveProductionDashboard() {
                     const targetElement = event.nativeEvent.target;
                     // Use closest to check if the click originated from the badge or its children
                     const houseTypeBadge = targetElement.closest('[data-house-type-badge="true"]');
+                    const dateTimeBadge = targetElement.closest('[data-datetime-badge="true"]'); // Check for datetime badge
 
-                    if (houseTypeBadge) {
-                        return false; // Don't activate drag if clicking the badge
+                    if (houseTypeBadge || dateTimeBadge) { // Prevent drag if clicking either badge
+                        return false;
                     }
 
                     // Otherwise, allow drag activation
@@ -1059,6 +1122,16 @@ function ActiveProductionDashboard() {
                         onSave={handleSetTipologia} // Pass the save handler
                         onClose={handleCloseTipologiaModal}
                         isLoading={isLoadingTipologias} // Pass loading state
+                    />
+                )}
+                {/* Render DateTime Modal */}
+                {dateTimeModalOpen && (
+                    <SetDateTimeModal
+                        planIds={dateTimePlanIds}
+                        currentItemDateTime={dateTimeCurrentValue}
+                        onSave={handleSetDateTime}
+                        onClose={handleCloseDateTimeModal}
+                        isLoading={isSavingDateTime} // Pass the dedicated loading state
                     />
                 )}
             </div>
