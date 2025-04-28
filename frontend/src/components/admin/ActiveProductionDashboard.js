@@ -288,7 +288,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                     <span style={{ color: projectColor, fontWeight: 'bold' }}>[{item.project_name}]</span>
                     {` ${item.house_identifier} `}
                     <span style={moduleBadgeStyle}>MD{item.module_sequence_in_house}</span>
-                    {`(${item.number_of_modules} total) - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`}
+                    {` - Tipo: ${item.house_type_name} - Inicio: ${item.planned_start_datetime} (${item.status})`}
                 </span>
            </div>
 
@@ -706,7 +706,7 @@ function ActiveProductionDashboard() {
                     <div style={moduleInfoStyle}>
                         <div><strong>ID Casa:</strong> {station.house_identifier || 'N/A'}</div>
                         <div><strong>Tipo:</strong> {station.house_type_name}</div>
-                        <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{station.module_sequence_in_house}</span> ({station.number_of_modules} total)</div>
+                        <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{station.module_sequence_in_house}</span></div> {/* Removed (N total) */}
                         <div><strong>Proyecto:</strong> {station.project_name}</div>
                         <div>(ID Mod: {station.module_id})</div>
                     </div>
