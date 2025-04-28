@@ -306,8 +306,9 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                     {/* House Type Badge */}
                     <span
                         style={houseTypeBadgeStyle}
+                        data-house-type-badge="true" // Added data attribute
                         onClick={e => {
-                            e.stopPropagation();
+                            e.stopPropagation(); // Keep stopPropagation
                             onHouseTypeBadgeClick(item.house_type_id, item.plan_id);
                         }}
                     >
@@ -438,11 +439,22 @@ function ActiveProductionDashboard() {
                 // distance: 5, // Default is 0, uncomment/adjust if needed
                 // delay: 100, // Default is 0 (PointerSensor), 250 (MouseSensor), uncomment/adjust if needed
                 shouldActivate: (event) => {
-                    // Activate drag ONLY if Shift key is NOT pressed
-                    if (event.nativeEvent && typeof event.nativeEvent.shiftKey !== 'undefined') {
-                        return !event.nativeEvent.shiftKey;
+                    // Check if Shift key is pressed
+                    const isShiftPressed = event.nativeEvent && typeof event.nativeEvent.shiftKey !== 'undefined' && event.nativeEvent.shiftKey;
+                    if (isShiftPressed) {
+                        return false; // Don't activate drag if Shift is pressed
                     }
-                    // Fallback: allow activation if we can't detect shiftKey
+
+                    // Check if the event target is the house type badge or inside it
+                    const targetElement = event.nativeEvent.target;
+                    // Use closest to check if the click originated from the badge or its children
+                    const houseTypeBadge = targetElement.closest('[data-house-type-badge="true"]');
+
+                    if (houseTypeBadge) {
+                        return false; // Don't activate drag if clicking the badge
+                    }
+
+                    // Otherwise, allow drag activation
                     return true;
                 }
             }
