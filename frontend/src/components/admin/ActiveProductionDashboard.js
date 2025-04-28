@@ -129,6 +129,20 @@ const moduleBadgeStyle = {
     verticalAlign: 'middle', // Align badge nicely with text
 };
 
+// Style for the House Type badge
+const houseTypeBadgeStyle = {
+    display: 'inline-block',
+    padding: '2px 5px',
+    borderRadius: '3px',
+    backgroundColor: '#007bff', // Bootstrap primary color (blue)
+    color: 'white',
+    fontSize: '0.8em',
+    fontWeight: 'bold',
+    marginRight: '5px', // Add some space after the badge
+    verticalAlign: 'middle', // Align badge nicely with text
+};
+
+
 // --- Line Indicator Component ---
 // Extracted for clarity and reusability
 const LineIndicator = ({ line, isActive, isClickable, onClick }) => {
@@ -288,7 +302,12 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                     <span style={{ color: projectColor, fontWeight: 'bold' }}>[{item.project_name}]</span>
                     {` ${item.house_identifier} `}
                     <span style={moduleBadgeStyle}>MD{item.module_sequence_in_house}</span>
-                    {` - Tipo: ${item.house_type_name} - ${formatPlannedDate(item.planned_start_datetime)}`}
+                    {/* House Type Badge */}
+                    <span style={houseTypeBadgeStyle}>
+                        [{item.house_type_name}]
+                        {item.house_type_typology && `[${item.house_type_typology}]`} {/* Add typology if it exists */}
+                    </span>
+                    {` - ${formatPlannedDate(item.planned_start_datetime)}`}
                 </span>
            </div>
 
@@ -372,7 +391,8 @@ function ActiveProductionDashboard() {
                     newMap.set(project.id, generateDeterministicColor(project.id)); // Use deterministic color
                     updated = true;
                 }
-            });
+            }
+            );
             return updated ? newMap : prevMap; // Only update state if changes were made
         });
     }, [uniqueProjects]); // Dependency: uniqueProjects
@@ -728,7 +748,14 @@ function ActiveProductionDashboard() {
                 {modulePresent ? (
                     <div style={moduleInfoStyle}>
                         <div><strong>ID Casa:</strong> {station.house_identifier || 'N/A'}</div>
-                        <div><strong>Tipo:</strong> {station.house_type_name}</div>
+                        {/* Replaced "Tipo: ..." with House Type Badge */}
+                        <div>
+                            <strong>Tipo:</strong>
+                            <span style={houseTypeBadgeStyle}>
+                                [{station.house_type_name}]
+                                {station.house_type_typology && `[${station.house_type_typology}]`} {/* Add typology if it exists */}
+                            </span>
+                        </div>
                         <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{station.module_sequence_in_house}</span></div> {/* Removed (N total) */}
                         <div><strong>Proyecto:</strong> {station.project_name}</div>
                         <div>(ID Mod: {station.module_id})</div>
