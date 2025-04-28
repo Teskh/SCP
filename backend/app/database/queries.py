@@ -307,10 +307,11 @@ def generate_production_plan_for_project(project_id, project_name, house_types_d
         number_of_modules = ht_detail['number_of_modules'] # Fetch number of modules
 
         for i in range(quantity): # For each house instance
-            house_base_identifier = f"{project_name}-{house_type_name}-{i+1}" # Identifier for the house
+            # house_base_identifier = f"{project_name}-{house_type_name}-{i+1}" # Old identifier format
+            house_base_identifier = str(i + 1) # New identifier: Just the sequence number of the house instance
 
             for module_seq in range(1, number_of_modules + 1): # For each module within the house
-                # Identifier could include module sequence, e.g., "ProjectX-TypeA-1-M1"
+                # Identifier could include module sequence, e.g., "1-M1"
                 # Or keep house_identifier the same and rely on module_sequence_in_house column
                 house_identifier = house_base_identifier # Using house identifier, module sequence is separate column
 
