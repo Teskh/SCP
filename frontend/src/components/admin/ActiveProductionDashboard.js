@@ -15,7 +15,7 @@ import {
     useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities'; // For transform/transition styles
-import HouseTypeDefinitionModal from './HouseTypeDefinitionModal';
+import SetTipologiaModal from './SetTipologiaModal'; // Updated import
 import * as adminService from '../../services/adminService';
 import styles from './AdminComponentStyles'; // Assuming shared styles
 

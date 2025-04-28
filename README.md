@@ -57,7 +57,7 @@ No Task Dependencies (Initial): Workflow managed by users.
 Station-Context Driven: Core logic relies on fixed tablet location.
 Separate Admin Interface: For data management (List of tasks, List of workers/specialties, Production planning, House Types including Parameters and Panels per module)
 Ensure keeping this document in context when making any change, as well as our schema and App.js.
-This is the structure of this codebase:
+This is the structure of this codebase, keep it up to date when new changes modify it:
 .
 ├── .env                                                               # Stores environment variables (e.g., secrets, database paths) - Not committed to Git
 ├── .gitignore                                                         # Specifies intentionally untracked files that Git should ignore

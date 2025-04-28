@@ -2,7 +2,6 @@ import React from 'react';
 import { Routes, Route, Link, Navigate, Outlet } from 'react-router-dom'; // Import Outlet
 import './App.css';
 import AdminDashboard from './pages/AdminDashboard';
-// DefinitionsManager is no longer needed as TaskDefinitionManager is routed directly
 import TaskDefinitionManager from './components/admin/TaskDefinitionManager'; // Import TaskDefinitionManager
 import WorkersManager from './components/admin/WorkersManager';
 import HouseTypesManager from './components/admin/HouseTypesManager';
@@ -10,7 +9,6 @@ import HouseParametersManager from './components/admin/HouseParametersManager';
 import SpecialtiesManager from './components/admin/SpecialtiesManager';
 import AdminTeamManager from './components/admin/AdminTeamManager';
 import ProjectsManager from './components/admin/ProjectsManager';
-// import ProductionPlanner from './components/admin/ProductionPlanner'; // Removed ProductionPlanner
 import ActiveProductionDashboard from './components/admin/ActiveProductionDashboard'; // Import ActiveProductionDashboard
 // Import other pages/components as needed
 
