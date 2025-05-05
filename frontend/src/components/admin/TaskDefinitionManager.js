@@ -24,8 +24,22 @@ const initialFormState = {
     description: '',
     house_type_id: '', // Renamed from module_type_id
     specialty_id: '',
-    station_id: '',
+    station_sequence_order: '', // Changed from station_id
 };
+
+// Helper to get unique sequence orders and their station names
+const getUniqueSequenceOrders = (stations) => {
+    const sequenceMap = new Map();
+    stations.forEach(station => {
+        if (!sequenceMap.has(station.sequence_order)) {
+            sequenceMap.set(station.sequence_order, { order: station.sequence_order, names: [] });
+        }
+        sequenceMap.get(station.sequence_order).names.push(station.station_id);
+    });
+    // Sort by sequence order
+    return Array.from(sequenceMap.values()).sort((a, b) => a.order - b.order);
+};
+
 
 function TaskDefinitionManager() {
     const [taskDefs, setTaskDefs] = useState([]);
@@ -76,7 +90,7 @@ function TaskDefinitionManager() {
             // Ensure IDs are strings for select value matching, handle nulls
             house_type_id: taskDef.house_type_id?.toString() || '', // Renamed field
             specialty_id: taskDef.specialty_id?.toString() || '',
-            station_id: taskDef.station_id || '', // station_id is TEXT
+            station_sequence_order: taskDef.station_sequence_order?.toString() || '', // Changed from station_id
         });
         window.scrollTo(0, 0); // Scroll to top to see the form
     };
@@ -97,7 +111,7 @@ function TaskDefinitionManager() {
             ...formData,
             house_type_id: formData.house_type_id || null, // Renamed field
             specialty_id: formData.specialty_id || null,
-            station_id: formData.station_id || null,
+            station_sequence_order: formData.station_sequence_order || null, // Changed from station_id
         };
 
         try {
@@ -197,18 +211,18 @@ function TaskDefinitionManager() {
                      </select>
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="station">Estación:</label>
+                     <label style={styles.label} htmlFor="stationSequence">Etapa (Secuencia):</label> {/* Changed label */}
                      <select
-                         id="station"
-                         name="station_id"
-                         value={formData.station_id}
+                         id="stationSequence"
+                         name="station_sequence_order" // Changed name
+                         value={formData.station_sequence_order} // Changed value
                          onChange={handleInputChange}
                          style={styles.select}
                      >
-                         <option value="">-- Opcional: Seleccionar Estación --</option>
-                         {stations.map(st => (
-                             <option key={st.station_id} value={st.station_id}>
-                                 {st.station_id} - {st.name}
+                         <option value="">-- Opcional: Seleccionar Etapa --</option> {/* Changed text */}
+                         {getUniqueSequenceOrders(stations).map(seqInfo => (
+                             <option key={seqInfo.order} value={seqInfo.order}>
+                                 {seqInfo.order} ({seqInfo.names.join(', ')}) {/* Display sequence and associated stations */}
                              </option>
                          ))}
                      </select>
@@ -233,7 +247,7 @@ function TaskDefinitionManager() {
                             <th style={styles.th}>Descripción</th>
                             <th style={styles.th}>Tipo Vivienda</th> {/* Changed header */}
                             <th style={styles.th}>Especialidad</th>
-                            <th style={styles.th}>Estación</th>
+                            <th style={styles.th}>Etapa (Secuencia)</th> {/* Changed header */}
                             <th style={styles.th}>Acciones</th>
                         </tr>
                     </thead>
@@ -244,7 +258,7 @@ function TaskDefinitionManager() {
                                 <td style={styles.td}>{td.description}</td>
                                 <td style={styles.td}>{td.house_type_name || 'N/A'}</td> {/* Changed field */}
                                 <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
-                                <td style={styles.td}>{td.station_name ? `${td.station_id} (${td.station_name})` : (td.station_id || 'N/A')}</td>
+                                <td style={styles.td}>{td.station_sequence_order ?? 'N/A'}</td> {/* Changed field */}
                                 <td style={styles.td}>
                                     <button onClick={() => handleEdit(td)} style={styles.button} disabled={isLoading}>Editar</button>
                                     <button onClick={() => handleDelete(td.task_definition_id)} style={styles.button} disabled={isLoading}>Eliminar</button>

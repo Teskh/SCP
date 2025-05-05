@@ -464,41 +464,40 @@ def get_all_task_definitions():
             td.task_definition_id, td.name, td.description,
             ht.name as house_type_name,
             sp.name as specialty_name,
-            st.name as station_name,
-            td.house_type_id, td.specialty_id, td.station_id
+            td.house_type_id, td.specialty_id, td.station_sequence_order -- Changed station_id to station_sequence_order
         FROM TaskDefinitions td
         LEFT JOIN HouseTypes ht ON td.house_type_id = ht.house_type_id
         LEFT JOIN Specialties sp ON td.specialty_id = sp.specialty_id
-        LEFT JOIN Stations st ON td.station_id = st.station_id
+        -- Removed join to Stations table
         ORDER BY td.name
     """
     cursor = db.execute(query)
     task_defs = cursor.fetchall()
     return [dict(row) for row in task_defs]
 
-def add_task_definition(name, description, house_type_id, specialty_id, station_id):
+def add_task_definition(name, description, house_type_id, specialty_id, station_sequence_order):
     """Adds a new task definition."""
     db = get_db()
     try:
         cursor = db.execute(
             """INSERT INTO TaskDefinitions
-               (name, description, house_type_id, specialty_id, station_id)
+               (name, description, house_type_id, specialty_id, station_sequence_order)
                VALUES (?, ?, ?, ?, ?)""",
-            (name, description, house_type_id, specialty_id, station_id)
+            (name, description, house_type_id, specialty_id, station_sequence_order)
         )
         db.commit()
         return cursor.lastrowid
     except sqlite3.IntegrityError:
         return None # Or raise
 
-def update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_id):
+def update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_sequence_order):
     """Updates an existing task definition."""
     db = get_db()
     cursor = db.execute(
         """UPDATE TaskDefinitions SET
-           name = ?, description = ?, house_type_id = ?, specialty_id = ?, station_id = ?
+           name = ?, description = ?, house_type_id = ?, specialty_id = ?, station_sequence_order = ?
            WHERE task_definition_id = ?""",
-        (name, description, house_type_id, specialty_id, station_id, task_definition_id)
+        (name, description, house_type_id, specialty_id, station_sequence_order, task_definition_id)
     )
     db.commit()
     return cursor.rowcount > 0

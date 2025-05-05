@@ -122,10 +122,10 @@ CREATE TABLE TaskDefinitions (
     description TEXT,
     house_type_id INTEGER, -- Which type of house this task applies to (can be NULL if generic)
     specialty_id INTEGER, -- Optional: Link task to a specific specialty
-    station_id TEXT, -- Optional: Link task to a specific station (e.g., 'W1', 'A3')
+    station_sequence_order INTEGER, -- Optional: Link task to a specific production sequence step (e.g., 1 for W1, 7 for A1/B1/C1)
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE SET NULL, -- Allow house type deletion without deleting task def
-    FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id) ON DELETE SET NULL, -- Allow specialty deletion without deleting task def
-    FOREIGN KEY (station_id) REFERENCES Stations(station_id) ON DELETE SET NULL -- Allow station deletion without deleting task def
+    FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id) ON DELETE SET NULL -- Allow specialty deletion without deleting task def
+    -- No direct FK to Stations.sequence_order as it's not unique
 );
 
 -- ========= Task Execution Tracking =========
@@ -166,7 +166,7 @@ CREATE INDEX idx_modules_house_type ON Modules (house_type_id);
 CREATE INDEX idx_modules_plan_id ON Modules (plan_id); -- Added index
 CREATE INDEX idx_taskdefinitions_house_type ON TaskDefinitions (house_type_id);
 CREATE INDEX idx_taskdefinitions_specialty ON TaskDefinitions (specialty_id);
-CREATE INDEX idx_taskdefinitions_station ON TaskDefinitions (station_id);
+CREATE INDEX idx_taskdefinitions_station_sequence ON TaskDefinitions (station_sequence_order); -- Renamed index
 CREATE INDEX idx_tasklogs_module ON TaskLogs (module_id);
 CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id);
 CREATE INDEX idx_tasklogs_status ON TaskLogs (status);

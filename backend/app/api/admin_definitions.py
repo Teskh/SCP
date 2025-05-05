@@ -825,10 +825,16 @@ def add_task_definition():
     description = data.get('description', '')
     house_type_id = data.get('house_type_id') # Can be None/null
     specialty_id = data.get('specialty_id')     # Can be None/null
-    station_id = data.get('station_id')         # Can be None/null
+    station_sequence_order = data.get('station_sequence_order') # Changed from station_id
+
+    # Convert sequence order to integer if present, otherwise None
+    try:
+        station_seq_int = int(station_sequence_order) if station_sequence_order is not None else None
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid station_sequence_order, must be an integer or null"), 400
 
     try:
-        new_id = queries.add_task_definition(name, description, house_type_id, specialty_id, station_id)
+        new_id = queries.add_task_definition(name, description, house_type_id, specialty_id, station_seq_int)
         if new_id:
             # Fetch the newly created task def to return it (including related names)
             # Assuming a query like get_task_definition_by_id exists
@@ -839,7 +845,7 @@ def add_task_definition():
                 # Fallback if fetch fails
                 new_task_def_basic = {
                     'task_definition_id': new_id, 'name': name, 'description': description,
-                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_id': station_id
+                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_sequence_order': station_seq_int
                 }
                 return jsonify(new_task_def_basic), 201
         else:
@@ -855,7 +861,8 @@ def add_task_definition():
              return jsonify(error="Task definition name already exists"), 409 # Conflict
          elif 'FOREIGN KEY constraint failed' in str(ie):
              logger.warning(f"Foreign key constraint error adding task definition: {ie}")
-             return jsonify(error="Invalid house type, specialty, or station specified"), 400
+             # Note: station_sequence_order doesn't have a direct FK constraint anymore
+             return jsonify(error="Invalid house type or specialty specified"), 400
          else:
              logger.error(f"Integrity error adding task definition: {ie}", exc_info=True)
              return jsonify(error="Database integrity error"), 409
@@ -875,10 +882,16 @@ def update_task_definition(task_definition_id):
     description = data.get('description', '')
     house_type_id = data.get('house_type_id')
     specialty_id = data.get('specialty_id')
-    station_id = data.get('station_id')
+    station_sequence_order = data.get('station_sequence_order') # Changed from station_id
+
+    # Convert sequence order to integer if present, otherwise None
+    try:
+        station_seq_int = int(station_sequence_order) if station_sequence_order is not None else None
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid station_sequence_order, must be an integer or null"), 400
 
     try:
-        success = queries.update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_id)
+        success = queries.update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_seq_int)
         if success:
             # Fetch updated task definition data to include potentially changed names
             # Assuming a query like get_task_definition_by_id exists
@@ -889,7 +902,7 @@ def update_task_definition(task_definition_id):
                 # Fallback if fetch fails
                 updated_task_def_basic = {
                     'task_definition_id': task_definition_id, 'name': name, 'description': description,
-                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_id': station_id
+                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_sequence_order': station_seq_int
                 }
                 return jsonify(updated_task_def_basic)
         else:
@@ -904,7 +917,8 @@ def update_task_definition(task_definition_id):
              return jsonify(error="Task definition name already exists"), 409 # Conflict
          elif 'FOREIGN KEY constraint failed' in str(ie):
              logger.warning(f"Foreign key constraint error updating task definition {task_definition_id}: {ie}")
-             return jsonify(error="Invalid house type, specialty, or station specified"), 400
+             # Note: station_sequence_order doesn't have a direct FK constraint anymore
+             return jsonify(error="Invalid house type or specialty specified"), 400
          else:
              logger.error(f"Integrity error updating task definition {task_definition_id}: {ie}", exc_info=True)
              return jsonify(error="Database integrity error"), 409

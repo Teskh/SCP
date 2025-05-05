@@ -264,7 +264,7 @@ export const addTaskDefinition = async (taskDefData) => {
         ...taskDefData,
         house_type_id: taskDefData.house_type_id || null, // Renamed field
         specialty_id: taskDefData.specialty_id || null,
-        station_id: taskDefData.station_id || null,
+        station_sequence_order: taskDefData.station_sequence_order || null, // Changed from station_id
     };
     const response = await fetch(`${API_BASE_URL}/task_definitions`, {
         method: 'POST',
@@ -279,7 +279,7 @@ export const updateTaskDefinition = async (id, taskDefData) => {
         ...taskDefData,
         house_type_id: taskDefData.house_type_id || null, // Renamed field
         specialty_id: taskDefData.specialty_id || null,
-        station_id: taskDefData.station_id || null,
+        station_sequence_order: taskDefData.station_sequence_order || null, // Changed from station_id
     };
     const response = await fetch(`${API_BASE_URL}/task_definitions/${id}`, {
         method: 'PUT',
