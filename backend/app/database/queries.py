@@ -851,7 +851,8 @@ def get_all_stations():
     """Fetches all stations for dropdowns."""
     db = get_db()
     # Order by sequence for logical flow in dropdowns
-    cursor = db.execute("SELECT station_id, name FROM Stations ORDER BY sequence_order")
+    # Ensure sequence_order is selected for use in frontend logic
+    cursor = db.execute("SELECT station_id, name, sequence_order FROM Stations ORDER BY sequence_order")
     return [dict(row) for row in cursor.fetchall()]
 
 
