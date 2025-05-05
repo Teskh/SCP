@@ -475,6 +475,24 @@ def get_all_task_definitions():
     task_defs = cursor.fetchall()
     return [dict(row) for row in task_defs]
 
+def get_task_definition_by_id(task_definition_id):
+    """Fetches a single task definition by its ID, including related names."""
+    db = get_db()
+    query = """
+        SELECT
+            td.task_definition_id, td.name, td.description,
+            ht.name as house_type_name,
+            sp.name as specialty_name,
+            td.house_type_id, td.specialty_id, td.station_sequence_order
+        FROM TaskDefinitions td
+        LEFT JOIN HouseTypes ht ON td.house_type_id = ht.house_type_id
+        LEFT JOIN Specialties sp ON td.specialty_id = sp.specialty_id
+        WHERE td.task_definition_id = ?
+    """
+    cursor = db.execute(query, (task_definition_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
 def add_task_definition(name, description, house_type_id, specialty_id, station_sequence_order):
     """Adds a new task definition."""
     db = get_db()
