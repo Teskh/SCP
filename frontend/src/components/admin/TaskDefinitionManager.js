@@ -27,17 +27,32 @@ const initialFormState = {
     station_sequence_order: '', // Changed from station_id
 };
 
-// Helper to get unique sequence orders and their station names
-const getUniqueSequenceOrders = (stations) => {
-    const sequenceMap = new Map();
-    stations.forEach(station => {
-        if (!sequenceMap.has(station.sequence_order)) {
-            sequenceMap.set(station.sequence_order, { order: station.sequence_order, names: [] });
-        }
-        sequenceMap.get(station.sequence_order).names.push(station.station_id);
-    });
-    // Sort by sequence order
-    return Array.from(sequenceMap.values()).sort((a, b) => a.order - b.order);
+// Helper to generate descriptive stage options based on sequence order
+const generateStageOptions = (stations) => {
+    // Define the desired labels for each sequence order
+    const stageLabels = {
+        1: 'Linea de Paneles 1 (W1)',
+        2: 'Linea de Paneles 2 (W2)',
+        3: 'Linea de Paneles 3 (W3)',
+        4: 'Linea de Paneles 4 (W4)',
+        5: 'Linea de Paneles 5 (W5)',
+        6: 'Magazine (M1)',
+        7: 'Linea de Ensamblaje 1 (A1/B1/C1)',
+        8: 'Linea de Ensamblaje 2 (A2/B2/C2)',
+        9: 'Linea de Ensamblaje 3 (A3/B3/C3)',
+        10: 'Linea de Ensamblaje 4 (A4/B4/C4)',
+        11: 'Linea de Ensamblaje 5 (A5/B5/C5)',
+        12: 'Linea de Ensamblaje 6 (A6/B6/C6)',
+    };
+
+    // Get unique sequence orders present in the stations data
+    const existingOrders = [...new Set(stations.map(s => s.sequence_order))].sort((a, b) => a - b);
+
+    // Map existing orders to the desired label format
+    return existingOrders.map(order => ({
+        value: order.toString(), // The value stored will be the sequence number as a string
+        label: stageLabels[order] || `Etapa Desconocida (${order})` // Use defined label or fallback
+    }));
 };
 
 
@@ -219,10 +234,10 @@ function TaskDefinitionManager() {
                          onChange={handleInputChange}
                          style={styles.select}
                      >
-                         <option value="">-- Opcional: Seleccionar Etapa --</option> {/* Changed text */}
-                         {getUniqueSequenceOrders(stations).map(seqInfo => (
-                             <option key={seqInfo.order} value={seqInfo.order}>
-                                 {seqInfo.order} ({seqInfo.names.join(', ')}) {/* Display sequence and associated stations */}
+                         <option value="">-- Opcional: Seleccionar Etapa --</option>
+                         {generateStageOptions(stations).map(stage => (
+                             <option key={stage.value} value={stage.value}>
+                                 {stage.label} {/* Display the descriptive label */}
                              </option>
                          ))}
                      </select>
