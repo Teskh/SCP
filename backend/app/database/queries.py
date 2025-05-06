@@ -422,6 +422,16 @@ def get_all_specialties():
     specialties = cursor.fetchall()
     return [dict(row) for row in specialties] # Convert Row objects to dicts
 
+def get_specialty_by_name(name):
+    """Fetches a specialty by its name."""
+    db = get_db()
+    cursor = db.execute(
+        "SELECT specialty_id, name, description FROM Specialties WHERE name = ?",
+        (name,)
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
 def add_specialty(name, description):
     """Adds a new specialty to the database."""
     db = get_db()
@@ -798,6 +808,16 @@ def get_all_supervisors():
     supervisors = cursor.fetchall()
     return [dict(row) for row in supervisors]
 
+def get_admin_member_by_pin(pin):
+    """Fetches an admin team member by their PIN."""
+    db = get_db()
+    cursor = db.execute(
+        "SELECT admin_team_id, first_name, last_name, role, pin, is_active FROM AdminTeam WHERE pin = ?",
+        (pin,)
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
 
 def delete_task_definition(task_definition_id):
     """Deletes a task definition."""
@@ -907,6 +927,42 @@ def get_all_workers():
         result.append(worker_dict)
     return result
 
+def get_worker_by_id(worker_id):
+    """Fetches a single worker by their ID, including specialty and supervisor names."""
+    db = get_db()
+    query = """
+        SELECT
+            w.worker_id, w.first_name, w.last_name, w.pin, w.is_active,
+            w.specialty_id, s.name as specialty_name,
+            w.supervisor_id, sup.first_name as supervisor_first_name, sup.last_name as supervisor_last_name
+        FROM Workers w
+        LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
+        LEFT JOIN Workers sup ON w.supervisor_id = sup.worker_id
+        WHERE w.worker_id = ?
+    """
+    cursor = db.execute(query, (worker_id,))
+    row = cursor.fetchone()
+    if not row:
+        return None
+
+    worker_dict = dict(row)
+    if worker_dict['supervisor_first_name'] and worker_dict['supervisor_last_name']:
+        worker_dict['supervisor_name'] = f"{worker_dict['supervisor_first_name']} {worker_dict['supervisor_last_name']}"
+    else:
+        worker_dict['supervisor_name'] = None
+    # del worker_dict['supervisor_first_name'] # Optional: remove redundant fields
+    # del worker_dict['supervisor_last_name']
+    return worker_dict
+
+def get_worker_by_pin(pin):
+    """Fetches a worker by their PIN."""
+    db = get_db()
+    cursor = db.execute(
+        "SELECT worker_id, first_name, last_name, pin FROM Workers WHERE pin = ?",
+        (pin,)
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
 
 def add_worker(first_name, last_name, pin, specialty_id, supervisor_id, is_active):
     """Adds a new worker to the database."""
