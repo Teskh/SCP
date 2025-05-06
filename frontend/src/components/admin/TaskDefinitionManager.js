@@ -66,6 +66,17 @@ function TaskDefinitionManager() {
     const [editMode, setEditMode] = useState(null); // null or task_definition_id
     const [formData, setFormData] = useState(initialFormState);
 
+    // Create a map from sequence order to label for efficient lookup in the table
+    const stageLabelMap = useMemo(() => {
+        const options = generateStageOptions(stations); // Use the existing helper
+        const map = new Map();
+        options.forEach(option => {
+            // Ensure the value is treated as a number for the map key
+            map.set(parseInt(option.value, 10), option.label);
+        });
+        return map;
+    }, [stations]); // Recalculate only when stations change
+
     // Fetch all necessary data (task defs and related entities for dropdowns)
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -273,7 +284,8 @@ function TaskDefinitionManager() {
                                 <td style={styles.td}>{td.description}</td>
                                 <td style={styles.td}>{td.house_type_name || 'N/A'}</td> {/* Changed field */}
                                 <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
-                                <td style={styles.td}>{td.station_sequence_order ?? 'N/A'}</td> {/* Changed field */}
+                                {/* Look up the label using the map, fallback to the number or N/A */}
+                                <td style={styles.td}>{stageLabelMap.get(td.station_sequence_order) || td.station_sequence_order ?? 'N/A'}</td>
                                 <td style={styles.td}>
                                     <button onClick={() => handleEdit(td)} style={styles.button} disabled={isLoading}>Editar</button>
                                     <button onClick={() => handleDelete(td.task_definition_id)} style={styles.button} disabled={isLoading}>Eliminar</button>
