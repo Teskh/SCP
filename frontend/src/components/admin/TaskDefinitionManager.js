@@ -285,7 +285,8 @@ function TaskDefinitionManager() {
                                 <td style={styles.td}>{td.house_type_name || 'N/A'}</td> {/* Changed field */}
                                 <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
                                 {/* Look up the label using the map, fallback to the number or N/A */}
-                                <td style={styles.td}>{stageLabelMap.get(td.station_sequence_order) || td.station_sequence_order ?? 'N/A'}</td>
+                                {/* Added parentheses to clarify operator precedence */}
+                                <td style={styles.td}>{(stageLabelMap.get(td.station_sequence_order) || td.station_sequence_order) ?? 'N/A'}</td>
                                 <td style={styles.td}>
                                     <button onClick={() => handleEdit(td)} style={styles.button} disabled={isLoading}>Editar</button>
                                     <button onClick={() => handleDelete(td.task_definition_id)} style={styles.button} disabled={isLoading}>Eliminar</button>
