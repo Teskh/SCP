@@ -31,7 +31,7 @@ const initialFormState = {
 function WorkersManager() {
     const [workers, setWorkers] = useState([]);
     const [specialties, setSpecialties] = useState([]);
-    const [supervisors, setSupervisors] = useState([]); // List of potential supervisors (fetched from AdminTeam)
+    const [supervisors, setSupervisors] = useState([]); // List of potential supervisors (other workers)
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [editMode, setEditMode] = useState(null); // null or worker_id
@@ -42,16 +42,22 @@ function WorkersManager() {
         setIsLoading(true);
         setError('');
         try {
-            // Fetch workers, specialties, and supervisors concurrently
-            const [workersData, specialtiesData, supervisorsData] = await Promise.all([
+            // Fetch workers and specialties concurrently
+            const [workersData, specialtiesData] = await Promise.all([
                 adminService.getWorkers(),
                 adminService.getSpecialties(),
-                adminService.getSupervisors() // Fetch actual supervisors
             ]);
             setWorkers(workersData);
             setSpecialties(specialtiesData);
-            // Set supervisors list directly from the fetched data
-            setSupervisors(supervisorsData.map(s => ({ id: s.admin_team_id, name: `${s.first_name} ${s.last_name}` })));
+
+            // Populate the supervisors list for the dropdown from active workersData
+            const potentialSupervisors = workersData
+                .filter(w => w.is_active) // Only active workers can be supervisors
+                .map(w => ({
+                    id: w.worker_id, // Use worker_id as the ID
+                    name: `${w.first_name} ${w.last_name}`
+                }));
+            setSupervisors(potentialSupervisors);
         } catch (err) {
             setError(err.message || 'Failed to fetch data');
         } finally {
@@ -179,15 +185,12 @@ function WorkersManager() {
                     <label style={styles.label} htmlFor="supervisor">Supervisor:</label>
                     <select id="supervisor" name="supervisor_id" value={formData.supervisor_id} onChange={handleInputChange} style={styles.select}>
                         <option value="">-- Opcional: Seleccionar Supervisor --</option>
-                        {/* Map over the fetched supervisors list */}
-                        {/* IMPORTANT: The 'value' here should match what the backend expects for Workers.supervisor_id */}
-                        {/* Currently, Workers.supervisor_id references Workers.worker_id. */}
-                        {/* If the supervisor list comes from AdminTeam, we need a way to link AdminTeam.admin_team_id back to Workers.worker_id */}
-                        {/* OR change Workers.supervisor_id to store AdminTeam.admin_team_id */}
-                        {/* For now, assuming the backend handles the mapping or the IDs are compatible. */}
-                        {/* Using sup.id which corresponds to admin_team_id from the fetched list */}
-                        {supervisors.map(sup => (
-                            <option key={sup.id} value={sup.id}>{sup.name}</option>
+                        {/* Map over the supervisors list (populated by active workers) */}
+                        {/* Filter out the worker being edited (cannot be their own supervisor) */}
+                        {supervisors
+                            .filter(sup => sup.id !== editMode) // sup.id is worker_id, editMode is the worker_id being edited
+                            .map(sup => (
+                                <option key={sup.id} value={sup.id}>{sup.name}</option>
                         ))}
                     </select>
                 </div>
