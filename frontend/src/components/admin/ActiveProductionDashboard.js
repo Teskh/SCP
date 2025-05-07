@@ -709,26 +709,14 @@ function ActiveProductionDashboard() {
                 }
 
                 // 4. Insert the dragged group into the filtered list at the target index
-                // Adjust index based on whether the original position of the group was before or after the target
-                 const originalIndexOfFirstDragged = originalItems.findIndex(item => item.plan_id === groupBeingDragged[0].plan_id);
-                 const originalIndexOfOver = originalItems.findIndex(item => item.plan_id === over.id);
-
-                 let insertionIndex = newIndexInFilteredList;
-                 // If the item we are dropping over was originally *after* the group,
-                 // its index in the filtered list needs adjustment when inserting the group.
-                 if (originalIndexOfOver > originalIndexOfFirstDragged) {
-                     // No index adjustment needed in splice if dropping after
-                 } else {
-                     // If dropping before, the splice index is correct as is.
-                 }
-                 // Correction: Find the index of 'over' in the filtered list.
-                 // To insert *after* the 'over' item, we splice at index + 1.
-                 insertionIndex = newIndexInFilteredList + 1; // Reassign the existing variable
-
+                // newIndexInFilteredList is the index of 'over.id' in the list of items *not* being dragged.
+                // To place the dragged group *before* the 'over.id' item (consistent with dropping "between" items,
+                // or matching single item drop behavior where item moves to the 'over.id' position),
+                // we insert the group at this newIndexInFilteredList.
                 reorderedItems = [
-                    ...itemsWithoutGroup.slice(0, insertionIndex), // Items up to and including the 'over' item
-                    ...groupBeingDragged,                          // The dragged group
-                    ...itemsWithoutGroup.slice(insertionIndex)     // Items after the 'over' item
+                    ...itemsWithoutGroup.slice(0, newIndexInFilteredList), // Items before 'over.id' in the filtered list
+                    ...groupBeingDragged,                                   // The dragged group
+                    ...itemsWithoutGroup.slice(newIndexInFilteredList)      // Items from 'over.id' onwards in the filtered list
                 ];
 
             } else {
