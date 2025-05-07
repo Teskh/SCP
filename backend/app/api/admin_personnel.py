@@ -216,9 +216,8 @@ def update_worker(worker_id):
     if not pin or len(str(pin)) < 4:
          return jsonify(error="PIN must be at least 4 digits"), 400
 
-    # Prevent worker from being their own supervisor
-    if supervisor_id is not None and int(supervisor_id) == worker_id:
-        return jsonify(error="Worker cannot be their own supervisor"), 400
+    # supervisor_id now refers to AdminTeam.admin_team_id, so the check for self-supervision is no longer applicable here.
+    # If an admin can also be a worker, further logic might be needed, but based on current schema, they are distinct.
 
     try:
         success = queries.update_worker(worker_id, first_name, last_name, pin, specialty_id, supervisor_id, is_active)

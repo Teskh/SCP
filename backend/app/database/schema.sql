@@ -32,10 +32,10 @@ CREATE TABLE Workers (
     last_name TEXT NOT NULL,
     pin TEXT NOT NULL,
     specialty_id INTEGER, -- Foreign Key to Specialties table
-    supervisor_id INTEGER, -- Foreign Key to Workers table (self-referencing), nullable
+    supervisor_id INTEGER, -- Foreign Key to AdminTeam table, nullable
     is_active INTEGER DEFAULT 1, -- Boolean (0=false, 1=true)
     FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id),
-    FOREIGN KEY (supervisor_id) REFERENCES Workers(worker_id)
+    FOREIGN KEY (supervisor_id) REFERENCES AdminTeam(admin_team_id) ON DELETE SET NULL
 );
 
 -- ========= Projects =========

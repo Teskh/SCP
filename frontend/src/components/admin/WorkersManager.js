@@ -50,14 +50,12 @@ function WorkersManager() {
             setWorkers(workersData);
             setSpecialties(specialtiesData);
 
-            // Populate the supervisors list for the dropdown from active workersData
-            const potentialSupervisors = workersData
-                .filter(w => w.is_active) // Only active workers can be supervisors
-                .map(w => ({
-                    id: w.worker_id, // Use worker_id as the ID
-                    name: `${w.first_name} ${w.last_name}`
-                }));
-            setSupervisors(potentialSupervisors);
+            // Populate the supervisors list from AdminTeam members with 'Supervisor' role
+            const supervisorsData = await adminService.getSupervisors();
+            setSupervisors(supervisorsData.map(sup => ({
+                id: sup.admin_team_id, // Use admin_team_id from AdminTeam
+                name: `${sup.first_name} ${sup.last_name}`
+            })));
         } catch (err) {
             setError(err.message || 'Failed to fetch data');
         } finally {
@@ -185,12 +183,11 @@ function WorkersManager() {
                     <label style={styles.label} htmlFor="supervisor">Supervisor:</label>
                     <select id="supervisor" name="supervisor_id" value={formData.supervisor_id} onChange={handleInputChange} style={styles.select}>
                         <option value="">-- Opcional: Seleccionar Supervisor --</option>
-                        {/* Map over the supervisors list (populated by active workers) */}
-                        {/* Filter out the worker being edited (cannot be their own supervisor) */}
-                        {supervisors
-                            .filter(sup => sup.id !== editMode) // sup.id is worker_id, editMode is the worker_id being edited
-                            .map(sup => (
-                                <option key={sup.id} value={sup.id}>{sup.name}</option>
+                        {/* Map over the supervisors list (populated from AdminTeam supervisors) */}
+                        {/* A worker (from Workers table) cannot be an AdminTeam supervisor in the current distinct table structure,
+                            so no need to filter out editMode worker from this list. */}
+                        {supervisors.map(sup => (
+                            <option key={sup.id} value={sup.id}>{sup.name}</option>
                         ))}
                     </select>
                 </div>

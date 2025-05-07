@@ -900,15 +900,15 @@ def get_all_workers():
     """Fetches all workers with their specialty name and supervisor name."""
     db = get_db()
     # Use LEFT JOINs in case specialty or supervisor is NULL
-    # Use aliases for the self-join on Workers table for supervisor
+    # Supervisor is now an AdminTeam member
     query = """
         SELECT
             w.worker_id, w.first_name, w.last_name, w.pin, w.is_active,
             w.specialty_id, s.name as specialty_name,
-            w.supervisor_id, sup.first_name as supervisor_first_name, sup.last_name as supervisor_last_name
+            w.supervisor_id, atm.first_name as supervisor_first_name, atm.last_name as supervisor_last_name
         FROM Workers w
         LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
-        LEFT JOIN Workers sup ON w.supervisor_id = sup.worker_id
+        LEFT JOIN AdminTeam atm ON w.supervisor_id = atm.admin_team_id
         ORDER BY w.last_name, w.first_name
     """
     cursor = db.execute(query)
@@ -934,10 +934,10 @@ def get_worker_by_id(worker_id):
         SELECT
             w.worker_id, w.first_name, w.last_name, w.pin, w.is_active,
             w.specialty_id, s.name as specialty_name,
-            w.supervisor_id, sup.first_name as supervisor_first_name, sup.last_name as supervisor_last_name
+            w.supervisor_id, atm.first_name as supervisor_first_name, atm.last_name as supervisor_last_name
         FROM Workers w
         LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
-        LEFT JOIN Workers sup ON w.supervisor_id = sup.worker_id
+        LEFT JOIN AdminTeam atm ON w.supervisor_id = atm.admin_team_id
         WHERE w.worker_id = ?
     """
     cursor = db.execute(query, (worker_id,))
