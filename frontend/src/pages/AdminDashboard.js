@@ -103,6 +103,19 @@ function AdminDashboard() {
                         </Link>
                     </li>
 
+                    {/* Configuración Section */}
+                    <li style={{...navItemStyles, marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #ddd'}}>
+                        <strong style={{ display: 'block', padding: '8px 12px', color: '#555' }}>Configuración</strong>
+                    </li>
+                    <li style={navItemStyles}>
+                        <Link
+                            to="/admin/station-context"
+                            style={{ ...navLinkStyles, ...(isActive('/admin/station-context') ? navLinkActiveStyles : {}) }}
+                        >
+                            Estaciones
+                        </Link>
+                    </li>
+
                     {/* Definiciones Section */}
                     <li style={{...navItemStyles, marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #ddd'}}>
                         <strong style={{ display: 'block', padding: '8px 12px', color: '#555' }}>Definiciones</strong>
