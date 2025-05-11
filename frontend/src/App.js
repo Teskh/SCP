@@ -29,17 +29,17 @@ const linkStyle = {
     color: '#333'
 };
 
-// Mock station ID, replace with actual context later
-const MOCK_STATION_ID = "Tablet-Alpha-01";
+// Key for localStorage, same as in StationContextSelector.js
+const STATION_CONTEXT_STORAGE_KEY = 'currentStationSequenceOrder';
 
 function App() {
     const [currentUser, setCurrentUser] = useState(null);
     const [userType, setUserType] = useState(null); // To store 'worker', 'Supervisor', etc.
-    const [currentStation, setCurrentStation] = useState(MOCK_STATION_ID); // Placeholder
+    const [activeStationSequenceOrder, setActiveStationSequenceOrder] = useState(null);
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Persist user state on refresh (optional, basic example)
+    // Persist user state and load station context on refresh
     useEffect(() => {
         const storedUser = localStorage.getItem('currentUser');
         const storedUserType = localStorage.getItem('userType');
@@ -47,7 +47,27 @@ function App() {
             setCurrentUser(JSON.parse(storedUser));
             setUserType(storedUserType);
         }
-        // For now, station is mocked, but could also be stored if selected by user
+
+        const storedSequenceOrder = localStorage.getItem(STATION_CONTEXT_STORAGE_KEY);
+        if (storedSequenceOrder) {
+            setActiveStationSequenceOrder(storedSequenceOrder);
+        }
+        
+        // Listen for changes to station context from other components (e.g. StationContextSelector)
+        const handleStorageChange = () => {
+            const updatedSequenceOrder = localStorage.getItem(STATION_CONTEXT_STORAGE_KEY);
+            setActiveStationSequenceOrder(updatedSequenceOrder);
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        // Also check when App mounts or visibility changes, as 'storage' event might not fire for same-page changes in all browsers.
+        // For simplicity, we rely on components updating localStorage to also potentially trigger re-renders or context updates.
+        // A more robust solution might involve a shared context for station selection.
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
+
     }, []);
 
     const handleLoginSuccess = (userData, type) => {
@@ -67,18 +87,16 @@ function App() {
     };
 
     // Determine if admin panel should be shown based on user type
-    const isAdminOrSupervisor = userType === 'Admin' || userType === 'Supervisor' || userType === 'Gestión de producción';
-
+    // Admin panel link is always visible, access control can be handled by routes/components if needed later.
+    // For now, the requirement is visibility.
     return (
         <div className="App">
             <nav style={navStyle}>
                 <Link to="/" style={linkStyle}>Inicio</Link>
-                {isAdminOrSupervisor && currentUser && (
-                    <Link to="/admin" style={linkStyle}>Panel de Administración</Link>
-                )}
+                <Link to="/admin" style={linkStyle}>Panel de Administración</Link>
                 {currentUser && (
                     <button onClick={handleLogout} style={{ ...linkStyle, background: 'none', border: 'none', cursor: 'pointer', color: '#333' }}>
-                        Cerrar Sesión ({currentUser.first_name})
+                        Cerrar Sesión ({currentUser.first_name}) ({userType})
                     </button>
                 )}
             </nav>
@@ -98,39 +116,31 @@ function App() {
                     path="/station"
                     element={
                         currentUser ? (
-                            <StationPage user={currentUser} stationId={currentStation} />
+                            <StationPage user={currentUser} activeStationSequenceOrder={activeStationSequenceOrder} />
                         ) : (
                             <Navigate to="/" replace />
                         )
                     }
                 />
 
-                {/* Admin Route - Conditionally rendered or protected */}
-                {isAdminOrSupervisor && currentUser ? (
-                    <Route path="/admin" element={<AdminDashboard />}>
-                        <Route path="definitions" element={<TaskDefinitionManager />} />
-                        <Route path="workers" element={<WorkersManager />} />
-                        <Route path="house-types" element={<HouseTypesManager />} />
-                        <Route path="house-parameters" element={<HouseParametersManager />} />
-                        <Route path="specialties" element={<SpecialtiesManager />} />
-                        <Route path="admin-team" element={<AdminTeamManager />} />
-                        <Route path="projects" element={<ProjectsManager />} />
-                        <Route path="production-status" element={<ActiveProductionDashboard />} />
-                        <Route path="station-context" element={<StationContextSelector />} />
-                        <Route index element={
-                            <div>
-                                <h1 style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>Panel de Administración</h1>
-                                <p>Seleccione una opción del menú para gestionar la configuración del sistema o ver el estado de producción.</p>
-                            </div>
-                        } />
-                    </Route>
-                ) : (
-                    // If trying to access /admin without auth/permissions, redirect to login
-                    // This also handles the case where /admin is the initial path before user state is loaded
-                    location.pathname.startsWith('/admin') && <Route path="/admin/*" element={<Navigate to="/" replace />} />
-                )}
-
-
+                {/* Admin Route - Always defined, visibility of link is handled above */}
+                <Route path="/admin" element={<AdminDashboard />}>
+                    <Route path="definitions" element={<TaskDefinitionManager />} />
+                    <Route path="workers" element={<WorkersManager />} />
+                    <Route path="house-types" element={<HouseTypesManager />} />
+                    <Route path="house-parameters" element={<HouseParametersManager />} />
+                    <Route path="specialties" element={<SpecialtiesManager />} />
+                    <Route path="admin-team" element={<AdminTeamManager />} />
+                    <Route path="projects" element={<ProjectsManager />} />
+                    <Route path="production-status" element={<ActiveProductionDashboard />} />
+                    <Route path="station-context" element={<StationContextSelector />} />
+                    <Route index element={
+                        <div>
+                            <h1 style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>Panel de Administración</h1>
+                            <p>Seleccione una opción del menú para gestionar la configuración del sistema o ver el estado de producción.</p>
+                        </div>
+                    } />
+                </Route>
                 {/* Catch-all for not found routes */}
                 <Route path="*" element={
                     <div>
