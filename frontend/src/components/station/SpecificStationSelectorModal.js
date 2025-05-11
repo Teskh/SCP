@@ -21,13 +21,68 @@ const modalContentStyle = {
     padding: '20px',
     borderRadius: '8px',
     minWidth: '300px',
-    maxWidth: '500px',
+    maxWidth: '90%',
     boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+    textAlign: 'center',
 };
 
-const radioOptionStyle = {
-    display: 'block',
-    margin: '10px 0',
+const buttonContainerStyle = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: '15px',
+    marginTop: '20px',
+};
+
+const stationButtonStyle = {
+    padding: '20px',
+    fontSize: '18px',
+    minWidth: '150px',
+    minHeight: '100px',
+    border: '2px solid #ddd',
+    borderRadius: '8px',
+    backgroundColor: '#f8f8f8',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    transition: 'all 0.2s ease',
+};
+
+const selectedButtonStyle = {
+    ...stationButtonStyle,
+    backgroundColor: '#e6f7ff',
+    borderColor: '#1890ff',
+    boxShadow: '0 0 8px rgba(24, 144, 255, 0.5)',
+};
+
+const stationIdStyle = {
+    fontWeight: 'bold',
+    fontSize: '24px',
+    marginBottom: '5px',
+};
+
+const stationNameStyle = {
+    fontSize: '14px',
+    textAlign: 'center',
+};
+
+const saveButtonStyle = {
+    marginTop: '30px',
+    padding: '15px 30px',
+    fontSize: '18px',
+    backgroundColor: '#1890ff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+};
+
+const disabledSaveButtonStyle = {
+    ...saveButtonStyle,
+    backgroundColor: '#ccc',
+    cursor: 'not-allowed',
 };
 
 function SpecificStationSelectorModal({
@@ -62,6 +117,10 @@ function SpecificStationSelectorModal({
         setError('');
     }, [ambiguousSequenceOrder, show]); // Re-evaluate if show changes (modal opens)
 
+    const handleStationSelect = (stationId) => {
+        setSelectedSpecificStation(stationId);
+        setError('');
+    };
 
     const handleSave = () => {
         if (!selectedSpecificStation) {
@@ -87,36 +146,36 @@ function SpecificStationSelectorModal({
         }
     }
 
-
     return (
         <div style={modalOverlayStyle}>
             <div style={modalContentStyle}>
-                <h3>{title}</h3>
+                <h2>{title}</h2>
                 {description && <p>{description}</p>}
 
-                {error && <p style={{ color: 'red' }}>{error}</p>}
+                {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
 
                 {specificOptions.length > 0 ? (
-                    specificOptions.map(station => (
-                        <div key={station.station_id} style={radioOptionStyle}>
-                            <input
-                                type="radio"
-                                id={`specific_station_${station.station_id}`}
-                                name="specific_station_selector"
-                                value={station.station_id}
-                                checked={selectedSpecificStation === station.station_id}
-                                onChange={(e) => setSelectedSpecificStation(e.target.value)}
-                            />
-                            <label htmlFor={`specific_station_${station.station_id}`} style={{ marginLeft: '8px' }}>
-                                {station.name} ({station.station_id})
-                            </label>
-                        </div>
-                    ))
+                    <div style={buttonContainerStyle}>
+                        {specificOptions.map(station => (
+                            <div 
+                                key={station.station_id} 
+                                style={selectedSpecificStation === station.station_id ? selectedButtonStyle : stationButtonStyle}
+                                onClick={() => handleStationSelect(station.station_id)}
+                            >
+                                <div style={stationIdStyle}>{station.station_id}</div>
+                                <div style={stationNameStyle}>{station.name}</div>
+                            </div>
+                        ))}
+                    </div>
                 ) : (
                     <p>No hay opciones específicas disponibles para esta selección, o las estaciones aún no se han cargado.</p>
                 )}
 
-                <button onClick={handleSave} style={{ marginTop: '20px', padding: '10px 15px' }} disabled={!specificOptions.length || isLoadingOptions}>
+                <button 
+                    onClick={handleSave} 
+                    style={!selectedSpecificStation || isLoadingOptions ? disabledSaveButtonStyle : saveButtonStyle} 
+                    disabled={!selectedSpecificStation || isLoadingOptions || !specificOptions.length}
+                >
                     Guardar Estación
                 </button>
             </div>
