@@ -35,6 +35,7 @@ function SpecificStationSelectorModal({
     onSave, // (specificStationId) => void
     ambiguousSequenceOrder, // The general sequence order (e.g., 'PANEL_LINE_GENERAL' or '7')
     allStations, // Array of all station objects { station_id, name, line_type, sequence_order }
+    isLoadingOptions, // New prop
 }) {
     const [selectedSpecificStation, setSelectedSpecificStation] = useState('');
     const [error, setError] = useState('');
@@ -115,7 +116,7 @@ function SpecificStationSelectorModal({
                     <p>No hay opciones específicas disponibles para esta selección, o las estaciones aún no se han cargado.</p>
                 )}
 
-                <button onClick={handleSave} style={{ marginTop: '20px', padding: '10px 15px' }} disabled={!specificOptions.length || isLoading}>
+                <button onClick={handleSave} style={{ marginTop: '20px', padding: '10px 15px' }} disabled={!specificOptions.length || isLoadingOptions}>
                     Guardar Estación
                 </button>
             </div>

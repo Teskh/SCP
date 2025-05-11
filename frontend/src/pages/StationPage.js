@@ -167,6 +167,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                     onSave={handleSaveSpecificStation}
                     ambiguousSequenceOrder={activeStationSequenceOrder}
                     allStations={allStations}
+                    isLoadingOptions={isLoadingAllStations} 
                 />
             )}
             <div style={headerStyle}>
