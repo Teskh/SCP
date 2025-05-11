@@ -82,8 +82,6 @@ This is the structure of this codebase, keep it up to date when new changes modi
 └── run.py                                                             # Entry point script to run the Flask development server
 ├── data                                                               # Directory to store persistent data (like database file) - Not committed to Git
 │   └── database.db                                                    # The SQLite database file
-├── data_dump_excluding_stations.sql                                   # SQL dump file containing data (excluding Stations table)
-├── dump.sql                                                           # SQL dump file containing data (likely including Stations)
 ├── frontend                                                           # Root directory for the React frontend application
 │   ├── .gitignore                                                     # Specifies intentionally untracked files for frontend (e.g., node_modules)
 │   ├── package-lock.json                                              # Records exact versions of frontend dependencies

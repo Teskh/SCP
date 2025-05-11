@@ -14,6 +14,7 @@ env/
 .aider.tags.cache.v3/
 .aider.chat.history.md
 *.txt
+.vscode/
 
 # Python cache files
 __pycache__/

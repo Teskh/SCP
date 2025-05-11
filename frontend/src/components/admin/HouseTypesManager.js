@@ -22,13 +22,11 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
             initialValues[`${ev.parameter_id}_${ev.module_sequence_number}_${tipologiaKey}`] = ev.value;
         });
 
-        // Determine initial generic state based on presence of general value (tipologia_id === null)
+        // Determine initial generic state: always default to generic (true) as per user request
         parameters.forEach(param => {
             for (let modSeq = 1; modSeq <= houseType.number_of_modules; modSeq++) {
                 const genericKey = `${param.parameter_id}_${modSeq}`;
-                const generalValueKey = `${param.parameter_id}_${modSeq}_null`;
-                // Check if a general value exists OR if there are no tipologias (default to generic)
-                initialIsGeneric[genericKey] = initialValues[generalValueKey] !== undefined || !tipologias || tipologias.length === 0;
+                initialIsGeneric[genericKey] = true; // Default to generic mode
             }
         });
 
@@ -56,27 +54,21 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                 if (hasTipologias) {
                     tipologias.forEach(t => {
                         const specificValueKey = `${parameterId}_${moduleSequence}_${t.tipologia_id}`;
-                        // Check if the key exists before deleting to avoid unnecessary updates if already empty
                         if (newValues[specificValueKey] !== undefined) {
-                             // Set to empty string to clear the input field visually
                             newValues[specificValueKey] = '';
-                            // Alternatively, delete the key: delete newValues[specificValueKey];
-                            // Using '' ensures the input field clears if it was controlled.
                         }
                     });
                 }
             } else {
                 // Switched FROM Generic: Clear the general value
                 const generalValueKey = `${parameterId}_${moduleSequence}_null`;
-                 if (newValues[generalValueKey] !== undefined) {
+                if (newValues[generalValueKey] !== undefined) {
                     newValues[generalValueKey] = '';
-                    // delete newValues[generalValueKey];
                 }
             }
             return newValues;
         });
     };
-
 
     const handleSave = () => {
         const changes = []; // { action: 'set'/'delete', parameter_id, module_sequence_number, tipologia_id, value? }
@@ -108,7 +100,6 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
 
                     if (isNumeric) {
                         const numericValue = parseFloat(currentValue);
-                        // Use != to handle type differences if originalValue was string/number from DB
                         if (numericValue != originalValue) {
                             changes.push({
                                 action: 'set', parameter_id: param.parameter_id, module_sequence_number: modSeq,
@@ -116,24 +107,18 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                             });
                         }
                     } else if (isEmpty && originalValue !== undefined) {
-                        // Value was cleared, and there was an original value -> delete it
                         changes.push({
                             action: 'delete', parameter_id: param.parameter_id, module_sequence_number: modSeq,
                             tipologia_id: tipologiaId
                         });
                     } else if (!isEmpty && !isNumeric) {
-                        // Invalid input, log warning but don't save/delete
                         console.warn(`Invalid number format for ${param.name} - Module ${modSeq} - Tipologia ${tipologiaKey}: ${currentValue}`);
-                        // Optionally set an error state here to inform the user
                     }
                 };
 
                 if (isParamGeneric || !hasTipologias) {
-                    // --- Handle Generic Case ---
-                    // Process the general value (tipologia_id = null)
                     processSingleValue(null);
 
-                    // Delete any existing specific tipologia values for this param/module if we are in generic mode
                     if (hasTipologias) {
                         tipologias.forEach(t => {
                             const originalSpecificValue = findOriginalValue(t.tipologia_id);
@@ -146,8 +131,6 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                         });
                     }
                 } else {
-                    // --- Handle Specific Tipologias Case ---
-                    // Delete the general value if it exists
                     const originalGeneralValue = findOriginalValue(null);
                     if (originalGeneralValue !== undefined) {
                         changes.push({
@@ -156,7 +139,6 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                         });
                     }
 
-                    // Process each specific tipologia value
                     tipologias.forEach(t => {
                         processSingleValue(t.tipologia_id);
                     });
@@ -175,13 +157,10 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
             if (existingIndex === -1) {
                 acc.push(current);
             } else if (current.action === 'set') {
-                // If a 'set' action duplicates an existing action, replace the old one
                 acc[existingIndex] = current;
             }
-            // If a 'delete' action duplicates, just keep the first one found
             return acc;
         }, []);
-
 
         onSave(uniqueChanges);
     };
@@ -197,7 +176,7 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
         inputGroup: { display: 'flex', flexDirection: 'column', gap: '2px' },
         tipologiaInputRow: { display: 'flex', gap: '5px', alignItems: 'center', marginLeft: '20px' },
         tipologiaLabel: { fontSize: '0.9em', color: '#555', minWidth: '80px' },
-        genericCheckboxContainer: { display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px', marginLeft: '10px' }, // Style for checkbox
+        genericCheckboxContainer: { display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px', marginLeft: '10px' },
         actions: { marginTop: '15px' },
         error: { color: 'red', marginBottom: '10px' }
     };
@@ -219,9 +198,9 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                         const generalValueKey = `${param.parameter_id}_${moduleSeq}_null`;
 
                         return (
-                            <div key={genericKey} style={{...editorStyles.paramRow, alignItems: 'flex-start', borderBottom: '1px dotted #ccc', paddingBottom: '10px', marginBottom: '10px'}}>
+                            <div key={genericKey} style={{ ...editorStyles.paramRow, alignItems: 'flex-start', borderBottom: '1px dotted #ccc', paddingBottom: '10px', marginBottom: '10px' }}>
                                 <label style={editorStyles.paramLabel}>{param.name}:</label>
-                                <div style={{ flexGrow: 1 }}> {/* Container for checkbox and inputs */}
+                                <div style={{ flexGrow: 1 }}>
                                     {hasTipologias && (
                                         <div style={editorStyles.genericCheckboxContainer}>
                                             <input
@@ -235,10 +214,9 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                                     )}
 
                                     <div style={editorStyles.inputGroup}>
-                                        {/* Show General input if generic is checked OR if there are no tipologias */}
                                         {(isParamGeneric || !hasTipologias) && (
                                             <div key={generalValueKey} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                {!hasTipologias && <label style={{...editorStyles.tipologiaLabel, minWidth: 0}}>Valor:</label>}
+                                                {!hasTipologias && <label style={{ ...editorStyles.tipologiaLabel, minWidth: 0 }}>Valor:</label>}
                                                 {hasTipologias && <label style={editorStyles.tipologiaLabel} htmlFor={generalValueKey}>General:</label>}
                                                 <input
                                                     id={generalValueKey}
@@ -252,7 +230,6 @@ const ParameterEditor = ({ houseType, parameters, tipologias, existingValues, on
                                             </div>
                                         )}
 
-                                        {/* Show Tipologia inputs if generic is NOT checked AND there are tipologias */}
                                         {!isParamGeneric && hasTipologias && tipologias.map(t => {
                                             const tipologiaValueKey = `${param.parameter_id}_${moduleSeq}_${t.tipologia_id}`;
                                             return (
@@ -389,10 +366,6 @@ function HouseTypesManager() {
             ...prev,
             [name]: type === 'number' ? parseInt(value, 10) || 1 : value // Ensure number_of_modules is integer >= 1
         }));
-        setFormData(prev => ({
-            ...prev,
-            [name]: type === 'number' ? parseInt(value, 10) || 1 : value // Ensure number_of_modules is integer >= 1
-        }));
     };
 
     const handleTipologiaInputChange = (e) => {
@@ -445,7 +418,7 @@ function HouseTypesManager() {
             await fetchHouseTypesAndParams(); // Refresh list
             if (!editMode && newOrUpdatedId) { // If adding, open the new one for editing tipologias
                 const newHouseType = houseTypes.find(ht => ht.house_type_id === newOrUpdatedId) || { house_type_id: newOrUpdatedId, ...formData }; // Find or construct
-                 if (newHouseType) handleEdit(newHouseType);
+                if (newHouseType) handleEdit(newHouseType);
             }
         } catch (err) {
             setError(err.message || `Error al ${editMode ? 'guardar' : 'añadir'} el tipo de vivienda`);
@@ -643,7 +616,7 @@ function HouseTypesManager() {
                     </div>
                     <div style={styles.formRow}>
                         <label style={styles.label} htmlFor="htModules">Número de Módulos:</label>
-                        <input id="htModules" type="number" name="number_of_modules" value={formData.number_of_modules} onChange={handleInputChange} required min="1" style={{...styles.input, flexGrow: 0, width: '80px'}} />
+                        <input id="htModules" type="number" name="number_of_modules" value={formData.number_of_modules} onChange={handleInputChange} required min="1" style={{ ...styles.input, flexGrow: 0, width: '80px' }} />
                     </div>
                     <div>
                         <button type="submit" disabled={isLoading} style={styles.button}>
@@ -684,11 +657,11 @@ function HouseTypesManager() {
                             style={styles.tipologiaInput}
                             disabled={tipologiaLoading}
                         />
-                        <button type="submit" disabled={tipologiaLoading} style={{...styles.button, ...styles.tipologiaButton}}>
+                        <button type="submit" disabled={tipologiaLoading} style={{ ...styles.button, ...styles.tipologiaButton }}>
                             {tipologiaLoading ? 'Guardando...' : (editingTipologiaId ? 'Actualizar' : 'Añadir')}
                         </button>
                         {editingTipologiaId && (
-                            <button type="button" onClick={handleCancelEditTipologia} style={{...styles.button, ...styles.tipologiaButton}} disabled={tipologiaLoading}>
+                            <button type="button" onClick={handleCancelEditTipologia} style={{ ...styles.button, ...styles.tipologiaButton }} disabled={tipologiaLoading}>
                                 Cancelar Edición
                             </button>
                         )}
@@ -711,21 +684,21 @@ function HouseTypesManager() {
                                         <td style={styles.tipologiaTd}>{t.name}</td>
                                         <td style={styles.tipologiaTd}>{t.description || '-'}</td>
                                         <td style={styles.tipologiaTd}>
-                                            <button onClick={() => handleEditTipologia(t)} style={{...styles.button, ...styles.tipologiaButton}} disabled={tipologiaLoading || !!editingTipologiaId}>Editar</button>
-                                            <button onClick={() => handleDeleteTipologia(t.tipologia_id)} style={{...styles.button, ...styles.tipologiaButton}} disabled={tipologiaLoading || !!editingTipologiaId}>Eliminar</button>
+                                            <button onClick={() => handleEditTipologia(t)} style={{ ...styles.button, ...styles.tipologiaButton }} disabled={tipologiaLoading || !!editingTipologiaId}>Editar</button>
+                                            <button onClick={() => handleDeleteTipologia(t.tipologia_id)} style={{ ...styles.button, ...styles.tipologiaButton }} disabled={tipologiaLoading || !!editingTipologiaId}>Eliminar</button>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     )}
-                     {!tipologiaLoading && houseTypeTipologias.length === 0 && <p>Este tipo de vivienda no tiene tipologías definidas.</p>}
+                    {!tipologiaLoading && houseTypeTipologias.length === 0 && <p>Este tipo de vivienda no tiene tipologías definidas.</p>}
                 </div>
             )}
 
 
-             {/* Parameter Editor Section */}
-             {editingParamsFor && (
+            {/* Parameter Editor Section */}
+            {editingParamsFor && (
                 <ParameterEditor
                     houseType={editingParamsFor}
                     parameters={allParameters}
@@ -819,8 +792,8 @@ function HouseTypesManager() {
                                         {/* Disable buttons based on current mode */}
                                         <button onClick={() => handleEdit(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Editar Info/Tipologías</button>
                                         <button onClick={() => handleOpenParameterEditor(ht)} style={styles.button} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Editar Parámetros</button>
-                                        <button onClick={() => handleOpenPanelsModal(ht)} style={{...styles.button, backgroundColor: '#17a2b8', color: 'white'}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Paneles</button>
-                                        <button onClick={() => handleDelete(ht.house_type_id)} style={{...styles.button, backgroundColor: '#dc3545', color: 'white'}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Eliminar</button>
+                                        <button onClick={() => handleOpenPanelsModal(ht)} style={{ ...styles.button, backgroundColor: '#17a2b8', color: 'white' }} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Paneles</button>
+                                        <button onClick={() => handleDelete(ht.house_type_id)} style={{ ...styles.button, backgroundColor: '#dc3545', color: 'white' }} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Eliminar</button>
                                     </td>
                                 </tr>
                             );
