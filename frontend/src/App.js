@@ -96,7 +96,7 @@ function App() {
                 <Link to="/admin" style={linkStyle}>Panel de Administración</Link>
                 {currentUser && (
                     <button onClick={handleLogout} style={{ ...linkStyle, background: 'none', border: 'none', cursor: 'pointer', color: '#333' }}>
-                        Cerrar Sesión ({currentUser.first_name}) ({userType})
+                        Cerrar Sesión
                     </button>
                 )}
             </nav>
