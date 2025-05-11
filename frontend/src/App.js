@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'; // Import Outlet, useNavigate, useLocation
+import { Routes, Route, Link, Navigate, useNavigate, useLocation } from 'react-router-dom'; // Removed Outlet, not used directly here
 import './App.css';
+import { getStations } from './services/adminService'; // Import getStations
 import AdminDashboard from './pages/AdminDashboard';
 import LoginPage from './pages/LoginPage'; // Import LoginPage
 import StationPage from './pages/StationPage'; // Import StationPage
@@ -36,6 +37,9 @@ function App() {
     const [currentUser, setCurrentUser] = useState(null);
     const [userType, setUserType] = useState(null); // To store 'worker', 'Supervisor', etc.
     const [activeStationSequenceOrder, setActiveStationSequenceOrder] = useState(null);
+    const [allStations, setAllStations] = useState([]);
+    const [isLoadingAllStations, setIsLoadingAllStations] = useState(true);
+    const [allStationsError, setAllStationsError] = useState('');
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -52,23 +56,36 @@ function App() {
         if (storedSequenceOrder) {
             setActiveStationSequenceOrder(storedSequenceOrder);
         }
+
+        // Fetch all stations
+        setIsLoadingAllStations(true);
+        getStations()
+            .then(data => {
+                setAllStations(data || []);
+                setIsLoadingAllStations(false);
+            })
+            .catch(err => {
+                console.error("Error fetching all stations in App.js:", err);
+                setAllStationsError(`Error cargando datos de estaciones: ${err.message}`);
+                setIsLoadingAllStations(false);
+            });
         
         // Listen for changes to station context from other components (e.g. StationContextSelector)
-        const handleStorageChange = () => {
-            const updatedSequenceOrder = localStorage.getItem(STATION_CONTEXT_STORAGE_KEY);
-            setActiveStationSequenceOrder(updatedSequenceOrder);
+        const handleStorageChange = (event) => {
+            if (event.key === STATION_CONTEXT_STORAGE_KEY) {
+                setActiveStationSequenceOrder(event.newValue);
+            }
+            // Note: We don't directly listen for selectedSpecificStationId here,
+            // StationPage will manage its own state based on that localStorage item.
         };
 
         window.addEventListener('storage', handleStorageChange);
-        // Also check when App mounts or visibility changes, as 'storage' event might not fire for same-page changes in all browsers.
-        // For simplicity, we rely on components updating localStorage to also potentially trigger re-renders or context updates.
-        // A more robust solution might involve a shared context for station selection.
 
         return () => {
             window.removeEventListener('storage', handleStorageChange);
         };
 
-    }, []);
+    }, []); // Run once on mount
 
     const handleLoginSuccess = (userData, type) => {
         setCurrentUser(userData);
@@ -116,7 +133,13 @@ function App() {
                     path="/station"
                     element={
                         currentUser ? (
-                            <StationPage user={currentUser} activeStationSequenceOrder={activeStationSequenceOrder} />
+                            <StationPage
+                                user={currentUser}
+                                activeStationSequenceOrder={activeStationSequenceOrder}
+                                allStations={allStations}
+                                isLoadingAllStations={isLoadingAllStations}
+                                allStationsError={allStationsError}
+                            />
                         ) : (
                             <Navigate to="/" replace />
                         )
@@ -124,6 +147,7 @@ function App() {
                 />
 
                 {/* Admin Route - Always defined, visibility of link is handled above */}
+                {/* Pass allStations to StationContextSelector if it needs it, currently it fetches its own */}
                 <Route path="/admin" element={<AdminDashboard />}>
                     <Route path="definitions" element={<TaskDefinitionManager />} />
                     <Route path="workers" element={<WorkersManager />} />
@@ -133,7 +157,7 @@ function App() {
                     <Route path="admin-team" element={<AdminTeamManager />} />
                     <Route path="projects" element={<ProjectsManager />} />
                     <Route path="production-status" element={<ActiveProductionDashboard />} />
-                    <Route path="station-context" element={<StationContextSelector />} />
+                    <Route path="station-context" element={<StationContextSelector allStations={allStations} isLoadingAllStations={isLoadingAllStations} />} />
                     <Route index element={
                         <div>
                             <h1 style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>Panel de Administración</h1>

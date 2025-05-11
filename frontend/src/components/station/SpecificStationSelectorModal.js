@@ -1,0 +1,126 @@
+import React, { useState, useEffect, useMemo } from 'react';
+
+const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL'; // From StationContextSelector/StationPage
+
+// Basic modal styling
+const modalOverlayStyle = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+};
+
+const modalContentStyle = {
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '8px',
+    minWidth: '300px',
+    maxWidth: '500px',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+};
+
+const radioOptionStyle = {
+    display: 'block',
+    margin: '10px 0',
+};
+
+function SpecificStationSelectorModal({
+    show,
+    onSave, // (specificStationId) => void
+    ambiguousSequenceOrder, // The general sequence order (e.g., 'PANEL_LINE_GENERAL' or '7')
+    allStations, // Array of all station objects { station_id, name, line_type, sequence_order }
+}) {
+    const [selectedSpecificStation, setSelectedSpecificStation] = useState('');
+    const [error, setError] = useState('');
+
+    const specificOptions = useMemo(() => {
+        if (!allStations || !allStations.length || !ambiguousSequenceOrder) return [];
+
+        if (ambiguousSequenceOrder === PANEL_LINE_GENERAL_VALUE) {
+            // W1 to W5 (sequence_order 1 to 5)
+            return allStations.filter(s => s.sequence_order >= 1 && s.sequence_order <= 5)
+                              .sort((a, b) => a.sequence_order - b.sequence_order);
+        } else {
+            // Assembly lines: stations matching the numeric sequence_order
+            const numericSequence = parseInt(ambiguousSequenceOrder, 10);
+            if (isNaN(numericSequence) || numericSequence < 7) return []; // Assembly lines start at seq 7
+            return allStations.filter(s => s.sequence_order === numericSequence)
+                              .sort((a,b) => a.station_id.localeCompare(b.station_id)); // Sort A, B, C
+        }
+    }, [allStations, ambiguousSequenceOrder]);
+
+    useEffect(() => {
+        // Reset selection when options change or modal reopens
+        setSelectedSpecificStation('');
+        setError('');
+    }, [ambiguousSequenceOrder, show]); // Re-evaluate if show changes (modal opens)
+
+
+    const handleSave = () => {
+        if (!selectedSpecificStation) {
+            setError('Debe seleccionar una estación específica.');
+            return;
+        }
+        onSave(selectedSpecificStation);
+    };
+
+    if (!show) {
+        return null;
+    }
+
+    let title = "Seleccione la Estación Específica";
+    let description = "";
+
+    if (ambiguousSequenceOrder === PANEL_LINE_GENERAL_VALUE) {
+        description = `Ha configurado "Línea de Paneles (General)" para este dispositivo. Por favor, especifique a cuál estación de panel corresponde:`;
+    } else {
+        const numericSequence = parseInt(ambiguousSequenceOrder, 10);
+        if (!isNaN(numericSequence) && numericSequence >= 7) {
+            description = `Ha configurado la secuencia de ensamblaje general "${numericSequence}" para este dispositivo. Por favor, especifique la línea y estación exacta (A, B, o C):`;
+        }
+    }
+
+
+    return (
+        <div style={modalOverlayStyle}>
+            <div style={modalContentStyle}>
+                <h3>{title}</h3>
+                {description && <p>{description}</p>}
+
+                {error && <p style={{ color: 'red' }}>{error}</p>}
+
+                {specificOptions.length > 0 ? (
+                    specificOptions.map(station => (
+                        <div key={station.station_id} style={radioOptionStyle}>
+                            <input
+                                type="radio"
+                                id={`specific_station_${station.station_id}`}
+                                name="specific_station_selector"
+                                value={station.station_id}
+                                checked={selectedSpecificStation === station.station_id}
+                                onChange={(e) => setSelectedSpecificStation(e.target.value)}
+                            />
+                            <label htmlFor={`specific_station_${station.station_id}`} style={{ marginLeft: '8px' }}>
+                                {station.name} ({station.station_id})
+                            </label>
+                        </div>
+                    ))
+                ) : (
+                    <p>No hay opciones específicas disponibles para esta selección, o las estaciones aún no se han cargado.</p>
+                )}
+
+                <button onClick={handleSave} style={{ marginTop: '20px', padding: '10px 15px' }} disabled={!specificOptions.length || isLoading}>
+                    Guardar Estación
+                </button>
+            </div>
+        </div>
+    );
+}
+
+export default SpecificStationSelectorModal;

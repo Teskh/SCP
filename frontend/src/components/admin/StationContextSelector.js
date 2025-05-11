@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getStations } from '../../services/adminService'; // Assuming getStations is in adminService
+// import { getStations } from '../../services/adminService'; // Now receives stations as prop
 
 const localStorageKey = 'currentStationSequenceOrder';
+const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId'; // New key
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
 
-function StationContextSelector() {
-    const [stations, setStations] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
+function StationContextSelector({ allStations, isLoadingAllStations }) { // Receive stations as props
+    // const [stations, setStations] = useState([]); // No longer fetches its own
+    // const [isLoading, setIsLoading] = useState(false); // Use isLoadingAllStations
+    const [error, setError] = useState(''); // Keep for local errors like save failure, though not implemented
     const [selectedSequence, setSelectedSequence] = useState('');
     const [savedSequence, setSavedSequence] = useState('');
 
@@ -18,18 +19,7 @@ function StationContextSelector() {
             setSelectedSequence(currentStoredSequence);
             setSavedSequence(currentStoredSequence);
         }
-
-        setIsLoading(true);
-        getStations()
-            .then(data => {
-                setStations(data);
-                setIsLoading(false);
-            })
-            .catch(err => {
-                setError(`Error fetching stations: ${err.message}`);
-                setIsLoading(false);
-                console.error(err);
-            });
+        // No longer fetches stations here, relies on props
     }, []);
 
     const stationSequenceOptions = useMemo(() => {
@@ -38,47 +28,47 @@ function StationContextSelector() {
             label: PANEL_LINE_GENERAL_LABEL
         };
 
-        if (!stations || stations.length === 0) return [panelLineGeneralOption];
+        if (!allStations || allStations.length === 0) return [panelLineGeneralOption];
 
         const sequenceMap = new Map();
-        stations.forEach(station => {
+        allStations.forEach(station => {
             if (!sequenceMap.has(station.sequence_order)) {
-                // Use a descriptive name, e.g., the name of the first station encountered for that sequence
-                // Or a generic name if preferred.
-                // Example: "Línea de Ensamblaje A: Estación 1" for sequence_order 7 (A1)
-                // We'll use the station name and its sequence order.
                 let displayName = station.name;
-                // For parallel assembly lines, the names might be too specific (A, B, C)
-                // Let's try to generalize for assembly lines if sequence_order >= 7 (A/B/C lines start at 7)
-                if (station.sequence_order >= 7) {
-                    // Try to find a more generic part of the name
-                    // e.g. "Línea de Ensamblaje A: Estación 1" -> "Estación de Ensamblaje 1"
+                if (station.sequence_order >= 7) { 
                     const assemblyMatch = station.name.match(/Línea de Ensamblaje [A-C]: (Estación \d+)/);
                     if (assemblyMatch && assemblyMatch[1]) {
-                        displayName = assemblyMatch[1]; // "Estación 1"
+                        displayName = assemblyMatch[1]; 
                     } else {
-                        // Fallback if name format is different
                         displayName = `Estación de Secuencia ${station.sequence_order}`;
                     }
                 }
+                // For panel line stations (1-5) and M1 (6), use their full names or a generic sequence name
+                else if (station.sequence_order <=6) {
+                     // Keep full name for W1-W5 and M1 as they are not "general" in the same way as assembly sequences
+                     // Or, if we want to group W1-W5 under "Panel Line Sequence X", that logic would go here.
+                     // For now, the existing logic is fine, this comment is for clarity.
+                }
+
 
                 sequenceMap.set(station.sequence_order, {
-                    value: station.sequence_order,
+                    value: station.sequence_order.toString(), // Ensure value is string for consistency with PANEL_LINE_GENERAL_VALUE
                     label: `${displayName} (Secuencia ${station.sequence_order})`,
-                    originalName: station.name // Keep for reference if needed
+                    originalName: station.name 
                 });
             }
         });
-        // Sort by sequence_order
-        const specificStationOptions = Array.from(sequenceMap.values()).sort((a, b) => a.value - b.value);
+        const specificStationOptions = Array.from(sequenceMap.values()).sort((a, b) => parseInt(a.value, 10) - parseInt(b.value, 10));
         return [panelLineGeneralOption, ...specificStationOptions];
-    }, [stations]);
+    }, [allStations]);
 
     const handleSave = () => {
         if (selectedSequence) {
             localStorage.setItem(localStorageKey, selectedSequence);
+            // Always remove the specific station ID when the general context is changed.
+            // StationPage will then prompt for a new specific one if the new context is ambiguous.
+            localStorage.removeItem(SELECTED_SPECIFIC_STATION_ID_KEY);
             setSavedSequence(selectedSequence);
-            alert(`Configuración de estación guardada: Secuencia ${selectedSequence}`);
+            alert(`Configuración de estación guardada: ${selectedSequence}. La estación específica se solicitará al operar si es necesario.`);
         } else {
             alert("Por favor, seleccione una secuencia de estación.");
         }
@@ -86,15 +76,18 @@ function StationContextSelector() {
 
     const currentStationName = useMemo(() => {
         if (!savedSequence) return "No configurada";
-        if (stationSequenceOptions.length === 0 && savedSequence !== PANEL_LINE_GENERAL_VALUE) return "Cargando opciones..."; // Handles case where stations not loaded yet but something is saved
-
+        // stationSequenceOptions depends on allStations, so if allStations is loading, options might be minimal
+        if (isLoadingAllStations && (!allStations || allStations.length === 0)) return "Cargando opciones de estación...";
+        
         const foundOption = stationSequenceOptions.find(opt => opt.value.toString() === savedSequence.toString());
-        return foundOption ? foundOption.label : `Opción Guardada: ${savedSequence} (Nombre no encontrado)`;
-    }, [savedSequence, stationSequenceOptions]);
+        return foundOption ? foundOption.label : `Opción Guardada: ${savedSequence} (Nombre no encontrado en opciones actuales)`;
+    }, [savedSequence, stationSequenceOptions, isLoadingAllStations, allStations]);
 
 
-    if (isLoading) return <p>Cargando estaciones...</p>;
-    if (error) return <p style={{ color: 'red' }}>{error}</p>;
+    if (isLoadingAllStations && (!allStations || allStations.length === 0)) return <p>Cargando lista de estaciones...</p>;
+    // Error prop from App.js could be displayed here if it's related to fetching allStations
+    // if (allStationsError) return <p style={{ color: 'red' }}>{allStationsError}</p>;
+    if (error) return <p style={{ color: 'red' }}>{error}</p>; // For local errors
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
