@@ -37,7 +37,7 @@ Context Awareness: Application identifies the station_id based on tablet configu
 Module Identification: System determines the module_id currently at this station_id.
 Task Presentation: Displays relevant pending tasks for the module, station, and worker's specialty.
 Task Completion: Worker selects and marks a task as done.
-Logging: System records the completion in TaskLogs.
+Logging: System records the completion in TaskLogs, including the start and finish station, and optionally linking to a specific panel if the task is panel-specific.
 Admin Interface: A separate section/route accessible after admin login allows for managing Workers, Projects, Modules, Task Definitions, House Types (including defining parameters and panels per module), Specialties, etc.
 Logout/Idle: Automatic logout after inactivity or manual logout.
 5. Login Mechanisms:
