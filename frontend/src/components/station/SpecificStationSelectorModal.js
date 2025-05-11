@@ -118,16 +118,12 @@ function SpecificStationSelectorModal({
     }, [ambiguousSequenceOrder, show]); // Re-evaluate if show changes (modal opens)
 
     const handleStationSelect = (stationId) => {
-        setSelectedSpecificStation(stationId);
+        // Save the selected station immediately on click
+        localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, stationId);
+        // Call the parent's onSave function to update state and close the modal
+        onSave(stationId);
+        // Clear any previous error
         setError('');
-    };
-
-    const handleSave = () => {
-        if (!selectedSpecificStation) {
-            setError('Debe seleccionar una estación específica.');
-            return;
-        }
-        onSave(selectedSpecificStation);
     };
 
     if (!show) {
@@ -170,14 +166,6 @@ function SpecificStationSelectorModal({
                 ) : (
                     <p>No hay opciones específicas disponibles para esta selección, o las estaciones aún no se han cargado.</p>
                 )}
-
-                <button 
-                    onClick={handleSave} 
-                    style={!selectedSpecificStation || isLoadingOptions ? disabledSaveButtonStyle : saveButtonStyle} 
-                    disabled={!selectedSpecificStation || isLoadingOptions || !specificOptions.length}
-                >
-                    Guardar Estación
-                </button>
             </div>
         </div>
     );
