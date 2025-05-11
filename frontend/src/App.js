@@ -100,6 +100,8 @@ function App() {
         setUserType(null);
         localStorage.removeItem('currentUser');
         localStorage.removeItem('userType');
+        // Clear the selected specific station ID on logout
+        localStorage.removeItem('selectedSpecificStationId'); 
         navigate('/'); // Navigate to login page after logout
     };
 
