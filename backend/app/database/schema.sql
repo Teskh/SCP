@@ -138,15 +138,19 @@ CREATE TABLE TaskLogs (
     module_id INTEGER NOT NULL, -- Which specific module instance
     task_definition_id INTEGER NOT NULL, -- Which task definition was performed
     worker_id INTEGER NOT NULL, -- Who performed it
+    panel_id INTEGER, -- Added: Optional link to a specific panel if the task is panel-specific
     status TEXT NOT NULL, -- 'Not Started', 'In Progress', 'Completed', 'Paused'
     started_at TEXT, -- Timestamp (ISO8601 format)
     completed_at TEXT, -- Timestamp (ISO8601 format)
-    station_id_when_completed TEXT NOT NULL, -- Record the actual station where it was marked complete
+    station_start TEXT, -- Added: Record the station where the task was started
+    station_finish TEXT NOT NULL, -- Renamed: Record the actual station where it was marked complete
     notes TEXT, -- Optional field for worker comments
     FOREIGN KEY (module_id) REFERENCES Modules(module_id),
     FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id),
     FOREIGN KEY (worker_id) REFERENCES Workers(worker_id),
-    FOREIGN KEY (station_id_when_completed) REFERENCES Stations(station_id)
+    FOREIGN KEY (panel_id) REFERENCES HouseTypePanels(house_type_panel_id) ON DELETE SET NULL, -- Added FK: If panel definition is deleted, set task log's panel_id to NULL
+    FOREIGN KEY (station_start) REFERENCES Stations(station_id) ON DELETE SET NULL, -- Added FK: If station is deleted, set station_start to NULL
+    FOREIGN KEY (station_finish) REFERENCES Stations(station_id) ON DELETE RESTRICT -- Renamed FK: Don't allow deleting station if tasks were completed there
 );
 
 CREATE TABLE TaskPauses (
@@ -174,6 +178,9 @@ CREATE INDEX idx_tasklogs_module ON TaskLogs (module_id);
 CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id);
 CREATE INDEX idx_tasklogs_status ON TaskLogs (status);
 CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
+CREATE INDEX idx_tasklogs_panel ON TaskLogs (panel_id); -- Added index for panel_id
+CREATE INDEX idx_tasklogs_station_start ON TaskLogs (station_start); -- Added index for station_start
+CREATE INDEX idx_tasklogs_station_finish ON TaskLogs (station_finish); -- Renamed index
 CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
 CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id);
 CREATE INDEX idx_projectmodules_house_type ON ProjectModules (house_type_id);
