@@ -10,6 +10,7 @@ import SpecialtiesManager from './components/admin/SpecialtiesManager';
 import AdminTeamManager from './components/admin/AdminTeamManager';
 import ProjectsManager from './components/admin/ProjectsManager';
 import ActiveProductionDashboard from './components/admin/ActiveProductionDashboard'; // Import ActiveProductionDashboard
+import StationContextSelector from './components/admin/StationContextSelector'; // Import StationContextSelector
 // Import other pages/components as needed
 
 // Basic Nav styling
@@ -61,6 +62,7 @@ function App() {
                  <Route path="projects" element={<ProjectsManager />} />
                  {/* <Route path="production-plan" element={<ProductionPlanner />} /> Removed route for Production Plan */}
                  <Route path="production-status" element={<ActiveProductionDashboard />} /> {/* Added route for Production Status */}
+                 <Route path="station-context" element={<StationContextSelector />} /> {/* Added route for Station Context Selector */}
                  {/* Index route for /admin */}
                   <Route index element={
                       <div>
