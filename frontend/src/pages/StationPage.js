@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import { getStations } from '../services/adminService'; // To fetch station details
 
+const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
+const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
+
 const StationPage = ({ user, activeStationSequenceOrder }) => {
     const [stations, setStations] = useState([]);
     const [isLoadingStations, setIsLoadingStations] = useState(false);
@@ -27,6 +30,11 @@ const StationPage = ({ user, activeStationSequenceOrder }) => {
         if (isLoadingStations) return "Cargando info de estación...";
         if (stationError) return "Error de estación";
         if (!activeStationSequenceOrder) return "Estación No Configurada";
+
+        if (activeStationSequenceOrder === PANEL_LINE_GENERAL_VALUE) {
+            return PANEL_LINE_GENERAL_LABEL;
+        }
+
         if (!stations || stations.length === 0) return "Buscando estación...";
 
         // Logic similar to StationContextSelector to find the display name for the sequence

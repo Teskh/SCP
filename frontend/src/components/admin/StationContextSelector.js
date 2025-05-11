@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getStations } from '../../services/adminService'; // Assuming getStations is in adminService
 
 const localStorageKey = 'currentStationSequenceOrder';
+const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
+const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
 
 function StationContextSelector() {
     const [stations, setStations] = useState([]);
@@ -31,7 +33,12 @@ function StationContextSelector() {
     }, []);
 
     const stationSequenceOptions = useMemo(() => {
-        if (!stations || stations.length === 0) return [];
+        const panelLineGeneralOption = {
+            value: PANEL_LINE_GENERAL_VALUE,
+            label: PANEL_LINE_GENERAL_LABEL
+        };
+
+        if (!stations || stations.length === 0) return [panelLineGeneralOption];
 
         const sequenceMap = new Map();
         stations.forEach(station => {
@@ -63,7 +70,8 @@ function StationContextSelector() {
             }
         });
         // Sort by sequence_order
-        return Array.from(sequenceMap.values()).sort((a, b) => a.value - b.value);
+        const specificStationOptions = Array.from(sequenceMap.values()).sort((a, b) => a.value - b.value);
+        return [panelLineGeneralOption, ...specificStationOptions];
     }, [stations]);
 
     const handleSave = () => {
@@ -77,9 +85,11 @@ function StationContextSelector() {
     };
 
     const currentStationName = useMemo(() => {
-        if (!savedSequence || stationSequenceOptions.length === 0) return "No configurada";
-        const foundOption = stationSequenceOptions.find(opt => opt.value.toString() === savedSequence);
-        return foundOption ? foundOption.label : `Secuencia ${savedSequence} (Nombre no encontrado)`;
+        if (!savedSequence) return "No configurada";
+        if (stationSequenceOptions.length === 0 && savedSequence !== PANEL_LINE_GENERAL_VALUE) return "Cargando opciones..."; // Handles case where stations not loaded yet but something is saved
+
+        const foundOption = stationSequenceOptions.find(opt => opt.value.toString() === savedSequence.toString());
+        return foundOption ? foundOption.label : `Opción Guardada: ${savedSequence} (Nombre no encontrado)`;
     }, [savedSequence, stationSequenceOptions]);
 
 
