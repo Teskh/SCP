@@ -268,14 +268,7 @@ function TaskDefinitionManager() {
             {isLoading && !taskDefs.length ? <p style={styles.loading}>Cargando definiciones de tareas...</p> : (
                 <table style={styles.table}>
                     <thead>
-                        <tr>
-                            <th style={styles.th}>Nombre</th>
-                            <th style={styles.th}>Descripción</th>
-                            <th style={styles.th}>Tipo Vivienda</th> {/* Changed header */}
-                            <th style={styles.th}>Especialidad</th>
-                            <th style={styles.th}>Etapa (Secuencia)</th> {/* Changed header */}
-                            <th style={styles.th}>Acciones</th>
-                        </tr>
+                        <tr><th style={styles.th}>Nombre</th><th style={styles.th}>Descripción</th><th style={styles.th}>Tipo Vivienda</th><th style={styles.th}>Especialidad</th><th style={styles.th}>Etapa (Secuencia)</th><th style={styles.th}>Acciones</th></tr>
                     </thead>
                     <tbody>
                         {taskDefs.map((td) => (
