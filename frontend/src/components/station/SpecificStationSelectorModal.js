@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL'; // From StationContextSelector/StationPage
+const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId'; // Key for localStorage
 
 // Basic modal styling
 const modalOverlayStyle = {
