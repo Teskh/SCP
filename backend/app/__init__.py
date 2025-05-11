@@ -69,12 +69,14 @@ def create_app(config_class=AppConfig):
     from .api.admin_personnel import admin_personnel_bp
     from .api.admin_projects import admin_projects_bp
     from .api.admin_definitions import admin_definitions_bp
+    from .api.auth import auth_bp # Import the new auth blueprint
 
     # Register each blueprint with the same URL prefix
     app.register_blueprint(admin_personnel_bp, url_prefix='/api/admin')
     app.register_blueprint(admin_projects_bp, url_prefix='/api/admin')
     app.register_blueprint(admin_definitions_bp, url_prefix='/api/admin')
-    # Add other blueprints here later (auth, worker, etc.)
+    app.register_blueprint(auth_bp, url_prefix='/api/auth') # Register the auth blueprint
+    # Add other blueprints here later (worker, etc.)
 
     # Serve React App
     @app.route('/', defaults={'path': ''})

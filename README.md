@@ -67,6 +67,7 @@ This is the structure of this codebase, keep it up to date when new changes modi
 │   │   │   ├── admin_definitions.py                                   # API routes for managing definitions (House Types, Parameters, Panels, Multiwalls, Task Definitions Stations)
 │   │   │   ├── admin_personnel.py                                     # API routes for managing personnel (Workers, Specialties, Admin Team)
 │   │   │   ├── admin_projects.py                                      # API routes for managing projects and the production plan/status
+│   │   │   ├── auth.py                                                # API routes for user authentication (login/logout)
 │   │   │   └── __init__.py                                            # Makes the 'api' directory a Python package
 │   │   ├── database                                                   # Package for database interactions
 │   │   │   ├── connection.py                                          # Handles establishing and closing the database connection (SQLite)
