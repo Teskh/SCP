@@ -1004,7 +1004,79 @@ def get_station_overview_data(station_id):
             house_type_id=current_house_type_id, # This comes from the module_info
             worker_specialty_id=worker_specialty_id
         )
-        return jsonify(module=module_info, tasks=tasks)
+
+        # --- Fetch Panels if it's a Panel Line Station (W1-W5) ---
+        panels = []
+        # Need the station's sequence order to check if it's W1-W5
+        station_details_cursor = connection.get_db().execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (station_id,))
+        station_details = station_details_cursor.fetchone()
+
+        if station_details and 1 <= station_details['sequence_order'] <= 5 and current_house_type_id and module_info.get('module_sequence_in_house'):
+            # Fetch panels only if we have the necessary info and it's a panel station
+            panels = queries.get_panels_for_house_type_module(
+                house_type_id=current_house_type_id,
+                module_sequence_number=module_info['module_sequence_in_house']
+            )
+
+        return jsonify(module=module_info, tasks=tasks, panels=panels) # Include panels in the response
     except Exception as e:
         logger.error(f"Error fetching station overview data for station {station_id}: {e}", exc_info=True)
         return jsonify(error=f"Failed to fetch station overview data: {str(e)}"), 500
+
+
+# === Task Operations ===
+
+@admin_definitions_bp.route('/tasks/start', methods=['POST'])
+def start_task():
+    """Starts a task log entry."""
+    data = request.get_json()
+    required_fields = ['module_id', 'task_definition_id', 'worker_id', 'start_station_id']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    module_id = data['module_id']
+    task_definition_id = data['task_definition_id']
+    worker_id = data['worker_id']
+    start_station_id = data['start_station_id']
+    house_type_panel_id = data.get('house_type_panel_id') # Optional
+
+    # Basic validation (can add more checks, e.g., if module/task/worker/station exist)
+    try:
+        module_id = int(module_id)
+        task_definition_id = int(task_definition_id)
+        worker_id = int(worker_id)
+        # start_station_id is string
+        if house_type_panel_id is not None:
+            house_type_panel_id = int(house_type_panel_id)
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid ID format. IDs must be integers (except station_id)."), 400
+
+    try:
+        # Check if task is already started or completed for this module?
+        # db = connection.get_db()
+        # existing_log = db.execute("SELECT status FROM TaskLogs WHERE module_id = ? AND task_definition_id = ?", (module_id, task_definition_id)).fetchone()
+        # if existing_log and existing_log['status'] in ['In Progress', 'Completed']:
+        #     return jsonify(error=f"Task is already {existing_log['status']}."), 409 # Conflict
+
+        new_log_id = queries.start_task_log(
+            module_id=module_id,
+            task_definition_id=task_definition_id,
+            worker_id=worker_id,
+            start_station_id=start_station_id,
+            house_type_panel_id=house_type_panel_id
+        )
+        if new_log_id:
+            # Optionally fetch the created log entry to return it
+            # log_entry = queries.get_task_log_by_id(new_log_id) # Requires new query function
+            return jsonify(message="Task started successfully", task_log_id=new_log_id), 201
+        else:
+            # This case might occur if start_task_log returns None without raising an exception
+            return jsonify(error="Failed to start task log"), 500
+    except sqlite3.IntegrityError as e:
+        logger.error(f"Integrity error starting task: {e}", exc_info=True)
+        # Check for specific constraints if needed
+        return jsonify(error="Database integrity error starting task. Check if related items exist."), 409
+    except Exception as e:
+        logger.error(f"Error starting task: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while starting the task"), 500

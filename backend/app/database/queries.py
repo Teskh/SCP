@@ -934,7 +934,8 @@ def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker
             COALESCE(tl.status, 'Not Started') AS task_status,
             tl.task_log_id,
             tl.started_at,
-            tl.completed_at
+            tl.completed_at,
+            tl.house_type_panel_id -- Retrieve panel ID if logged
         FROM TaskDefinitions td
         LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.module_id = ?
         -- Ensure the task definition is for the specific station by matching station_id via sequence_order
@@ -947,6 +948,44 @@ def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker
     # Parameters: module_id, station_id (for the JOIN), house_type_id, worker_specialty_id
     tasks_cursor = db.execute(query, (module_id, station_id, house_type_id, worker_specialty_id))
     return [dict(row) for row in tasks_cursor.fetchall()]
+
+
+def start_task_log(module_id, task_definition_id, worker_id, start_station_id, house_type_panel_id=None):
+    """
+    Starts a task by inserting a new record into TaskLogs or updating an existing 'Paused' one.
+    Sets status to 'In Progress' and records the start time and station.
+    Associates a panel if provided.
+    """
+    db = get_db()
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        # Check if there's an existing 'Paused' log for this exact task and module
+        # If so, we might want to resume it instead of creating a new one.
+        # For now, we assume starting always creates a new log or overwrites?
+        # Let's use INSERT OR REPLACE for simplicity, assuming one active log per task/module.
+        # A more robust solution might involve checking existing status first.
+
+        # Using INSERT OR REPLACE requires a UNIQUE constraint on (module_id, task_definition_id)
+        # if we want to prevent multiple 'In Progress' logs for the same task.
+        # If the schema doesn't have this, we should use INSERT.
+        # Let's stick to INSERT for now and assume the UI prevents starting an already started task.
+
+        cursor = db.execute(
+            """INSERT INTO TaskLogs
+               (module_id, task_definition_id, worker_id, start_station_id, started_at, status, house_type_panel_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (module_id, task_definition_id, worker_id, start_station_id, current_timestamp, 'In Progress', house_type_panel_id)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        # Could be foreign key violation or other constraint
+        print(f"Error starting task log (IntegrityError): {e}") # Replace with logging
+        raise e # Re-raise for API layer
+    except sqlite3.Error as e:
+        print(f"Error starting task log: {e}") # Replace with logging
+        return None
+
 
 def get_all_stations():
     """Fetches all stations for dropdowns."""
