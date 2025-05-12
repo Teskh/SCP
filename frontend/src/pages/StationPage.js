@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
+import { getStationOverviewData } from '../services/adminService'; // Import the new service
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
@@ -23,7 +24,6 @@ const checkSpecificIdValidity = (specificId, ambiguousSequence, stations) => {
 
 
 const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingAllStations, allStationsError }) => {
-import { getStationOverviewData } from '../services/adminService'; // Import the new service
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
