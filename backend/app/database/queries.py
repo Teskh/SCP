@@ -985,10 +985,10 @@ def get_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_spe
     return tasks
 
 
-def start_task_log(module_id, task_definition_id, worker_id, start_station_id, house_type_panel_id=None):
+def start_task_log(module_id, task_definition_id, worker_id, station_start, house_type_panel_id=None):
     """
     Starts a task by inserting a new record into TaskLogs or updating an existing 'Paused' one.
-    Sets status to 'In Progress' and records the start time and station.
+    Sets status to 'In Progress' and records the start time and station (station_start).
     Associates a panel if provided.
     """
     db = get_db()
@@ -1007,9 +1007,9 @@ def start_task_log(module_id, task_definition_id, worker_id, start_station_id, h
 
         cursor = db.execute(
             """INSERT INTO TaskLogs
-               (module_id, task_definition_id, worker_id, start_station_id, started_at, status, house_type_panel_id)
+               (module_id, task_definition_id, worker_id, station_start, started_at, status, house_type_panel_id)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (module_id, task_definition_id, worker_id, start_station_id, current_timestamp, 'In Progress', house_type_panel_id)
+            (module_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress', house_type_panel_id)
         )
         db.commit()
         return cursor.lastrowid

@@ -1066,8 +1066,8 @@ def start_task():
     Requires plan_id instead of module_id.
     """
     data = request.get_json()
-    # Changed required fields: plan_id instead of module_id
-    required_fields = ['plan_id', 'task_definition_id', 'worker_id', 'start_station_id']
+    # Changed required fields: plan_id instead of module_id, station_start instead of start_station_id
+    required_fields = ['plan_id', 'task_definition_id', 'worker_id', 'station_start']
     if not data or not all(field in data for field in required_fields):
         missing = [field for field in required_fields if field not in data]
         return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
@@ -1075,7 +1075,7 @@ def start_task():
     plan_id = data['plan_id']
     task_definition_id = data['task_definition_id']
     worker_id = data['worker_id']
-    start_station_id = data['start_station_id']
+    station_start = data['station_start'] # Changed variable name
     house_type_panel_id = data.get('house_type_panel_id') # Optional
 
     # Basic validation
@@ -1083,7 +1083,7 @@ def start_task():
         plan_id = int(plan_id)
         task_definition_id = int(task_definition_id)
         worker_id = int(worker_id)
-        # start_station_id is string
+        # station_start is string
         if house_type_panel_id is not None:
             house_type_panel_id = int(house_type_panel_id)
     except (ValueError, TypeError):
@@ -1100,17 +1100,17 @@ def start_task():
             # Module doesn't exist, create it (this also updates ProductionPlan status)
             # This should typically only happen at the first station (sequence 1)
             # We might add a check here: if station_sequence != 1 and module is None, raise error?
-            station_details_cursor = connection.get_db().execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (start_station_id,))
+            station_details_cursor = connection.get_db().execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (station_start,)) # Use station_start here
             station_details = station_details_cursor.fetchone()
             if not station_details:
-                 return jsonify(error=f"Start station '{start_station_id}' not found."), 400
+                 return jsonify(error=f"Start station '{station_start}' not found."), 400 # Use station_start here
             # Allow module creation only if station sequence is 1? Or trust frontend logic? Let's allow for now.
             # if station_details['sequence_order'] != 1:
-            #     logger.warning(f"Attempting to implicitly create module for plan {plan_id} at non-starting station {start_station_id}")
+            #     logger.warning(f"Attempting to implicitly create module for plan {plan_id} at non-starting station {station_start}")
                 # return jsonify(error="Cannot implicitly create module at non-starting station."), 400
 
             logger.info(f"Module for plan_id {plan_id} not found. Creating module...")
-            module_id = queries.create_module_from_plan(plan_id, start_station_id)
+            module_id = queries.create_module_from_plan(plan_id, station_start) # Use station_start here
             if not module_id:
                  # create_module_from_plan should raise exception on failure, but handle just in case
                  logger.error(f"Failed to create module for plan {plan_id} during task start.")
@@ -1129,7 +1129,7 @@ def start_task():
             module_id=module_id, # Use the found or created module_id
             task_definition_id=task_definition_id,
             worker_id=worker_id,
-            start_station_id=start_station_id,
+            station_start=station_start, # Use station_start here
             house_type_panel_id=house_type_panel_id
         )
 

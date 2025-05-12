@@ -599,16 +599,16 @@ export const getStationOverviewData = async (stationId, specialtyId) => {
  * @param {number} planId - The ID of the ProductionPlan item the task belongs to.
  * @param {number} taskDefinitionId - The ID of the task definition being started.
  * @param {number} workerId - The ID of the worker starting the task.
- * @param {string} startStationId - The ID of the station where the task is being started.
+ * @param {string} stationStart - The ID of the station where the task is being started (column name: station_start).
  * @param {number|null} [houseTypePanelId] - Optional ID of the panel associated with the task (for panel line).
  * @returns {Promise<object>} - The response from the server (e.g., { message: "...", task_log_id: ..., module_id: ... }).
  */
-export const startTask = async (planId, taskDefinitionId, workerId, startStationId, houseTypePanelId = null) => {
+export const startTask = async (planId, taskDefinitionId, workerId, stationStart, houseTypePanelId = null) => {
     const payload = {
         plan_id: planId, // Send plan_id instead of module_id
         task_definition_id: taskDefinitionId,
         worker_id: workerId,
-        start_station_id: startStationId,
+        station_start: stationStart, // Changed key to station_start
         house_type_panel_id: houseTypePanelId, // Will be null if not provided
     };
 

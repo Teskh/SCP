@@ -175,12 +175,12 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         setTaskActionError(null);
 
         try {
-            // Send plan_id instead of module_id
+            // Send plan_id instead of module_id and use stationStart parameter name
             await startTask(
                 targetModule.plan_id, // Use plan_id from current or upcoming module
                 taskDefinitionId,
                 user.id, // worker_id
-                currentSpecificStationId, // start_station_id
+                currentSpecificStationId, // stationStart
                 panelId // house_type_panel_id (will be null if not panel line or not selected)
             );
             // Success! Refresh data to show updated task status (module should now appear as current)
