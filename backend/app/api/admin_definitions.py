@@ -826,6 +826,7 @@ def add_task_definition():
     house_type_id = data.get('house_type_id') # Can be None/null
     specialty_id = data.get('specialty_id')     # Can be None/null
     station_sequence_order = data.get('station_sequence_order') # Changed from station_id
+    task_dependencies_input = data.get('task_dependencies', []) # Expect list of IDs from frontend
 
     # Convert sequence order to integer if present, otherwise None
     try:
@@ -833,11 +834,14 @@ def add_task_definition():
     except (ValueError, TypeError):
         return jsonify(error="Invalid station_sequence_order, must be an integer or null"), 400
 
+    # Convert dependencies list to comma-separated string for DB storage
+    # Ensure all elements are strings before joining
+    task_dependencies_str = ",".join(map(str, task_dependencies_input)) if task_dependencies_input else None
+
     try:
-        new_id = queries.add_task_definition(name, description, house_type_id, specialty_id, station_seq_int)
+        new_id = queries.add_task_definition(name, description, house_type_id, specialty_id, station_seq_int, task_dependencies_str)
         if new_id:
-            # Fetch the newly created task def to return it (including related names)
-            # Assuming a query like get_task_definition_by_id exists
+            # Fetch the newly created task def to return it (including related names and dependencies)
             new_task_def = queries.get_task_definition_by_id(new_id) # This query needs to exist in queries.py
             if new_task_def:
                 return jsonify(new_task_def), 201
@@ -845,11 +849,12 @@ def add_task_definition():
                 # Fallback if fetch fails
                 new_task_def_basic = {
                     'task_definition_id': new_id, 'name': name, 'description': description,
-                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_sequence_order': station_seq_int
+                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_sequence_order': station_seq_int,
+                    'task_dependencies': task_dependencies_str # Return the string format
                 }
                 return jsonify(new_task_def_basic), 201
         else:
-            # Check for specific errors if add_task_definition can return None without exception
+            # Check for specific errors if add_task_definition can return None without exception (should raise)
             # Assuming a query like get_task_definition_by_name exists
             existing = queries.get_task_definition_by_name(name) # This query needs to exist in queries.py
             if existing:
@@ -883,6 +888,7 @@ def update_task_definition(task_definition_id):
     house_type_id = data.get('house_type_id')
     specialty_id = data.get('specialty_id')
     station_sequence_order = data.get('station_sequence_order') # Changed from station_id
+    task_dependencies_input = data.get('task_dependencies', []) # Expect list of IDs from frontend
 
     # Convert sequence order to integer if present, otherwise None
     try:
@@ -890,11 +896,13 @@ def update_task_definition(task_definition_id):
     except (ValueError, TypeError):
         return jsonify(error="Invalid station_sequence_order, must be an integer or null"), 400
 
+    # Convert dependencies list to comma-separated string for DB storage
+    task_dependencies_str = ",".join(map(str, task_dependencies_input)) if task_dependencies_input else None
+
     try:
-        success = queries.update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_seq_int)
+        success = queries.update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_seq_int, task_dependencies_str)
         if success:
-            # Fetch updated task definition data to include potentially changed names
-            # Assuming a query like get_task_definition_by_id exists
+            # Fetch updated task definition data to include potentially changed names and dependencies
             updated_task_def = queries.get_task_definition_by_id(task_definition_id) # This query needs to exist in queries.py
             if updated_task_def:
                 return jsonify(updated_task_def)
@@ -902,11 +910,12 @@ def update_task_definition(task_definition_id):
                 # Fallback if fetch fails
                 updated_task_def_basic = {
                     'task_definition_id': task_definition_id, 'name': name, 'description': description,
-                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_sequence_order': station_seq_int
+                    'house_type_id': house_type_id, 'specialty_id': specialty_id, 'station_sequence_order': station_seq_int,
+                    'task_dependencies': task_dependencies_str # Return the string format
                 }
                 return jsonify(updated_task_def_basic)
         else:
-            # Check if task definition exists first
+            # Check if task definition exists first (update returns rowcount > 0)
             existing = queries.get_task_definition_by_id(task_definition_id) # This query needs to exist in queries.py
             if not existing:
                  return jsonify(error="Task Definition not found"), 404
@@ -950,6 +959,38 @@ def delete_task_definition(task_definition_id):
     except Exception as e:
         logger.error(f"Error in delete_task_definition {task_definition_id}: {e}", exc_info=True)
         return jsonify(error="Failed to delete task definition"), 500
+
+
+@admin_definitions_bp.route('/task_definitions/potential_dependencies', methods=['GET'])
+def get_potential_dependencies():
+    """
+    Get potential task dependencies based on the station sequence order
+    of the task being defined/edited.
+    Requires 'current_station_sequence_order' as a query parameter.
+    """
+    sequence_order_str = request.args.get('current_station_sequence_order')
+
+    if sequence_order_str is None or sequence_order_str.lower() == 'null' or sequence_order_str == '':
+        # Handle case where no station is selected yet (e.g., return empty list or tasks with NULL sequence)
+        # Using the logic from the query function: fetch tasks with NULL sequence order
+        current_sequence_order = None
+    else:
+        try:
+            current_sequence_order = int(sequence_order_str)
+            if current_sequence_order <= 0:
+                 raise ValueError("Sequence order must be positive.")
+        except ValueError:
+            return jsonify(error="Invalid 'current_station_sequence_order' parameter. Must be a positive integer."), 400
+
+    try:
+        potential_deps = queries.get_potential_task_dependencies(current_sequence_order)
+        # Add an indicator if a potential dependency has its own dependencies
+        for dep in potential_deps:
+            dep['has_dependencies'] = bool(dep.get('task_dependencies')) # True if the string is not empty/null
+        return jsonify(potential_deps)
+    except Exception as e:
+        logger.error(f"Error fetching potential task dependencies for sequence {current_sequence_order}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch potential task dependencies"), 500
 
 
 # === Stations Route (Read-only for dropdowns) ===

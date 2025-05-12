@@ -503,32 +503,74 @@ def get_task_definition_by_id(task_definition_id):
     row = cursor.fetchone()
     return dict(row) if row else None
 
-def add_task_definition(name, description, house_type_id, specialty_id, station_sequence_order):
+def add_task_definition(name, description, house_type_id, specialty_id, station_sequence_order, task_dependencies):
     """Adds a new task definition."""
     db = get_db()
     try:
         cursor = db.execute(
             """INSERT INTO TaskDefinitions
-               (name, description, house_type_id, specialty_id, station_sequence_order)
-               VALUES (?, ?, ?, ?, ?)""",
-            (name, description, house_type_id, specialty_id, station_sequence_order)
+               (name, description, house_type_id, specialty_id, station_sequence_order, task_dependencies)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (name, description, house_type_id, specialty_id, station_sequence_order, task_dependencies)
         )
         db.commit()
         return cursor.lastrowid
     except sqlite3.IntegrityError:
         return None # Or raise
 
-def update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_sequence_order):
+def update_task_definition(task_definition_id, name, description, house_type_id, specialty_id, station_sequence_order, task_dependencies):
     """Updates an existing task definition."""
     db = get_db()
     cursor = db.execute(
         """UPDATE TaskDefinitions SET
-           name = ?, description = ?, house_type_id = ?, specialty_id = ?, station_sequence_order = ?
+           name = ?, description = ?, house_type_id = ?, specialty_id = ?, station_sequence_order = ?, task_dependencies = ?
            WHERE task_definition_id = ?""",
-        (name, description, house_type_id, specialty_id, station_sequence_order, task_definition_id)
+        (name, description, house_type_id, specialty_id, station_sequence_order, task_dependencies, task_definition_id)
     )
     db.commit()
     return cursor.rowcount > 0
+
+def get_potential_task_dependencies(current_station_sequence_order):
+    """
+    Fetches task definitions that could be prerequisites for a task at the
+    given station sequence order. Potential prerequisites must be from stations
+    with a lower sequence order. Includes their own dependencies.
+    """
+    db = get_db()
+    # Fetch tasks from stations with sequence order less than the current one,
+    # or tasks not linked to any specific station (station_sequence_order IS NULL).
+    # Also fetch their own dependencies to indicate complexity.
+    query = """
+        SELECT
+            td.task_definition_id,
+            td.name,
+            td.station_sequence_order,
+            td.task_dependencies -- Include dependencies of potential parents
+        FROM TaskDefinitions td
+        WHERE td.station_sequence_order < ? OR td.station_sequence_order IS NULL
+        ORDER BY td.station_sequence_order, td.name;
+    """
+    # If current_station_sequence_order is None or 0 (e.g., for a new task before station is set),
+    # we might want to fetch all tasks or none? Let's fetch tasks with NULL sequence order only in that case.
+    # However, the frontend will likely only call this when a sequence order *is* selected.
+    # If current_station_sequence_order is None, the query `td.station_sequence_order < ?` becomes problematic.
+    # Let's assume a valid sequence order > 0 is always passed.
+    if current_station_sequence_order is None or current_station_sequence_order <= 0:
+        # Or return an empty list if no station is selected yet?
+        # Fetching only NULL sequence tasks if no station selected:
+        query_no_station = """
+            SELECT task_definition_id, name, station_sequence_order, task_dependencies
+            FROM TaskDefinitions
+            WHERE station_sequence_order IS NULL
+            ORDER BY name;
+        """
+        cursor = db.execute(query_no_station)
+    else:
+        cursor = db.execute(query, (current_station_sequence_order,))
+
+    potential_deps = cursor.fetchall()
+    return [dict(row) for row in potential_deps]
+
 
 # === House Type Panels ===
 
