@@ -963,3 +963,48 @@ def get_stations():
     except Exception as e:
         logger.error(f"Error in get_stations: {e}", exc_info=True)
         return jsonify(error="Failed to fetch stations"), 500
+
+
+# === Station Overview Data ===
+
+@admin_definitions_bp.route('/station_overview/<string:station_id>', methods=['GET'])
+def get_station_overview_data(station_id):
+    """
+    Provides data for the station page: current module and relevant tasks.
+    Requires worker_specialty_id as a query parameter.
+    """
+    worker_specialty_id_str = request.args.get('specialty_id')
+
+    worker_specialty_id = None
+    if worker_specialty_id_str and worker_specialty_id_str.lower() != 'null' and worker_specialty_id_str != '':
+        try:
+            worker_specialty_id = int(worker_specialty_id_str)
+        except ValueError:
+            return jsonify(error="Invalid specialty_id format. Must be an integer or null."), 400
+    # If worker_specialty_id_str is 'null', '', or not provided, worker_specialty_id remains None,
+    # which correctly fetches tasks with specialty_id IS NULL.
+
+    try:
+        module_info = queries.get_current_module_for_station(station_id)
+
+        if not module_info:
+            # No module currently at this station, or module has no plan_id link.
+            return jsonify(module=None, tasks=[])
+
+        current_module_id = module_info.get('module_id')
+        current_house_type_id = module_info.get('house_type_id')
+
+        if current_module_id is None: # house_type_id can be part of module_info even if module_id is None from query
+            logger.warn(f"No active module_id found for station {station_id}. Module Info: {module_info}")
+            return jsonify(module=module_info, tasks=[]) # Return module_info as is, but no tasks if no module_id
+
+        tasks = queries.get_tasks_for_module_at_station(
+            station_id=station_id,
+            module_id=current_module_id,
+            house_type_id=current_house_type_id, # This comes from the module_info
+            worker_specialty_id=worker_specialty_id
+        )
+        return jsonify(module=module_info, tasks=tasks)
+    except Exception as e:
+        logger.error(f"Error fetching station overview data for station {station_id}: {e}", exc_info=True)
+        return jsonify(error=f"Failed to fetch station overview data: {str(e)}"), 500

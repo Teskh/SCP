@@ -885,6 +885,69 @@ def get_all_house_types():
     # Return the list of house type dictionaries, now including parameters and tipologias
     return list(house_types_dict.values())
 
+def get_current_module_for_station(station_id):
+    """Fetches the current module at a specific station, ordered by the lowest planned_sequence."""
+    db = get_db()
+    query = """
+        SELECT
+            m.module_id,
+            m.plan_id,
+            pp.project_id,
+            p.name AS project_name,
+            pp.house_type_id,
+            ht.name AS house_type_name,
+            pp.house_identifier,
+            pp.module_sequence_in_house,
+            ht.number_of_modules,
+            pp.tipologia_id,
+            tip.name AS tipologia_name,
+            pp.planned_sequence,
+            m.status AS module_status
+        FROM Modules m
+        JOIN ProductionPlan pp ON m.plan_id = pp.plan_id
+        JOIN Projects p ON pp.project_id = p.project_id
+        JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseTypeTipologias tip ON pp.tipologia_id = tip.tipologia_id
+        WHERE m.current_station_id = ?
+        ORDER BY pp.planned_sequence ASC
+        LIMIT 1;
+    """
+    cursor = db.execute(query, (station_id,))
+    module_data = cursor.fetchone()
+    return dict(module_data) if module_data else None
+
+def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker_specialty_id):
+    """
+    Fetches tasks for a given module at a specific station, considering the worker's specialty.
+    Tasks are relevant if:
+    - Their station_sequence_order matches the specific station's sequence_order.
+    - Their house_type_id matches the module's house_type_id (or task's house_type_id is NULL).
+    - Their specialty_id matches the worker's specialty_id (or task's specialty_id is NULL).
+    """
+    db = get_db()
+
+    query = """
+        SELECT
+            td.task_definition_id,
+            td.name AS task_name,
+            td.description AS task_description,
+            COALESCE(tl.status, 'Not Started') AS task_status,
+            tl.task_log_id,
+            tl.started_at,
+            tl.completed_at
+        FROM TaskDefinitions td
+        LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.module_id = ?
+        -- Ensure the task definition is for the specific station by matching station_id via sequence_order
+        JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
+        WHERE
+            (td.house_type_id = ? OR td.house_type_id IS NULL)
+            AND (td.specialty_id = ? OR td.specialty_id IS NULL)
+        ORDER BY td.name;
+    """
+    # Parameters: module_id, station_id (for the JOIN), house_type_id, worker_specialty_id
+    tasks_cursor = db.execute(query, (module_id, station_id, house_type_id, worker_specialty_id))
+    return [dict(row) for row in tasks_cursor.fetchall()]
+
 def get_all_stations():
     """Fetches all stations for dropdowns."""
     db = get_db()

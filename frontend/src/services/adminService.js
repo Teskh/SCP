@@ -562,3 +562,23 @@ export const getProductionStatus = async () => { // Removed upcomingCount parame
     const response = await fetch(`${API_BASE_URL}/production_status`); // Removed query parameter
     return handleResponse(response);
 };
+
+// === Station Page Data ===
+export const getStationOverviewData = async (stationId, specialtyId) => {
+    // specialtyId can be null or undefined. If so, it won't be added to query params or backend handles it.
+    let url = `${API_BASE_URL}/station_overview/${stationId}`;
+    const params = new URLSearchParams();
+    if (specialtyId !== undefined && specialtyId !== null) {
+        params.append('specialty_id', specialtyId);
+    } else {
+        params.append('specialty_id', 'null'); // Explicitly send 'null' if it's null/undefined
+    }
+    
+    const queryString = params.toString();
+    if (queryString) {
+        url += `?${queryString}`;
+    }
+
+    const response = await fetch(url);
+    return handleResponse(response);
+};
