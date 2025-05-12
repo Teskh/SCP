@@ -143,7 +143,7 @@ CREATE TABLE TaskLogs (
     started_at TEXT, -- Timestamp (ISO8601 format)
     completed_at TEXT, -- Timestamp (ISO8601 format)
     station_start TEXT, -- Added: Record the station where the task was started
-    station_finish TEXT NOT NULL, -- Renamed: Record the actual station where it was marked complete
+    station_finish TEXT, -- Renamed: Record the actual station where it was marked complete (Nullable)
     notes TEXT, -- Optional field for worker comments
     FOREIGN KEY (module_id) REFERENCES Modules(module_id),
     FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id),
