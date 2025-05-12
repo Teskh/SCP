@@ -1129,8 +1129,8 @@ def start_task():
             module_id=module_id, # Use the found or created module_id
             task_definition_id=task_definition_id,
             worker_id=worker_id,
-            station_start=station_start # Use station_start here
-            # Removed house_type_panel_id parameter
+            station_start=station_start, # Use station_start here
+            house_type_panel_id=house_type_panel_id # Pass the panel ID
         )
 
         if new_log_id:

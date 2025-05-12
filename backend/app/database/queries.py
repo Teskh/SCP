@@ -1007,9 +1007,9 @@ def start_task_log(module_id, task_definition_id, worker_id, station_start, hous
 
         cursor = db.execute(
             """INSERT INTO TaskLogs
-               (module_id, task_definition_id, worker_id, station_start, started_at, status)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (module_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress') # Removed house_type_panel_id
+               (module_id, task_definition_id, worker_id, station_start, started_at, status, panel_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (module_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress', house_type_panel_id) # Added panel_id
         )
         db.commit()
         return cursor.lastrowid
