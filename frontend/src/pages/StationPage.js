@@ -171,7 +171,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                 />
             )}
             <div style={headerStyle}>
-                <h1>Bienvenido/a, {user.first_name}!</h1>
+                <h1>Bienvenido/a, {user.first_name}</h1>
                 <div style={stationInfoStyle}>
                     Estación: {displayStationName}
                 </div>
