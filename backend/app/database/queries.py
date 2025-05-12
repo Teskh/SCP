@@ -950,6 +950,41 @@ def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker
     return [dict(row) for row in tasks_cursor.fetchall()]
 
 
+def get_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_specialty_id):
+    """
+    Fetches task definitions relevant for a planned module (before it exists in Modules table)
+    at a specific station, considering the worker's specialty.
+    This is used primarily for the first station (sequence 1) to show tasks for the upcoming module.
+    It does NOT check TaskLogs as the module hasn't started yet.
+    """
+    db = get_db()
+    query = """
+        SELECT
+            td.task_definition_id,
+            td.name AS task_name,
+            td.description AS task_description,
+            'Not Started' AS task_status, -- Always 'Not Started' as module doesn't exist yet
+            NULL AS task_log_id, -- No log exists yet
+            NULL AS started_at,
+            NULL AS completed_at,
+            NULL AS house_type_panel_id -- No panel logged yet
+        FROM TaskDefinitions td
+        -- Ensure the task definition is for the specific station by matching station_id via sequence_order
+        JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
+        WHERE
+            (td.house_type_id = ? OR td.house_type_id IS NULL)
+            AND (td.specialty_id = ? OR td.specialty_id IS NULL)
+        ORDER BY td.name;
+    """
+    # Parameters: station_id, house_type_id, worker_specialty_id
+    tasks_cursor = db.execute(query, (station_id, house_type_id, worker_specialty_id))
+    # We add plan_id here manually as it's needed by the frontend startTask call
+    tasks = [dict(row) for row in tasks_cursor.fetchall()]
+    for task in tasks:
+        task['plan_id'] = plan_id # Add plan_id to each task dict
+    return tasks
+
+
 def start_task_log(module_id, task_definition_id, worker_id, start_station_id, house_type_panel_id=None):
     """
     Starts a task by inserting a new record into TaskLogs or updating an existing 'Paused' one.
@@ -987,6 +1022,58 @@ def start_task_log(module_id, task_definition_id, worker_id, start_station_id, h
         return None
 
 
+def get_module_by_plan_id(plan_id):
+    """Fetches an existing module record by its plan_id."""
+    db = get_db()
+    cursor = db.execute("SELECT module_id, plan_id, current_station_id, status FROM Modules WHERE plan_id = ?", (plan_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def create_module_from_plan(plan_id, start_station_id):
+    """
+    Creates a new Module record based on a ProductionPlan item,
+    sets its initial station and status, and updates the ProductionPlan status.
+    Returns the new module_id.
+    """
+    db = get_db()
+    try:
+        with db: # Use transaction
+            # 1. Fetch necessary details from ProductionPlan
+            plan_cursor = db.execute(
+                "SELECT project_id, house_type_id, module_sequence_in_house FROM ProductionPlan WHERE plan_id = ?",
+                (plan_id,)
+            )
+            plan_data = plan_cursor.fetchone()
+            if not plan_data:
+                raise ValueError(f"ProductionPlan item with plan_id {plan_id} not found.")
+
+            # 2. Insert into Modules table
+            module_cursor = db.execute(
+                """INSERT INTO Modules (plan_id, project_id, house_type_id, module_sequence_in_house, current_station_id, status)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (plan_id, plan_data['project_id'], plan_data['house_type_id'], plan_data['module_sequence_in_house'], start_station_id, 'In Progress')
+            )
+            new_module_id = module_cursor.lastrowid
+
+            # 3. Update ProductionPlan status
+            db.execute(
+                "UPDATE ProductionPlan SET status = 'In Progress' WHERE plan_id = ?",
+                (plan_id,)
+            )
+
+        print(f"Created module {new_module_id} for plan {plan_id} at station {start_station_id}.") # Replace with logging
+        return new_module_id
+    except sqlite3.IntegrityError as e:
+        # Could be a unique constraint violation if module for plan_id already exists (race condition?)
+        logger.error(f"Integrity error creating module for plan {plan_id}: {e}", exc_info=True)
+        raise e # Re-raise
+    except Exception as e:
+        logger.error(f"Error creating module for plan {plan_id}: {e}", exc_info=True)
+        # Transaction ensures rollback
+        raise e # Re-raise
+
+
 def get_all_stations():
     """Fetches all stations for dropdowns."""
     db = get_db()
@@ -994,6 +1081,30 @@ def get_all_stations():
     # Ensure sequence_order is selected for use in frontend logic
     cursor = db.execute("SELECT station_id, name, sequence_order FROM Stations ORDER BY sequence_order")
     return [dict(row) for row in cursor.fetchall()]
+
+
+def get_next_planned_module():
+    """Fetches the next module from the production plan (lowest sequence, Planned/Scheduled)."""
+    db = get_db()
+    query = """
+        SELECT
+            pp.plan_id, pp.project_id, p.name as project_name,
+            pp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
+            pp.house_identifier, pp.module_sequence_in_house,
+            pp.planned_sequence, pp.planned_start_datetime,
+            pp.planned_assembly_line, pp.status, pp.created_at, pp.updated_at,
+            pp.tipologia_id, htt.name as tipologia_name
+        FROM ProductionPlan pp
+        JOIN Projects p ON pp.project_id = p.project_id
+        JOIN HouseTypes ht ON pp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseTypeTipologias htt ON pp.tipologia_id = htt.tipologia_id
+        WHERE pp.status IN ('Planned', 'Scheduled')
+        ORDER BY pp.planned_sequence ASC
+        LIMIT 1;
+    """
+    cursor = db.execute(query)
+    module_data = cursor.fetchone()
+    return dict(module_data) if module_data else None
 
 
 # === Workers ===

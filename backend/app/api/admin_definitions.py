@@ -986,39 +986,71 @@ def get_station_overview_data(station_id):
 
     try:
         module_info = queries.get_current_module_for_station(station_id)
-
-        if not module_info:
-            # No module currently at this station, or module has no plan_id link.
-            return jsonify(module=None, tasks=[])
-
-        current_module_id = module_info.get('module_id')
-        current_house_type_id = module_info.get('house_type_id')
-
-        if current_module_id is None: # house_type_id can be part of module_info even if module_id is None from query
-            logger.warn(f"No active module_id found for station {station_id}. Module Info: {module_info}")
-            return jsonify(module=module_info, tasks=[]) # Return module_info as is, but no tasks if no module_id
-
-        tasks = queries.get_tasks_for_module_at_station(
-            station_id=station_id,
-            module_id=current_module_id,
-            house_type_id=current_house_type_id, # This comes from the module_info
-            worker_specialty_id=worker_specialty_id
-        )
-
-        # --- Fetch Panels if it's a Panel Line Station (W1-W5) ---
+        upcoming_module_info = None
+        tasks = []
         panels = []
-        # Need the station's sequence order to check if it's W1-W5
+
+        # Get station details (sequence order)
         station_details_cursor = connection.get_db().execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (station_id,))
         station_details = station_details_cursor.fetchone()
+        station_sequence_order = station_details['sequence_order'] if station_details else None
 
-        if station_details and 1 <= station_details['sequence_order'] <= 5 and current_house_type_id and module_info.get('module_sequence_in_house'):
-            # Fetch panels only if we have the necessary info and it's a panel station
-            panels = queries.get_panels_for_house_type_module(
-                house_type_id=current_house_type_id,
-                module_sequence_number=module_info['module_sequence_in_house']
-            )
+        if module_info:
+            # --- Scenario 1: Module is currently at the station ---
+            current_module_id = module_info.get('module_id')
+            current_house_type_id = module_info.get('house_type_id')
 
-        return jsonify(module=module_info, tasks=tasks, panels=panels) # Include panels in the response
+            if current_module_id:
+                tasks = queries.get_tasks_for_module_at_station(
+                    station_id=station_id,
+                    module_id=current_module_id,
+                    house_type_id=current_house_type_id,
+                    worker_specialty_id=worker_specialty_id
+                )
+                # Fetch panels if applicable (Panel Line W1-W5)
+                if station_sequence_order and 1 <= station_sequence_order <= 5 and current_house_type_id and module_info.get('module_sequence_in_house'):
+                    panels = queries.get_panels_for_house_type_module(
+                        house_type_id=current_house_type_id,
+                        module_sequence_number=module_info['module_sequence_in_house']
+                    )
+            else:
+                 logger.warn(f"Module info found for station {station_id}, but module_id is missing. Info: {module_info}")
+
+        elif station_sequence_order == 1:
+            # --- Scenario 2: No module at station, AND it's the first station (Seq 1) ---
+            # Try to get the next planned module
+            upcoming_module_info = queries.get_next_planned_module()
+            if upcoming_module_info:
+                upcoming_plan_id = upcoming_module_info.get('plan_id')
+                upcoming_house_type_id = upcoming_module_info.get('house_type_id')
+
+                if upcoming_plan_id and upcoming_house_type_id:
+                    # Fetch tasks relevant to this *plan* at this station
+                    tasks = queries.get_tasks_for_plan_at_station(
+                        station_id=station_id,
+                        plan_id=upcoming_plan_id, # Pass plan_id here
+                        house_type_id=upcoming_house_type_id,
+                        worker_specialty_id=worker_specialty_id
+                    )
+                    # Fetch panels if applicable (W1 is sequence 1, so this check is relevant)
+                    if upcoming_house_type_id and upcoming_module_info.get('module_sequence_in_house'):
+                         panels = queries.get_panels_for_house_type_module(
+                            house_type_id=upcoming_house_type_id,
+                            module_sequence_number=upcoming_module_info['module_sequence_in_house']
+                         )
+                else:
+                    logger.warn(f"Upcoming module found for station {station_id}, but plan_id or house_type_id missing. Info: {upcoming_module_info}")
+                    upcoming_module_info = None # Reset if essential info is missing
+
+        # --- Scenario 3: No module at station, and it's NOT the first station ---
+        # (Handled by module_info and upcoming_module_info both being None/empty)
+
+        return jsonify(
+            module=module_info,
+            upcoming_module=upcoming_module_info, # Add upcoming module info
+            tasks=tasks,
+            panels=panels
+        )
     except Exception as e:
         logger.error(f"Error fetching station overview data for station {station_id}: {e}", exc_info=True)
         return jsonify(error=f"Failed to fetch station overview data: {str(e)}"), 500
@@ -1028,22 +1060,27 @@ def get_station_overview_data(station_id):
 
 @admin_definitions_bp.route('/tasks/start', methods=['POST'])
 def start_task():
-    """Starts a task log entry."""
+    """
+    Starts a task log entry. If the module doesn't exist yet (i.e., starting the first task
+    for a planned module at the first station), it creates the module record first.
+    Requires plan_id instead of module_id.
+    """
     data = request.get_json()
-    required_fields = ['module_id', 'task_definition_id', 'worker_id', 'start_station_id']
+    # Changed required fields: plan_id instead of module_id
+    required_fields = ['plan_id', 'task_definition_id', 'worker_id', 'start_station_id']
     if not data or not all(field in data for field in required_fields):
         missing = [field for field in required_fields if field not in data]
         return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
 
-    module_id = data['module_id']
+    plan_id = data['plan_id']
     task_definition_id = data['task_definition_id']
     worker_id = data['worker_id']
     start_station_id = data['start_station_id']
     house_type_panel_id = data.get('house_type_panel_id') # Optional
 
-    # Basic validation (can add more checks, e.g., if module/task/worker/station exist)
+    # Basic validation
     try:
-        module_id = int(module_id)
+        plan_id = int(plan_id)
         task_definition_id = int(task_definition_id)
         worker_id = int(worker_id)
         # start_station_id is string
@@ -1053,30 +1090,63 @@ def start_task():
         return jsonify(error="Invalid ID format. IDs must be integers (except station_id)."), 400
 
     try:
-        # Check if task is already started or completed for this module?
-        # db = connection.get_db()
-        # existing_log = db.execute("SELECT status FROM TaskLogs WHERE module_id = ? AND task_definition_id = ?", (module_id, task_definition_id)).fetchone()
-        # if existing_log and existing_log['status'] in ['In Progress', 'Completed']:
-        #     return jsonify(error=f"Task is already {existing_log['status']}."), 409 # Conflict
+        # 1. Find or Create Module
+        module = queries.get_module_by_plan_id(plan_id)
+        if module:
+            module_id = module['module_id']
+            # Optional: Add check if module.current_station_id matches start_station_id?
+            # Or if module.status is already 'Completed'?
+        else:
+            # Module doesn't exist, create it (this also updates ProductionPlan status)
+            # This should typically only happen at the first station (sequence 1)
+            # We might add a check here: if station_sequence != 1 and module is None, raise error?
+            station_details_cursor = connection.get_db().execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (start_station_id,))
+            station_details = station_details_cursor.fetchone()
+            if not station_details:
+                 return jsonify(error=f"Start station '{start_station_id}' not found."), 400
+            # Allow module creation only if station sequence is 1? Or trust frontend logic? Let's allow for now.
+            # if station_details['sequence_order'] != 1:
+            #     logger.warning(f"Attempting to implicitly create module for plan {plan_id} at non-starting station {start_station_id}")
+                # return jsonify(error="Cannot implicitly create module at non-starting station."), 400
+
+            logger.info(f"Module for plan_id {plan_id} not found. Creating module...")
+            module_id = queries.create_module_from_plan(plan_id, start_station_id)
+            if not module_id:
+                 # create_module_from_plan should raise exception on failure, but handle just in case
+                 logger.error(f"Failed to create module for plan {plan_id} during task start.")
+                 return jsonify(error="Failed to create module record"), 500
+            logger.info(f"Module {module_id} created for plan {plan_id}.")
+
+
+        # 2. Start the Task Log using the obtained module_id
+        # Check if task is already started/completed for this module? (Optional, but good practice)
+        db = connection.get_db()
+        existing_log = db.execute("SELECT status FROM TaskLogs WHERE module_id = ? AND task_definition_id = ?", (module_id, task_definition_id)).fetchone()
+        if existing_log and existing_log['status'] in ['In Progress', 'Completed']:
+            return jsonify(error=f"Task is already {existing_log['status']}."), 409 # Conflict
 
         new_log_id = queries.start_task_log(
-            module_id=module_id,
+            module_id=module_id, # Use the found or created module_id
             task_definition_id=task_definition_id,
             worker_id=worker_id,
             start_station_id=start_station_id,
             house_type_panel_id=house_type_panel_id
         )
+
         if new_log_id:
-            # Optionally fetch the created log entry to return it
-            # log_entry = queries.get_task_log_by_id(new_log_id) # Requires new query function
-            return jsonify(message="Task started successfully", task_log_id=new_log_id), 201
+            return jsonify(message="Task started successfully", task_log_id=new_log_id, module_id=module_id), 201
         else:
             # This case might occur if start_task_log returns None without raising an exception
+            logger.error(f"start_task_log returned None for module {module_id}, task {task_definition_id}.")
             return jsonify(error="Failed to start task log"), 500
+
+    except ValueError as ve: # Catch specific errors like plan_id not found from create_module_from_plan
+        logger.error(f"Value error starting task for plan {plan_id}: {ve}", exc_info=True)
+        return jsonify(error=str(ve)), 400 # Bad request if plan_id invalid
     except sqlite3.IntegrityError as e:
-        logger.error(f"Integrity error starting task: {e}", exc_info=True)
+        logger.error(f"Integrity error starting task for plan {plan_id}: {e}", exc_info=True)
         # Check for specific constraints if needed
         return jsonify(error="Database integrity error starting task. Check if related items exist."), 409
     except Exception as e:
-        logger.error(f"Error starting task: {e}", exc_info=True)
+        logger.error(f"Error starting task for plan {plan_id}: {e}", exc_info=True)
         return jsonify(error="An unexpected error occurred while starting the task"), 500

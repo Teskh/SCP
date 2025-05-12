@@ -27,8 +27,9 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
     const [currentSpecificStationId, setCurrentSpecificStationId] = useState(null);
 
-    // State for station overview data (module and tasks)
-    const [moduleData, setModuleData] = useState(null);
+    // State for station overview data (current module, upcoming module, tasks, panels)
+    const [moduleData, setModuleData] = useState(null); // Module currently at station
+    const [upcomingModuleData, setUpcomingModuleData] = useState(null); // Next module if seq=1 and no current module
     const [tasks, setTasks] = useState([]);
     const [availablePanels, setAvailablePanels] = useState([]); // State for panels
     const [isLoadingStationData, setIsLoadingStationData] = useState(false);
@@ -86,6 +87,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         if (!currentSpecificStationId || !user || user.specialty_id === undefined) {
             // Clear data if station or user/specialty is not set
             setModuleData(null);
+            setUpcomingModuleData(null); // Clear upcoming module too
             setTasks([]);
             setAvailablePanels([]);
             return;
@@ -94,14 +96,17 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         setIsLoadingStationData(true);
         setStationDataError('');
         setModuleData(null);
+        setUpcomingModuleData(null); // Clear upcoming module before fetch
         setTasks([]);
         setAvailablePanels([]); // Clear panels before fetch
         try {
             // console.log("Fetching station data for:", currentSpecificStationId, "Specialty:", user.specialty_id);
             const data = await getStationOverviewData(currentSpecificStationId, user.specialty_id);
-            setModuleData(data.module);
-            setTasks(data.tasks || []); // Ensure tasks is an array
-            setAvailablePanels(data.panels || []); // Store panels if returned
+            // console.log("Station Overview Data Received:", data); // Debugging
+            setModuleData(data.module); // Will be null if no module at station
+            setUpcomingModuleData(data.upcoming_module); // Will be null if module exists or not seq 1 or no upcoming
+            setTasks(data.tasks || []); // Ensure tasks is an array (tasks for current or upcoming module)
+            setAvailablePanels(data.panels || []); // Store panels if returned (for current or upcoming module)
         } catch (error) {
             console.error("Error fetching station data:", error);
             setStationDataError(error.message || 'Error al cargar datos de la estación.');
@@ -157,9 +162,12 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
     };
 
     const startTaskApiCall = async (taskDefinitionId, panelId) => {
-        if (!moduleData || !moduleData.module_id || !user || !user.id || !currentSpecificStationId) {
-            console.error("Missing data needed to start task:", { moduleData, user, currentSpecificStationId });
-            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para iniciar la tarea." });
+        // Determine if we are starting for a current module or an upcoming one
+        const targetModule = moduleData || upcomingModuleData;
+
+        if (!targetModule || !targetModule.plan_id || !user || !user.id || !currentSpecificStationId) {
+            console.error("Missing data needed to start task:", { targetModule, user, currentSpecificStationId });
+            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para iniciar la tarea (plan_id, usuario, estación)." });
             return;
         }
 
@@ -167,14 +175,15 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         setTaskActionError(null);
 
         try {
+            // Send plan_id instead of module_id
             await startTask(
-                moduleData.module_id,
+                targetModule.plan_id, // Use plan_id from current or upcoming module
                 taskDefinitionId,
                 user.id, // worker_id
                 currentSpecificStationId, // start_station_id
-                panelId // house_type_panel_id (will be null if not panel line)
+                panelId // house_type_panel_id (will be null if not panel line or not selected)
             );
-            // Success! Refresh data to show updated task status
+            // Success! Refresh data to show updated task status (module should now appear as current)
             fetchStationData(); // Re-fetch all station data
             setSelectingPanelForTask(null); // Close panel selector if open
             setSelectedPanelId('');
@@ -298,9 +307,10 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                 <div>
                     {isLoadingStationData && <p>Cargando datos del módulo y tareas...</p>}
                     {stationDataError && <p style={{ color: 'red' }}>{stationDataError}</p>}
-                    
-                    {moduleData && (
-                        <div style={{ marginTop: '20px', padding: '15px', border: '1px solid #eee', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
+
+                    {/* Display Current Module OR Upcoming Module */}
+                    {moduleData ? (
+                        <div style={moduleInfoBoxStyle}>
                             <h3>Módulo Actual</h3>
                             <p><strong>Proyecto:</strong> {moduleData.project_name}</p>
                             <p><strong>Tipo de Casa:</strong> {moduleData.house_type_name} {moduleData.tipologia_name ? `(${moduleData.tipologia_name})` : ''}</p>
@@ -309,14 +319,24 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                             <p><strong>Secuencia Planificada:</strong> {moduleData.planned_sequence}</p>
                             <p><strong>Estado Módulo:</strong> {moduleData.module_status}</p>
                         </div>
-                    )}
-                    {!moduleData && !isLoadingStationData && !stationDataError && (
-                        <p style={{ marginTop: '20px' }}>No hay módulo asignado a esta estación actualmente o no se encontró información del módulo.</p>
+                    ) : upcomingModuleData ? (
+                        <div style={{...moduleInfoBoxStyle, backgroundColor: '#eef'}}> {/* Slightly different background for upcoming */}
+                            <h3>Próximo Módulo</h3>
+                            <p><strong>Proyecto:</strong> {upcomingModuleData.project_name}</p>
+                            <p><strong>Tipo de Casa:</strong> {upcomingModuleData.house_type_name} {upcomingModuleData.tipologia_name ? `(${upcomingModuleData.tipologia_name})` : ''}</p>
+                            <p><strong>Identificador Casa:</strong> {upcomingModuleData.house_identifier}</p>
+                            <p><strong>Módulo:</strong> {upcomingModuleData.module_sequence_in_house} de {upcomingModuleData.number_of_modules}</p>
+                            <p><strong>Secuencia Planificada:</strong> {upcomingModuleData.planned_sequence}</p>
+                            <p><strong>Estado Plan:</strong> {upcomingModuleData.status}</p>
+                        </div>
+                    ) : !isLoadingStationData && !stationDataError && (
+                        <p style={{ marginTop: '20px' }}>No hay módulo asignado a esta estación actualmente ni módulo próximo en planificación.</p>
                     )}
 
+                    {/* Display Tasks (for current or upcoming module) */}
                     {tasks.length > 0 && (
                         <div style={{ marginTop: '30px' }}>
-                            <h3>Tareas Pendientes/En Progreso</h3>
+                            <h3>Tareas {moduleData ? 'Pendientes/En Progreso' : 'Próximo Módulo'}</h3>
                             <ul style={{ listStyleType: 'none', padding: 0 }}>
                                 {tasks.map(task => {
                                     const isSelectingPanel = selectingPanelForTask === task.task_definition_id;
@@ -381,8 +401,9 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                             </ul>
                         </div>
                     )}
-                    {!isLoadingStationData && !stationDataError && moduleData && tasks.length === 0 && (
-                         <p style={{ marginTop: '20px' }}>No hay tareas disponibles para este módulo en esta estación para su especialidad, o todas las tareas están completas.</p>
+                    {/* Message when no tasks are available */}
+                    {!isLoadingStationData && !stationDataError && (moduleData || upcomingModuleData) && tasks.length === 0 && (
+                         <p style={{ marginTop: '20px' }}>No hay tareas disponibles para {moduleData ? 'este módulo' : 'el próximo módulo'} en esta estación para su especialidad.</p>
                     )}
                 </div>
             ) : (
@@ -396,6 +417,15 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
 };
 
 // Some basic styles (consider moving to a separate CSS file or styled-components)
+const moduleInfoBoxStyle = {
+    marginTop: '20px',
+    padding: '15px',
+    border: '1px solid #eee',
+    borderRadius: '5px',
+    backgroundColor: '#f9f9f9',
+    textAlign: 'left', // Align text left within the box
+};
+
 const taskListItemStyle = {
     border: '1px solid #ddd',
     padding: '15px',

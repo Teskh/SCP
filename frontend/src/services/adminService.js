@@ -565,11 +565,12 @@ export const getProductionStatus = async () => { // Removed upcomingCount parame
 
 // === Station Page Data ===
 /**
- * Fetches the overview data for a specific station, including the current module,
- * tasks relevant to the specialty, and available panels if it's a panel line station.
+ * Fetches the overview data for a specific station.
+ * Returns the current module OR the next upcoming module (if station seq=1 and no current module),
+ * relevant tasks, and available panels if applicable.
  * @param {string} stationId - The ID of the station (e.g., 'W1', 'A3').
  * @param {number|null} specialtyId - The specialty ID of the logged-in worker, or null.
- * @returns {Promise<{module: object|null, tasks: Array<object>, panels: Array<object>}>}
+ * @returns {Promise<{module: object|null, upcoming_module: object|null, tasks: Array<object>, panels: Array<object>}>}
  */
 export const getStationOverviewData = async (stationId, specialtyId) => {
     // specialtyId can be null or undefined. If so, it won't be added to query params or backend handles it.
@@ -593,17 +594,18 @@ export const getStationOverviewData = async (stationId, specialtyId) => {
 
 
 /**
- * Sends a request to start a specific task for a module.
- * @param {number} moduleId - The ID of the module the task belongs to.
+ * Sends a request to start a specific task for a planned production item (module).
+ * If the module doesn't exist yet in the Modules table, the backend will create it.
+ * @param {number} planId - The ID of the ProductionPlan item the task belongs to.
  * @param {number} taskDefinitionId - The ID of the task definition being started.
  * @param {number} workerId - The ID of the worker starting the task.
  * @param {string} startStationId - The ID of the station where the task is being started.
  * @param {number|null} [houseTypePanelId] - Optional ID of the panel associated with the task (for panel line).
- * @returns {Promise<object>} - The response from the server (e.g., { message: "...", task_log_id: ... }).
+ * @returns {Promise<object>} - The response from the server (e.g., { message: "...", task_log_id: ..., module_id: ... }).
  */
-export const startTask = async (moduleId, taskDefinitionId, workerId, startStationId, houseTypePanelId = null) => {
+export const startTask = async (planId, taskDefinitionId, workerId, startStationId, houseTypePanelId = null) => {
     const payload = {
-        module_id: moduleId,
+        plan_id: planId, // Send plan_id instead of module_id
         task_definition_id: taskDefinitionId,
         worker_id: workerId,
         start_station_id: startStationId,
