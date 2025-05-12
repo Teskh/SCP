@@ -53,7 +53,7 @@ Internal Use Only: Simplified security.
 Low Stakes: Focus on visibility, not critical enforcement (initially).
 Full-Screen SPA (React): Essential for tablet kiosk experience.
 Defined Production Flow: Logic tied to the specific station layout.
-No Task Dependencies (Initial): Workflow managed by users.
+Task Dependencies: Tasks can specify prerequisite tasks via comma-separated task_definition_ids.
 Station-Context Driven: Core logic relies on fixed tablet location.
 Separate Admin Interface: For data management (List of tasks, List of workers/specialties, Production planning, House Types including Parameters and Panels per module)
 Ensure keeping this document in context when making any change, as well as our schema and App.js.

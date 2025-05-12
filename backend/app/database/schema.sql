@@ -126,6 +126,7 @@ CREATE TABLE TaskDefinitions (
     house_type_id INTEGER, -- Which type of house this task applies to (can be NULL if generic)
     specialty_id INTEGER, -- Optional: Link task to a specific specialty
     station_sequence_order INTEGER, -- Optional: Link task to a specific production sequence step (e.g., 1 for W1, 7 for A1/B1/C1)
+    task_dependencies TEXT, -- Comma-separated list of prerequisite task_definition_ids (e.g., "1,5,8")
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE SET NULL, -- Allow house type deletion without deleting task def
     FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id) ON DELETE SET NULL -- Allow specialty deletion without deleting task def
     -- No direct FK to Stations.sequence_order as it's not unique
