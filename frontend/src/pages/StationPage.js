@@ -24,28 +24,6 @@ const checkSpecificIdValidity = (specificId, ambiguousSequence, stations) => {
 
 
 const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingAllStations, allStationsError }) => {
-
-const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
-const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
-const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId';
-
-// Helper function to check if a specific station ID is valid for the ambiguous context
-const checkSpecificIdValidity = (specificId, ambiguousSequence, stations) => {
-    if (!specificId || !stations || stations.length === 0) return false;
-    const station = stations.find(s => s.station_id === specificId);
-    if (!station) return false;
-
-    if (ambiguousSequence === PANEL_LINE_GENERAL_VALUE) {
-        return station.sequence_order >= 1 && station.sequence_order <= 5; // W stations
-    } else {
-        const numericAmbiguousSeq = parseInt(ambiguousSequence, 10);
-        if (isNaN(numericAmbiguousSeq)) return false;
-        return station.sequence_order === numericAmbiguousSeq;
-    }
-};
-
-
-const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingAllStations, allStationsError }) => {
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
     const [currentSpecificStationId, setCurrentSpecificStationId] = useState(null);
 
