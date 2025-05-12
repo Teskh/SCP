@@ -934,8 +934,8 @@ def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker
             COALESCE(tl.status, 'Not Started') AS task_status,
             tl.task_log_id,
             tl.started_at,
-            tl.completed_at,
-            tl.house_type_panel_id -- Retrieve panel ID if logged
+            tl.completed_at
+            -- tl.house_type_panel_id -- This column does not exist in TaskLogs
         FROM TaskDefinitions td
         LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.module_id = ?
         -- Ensure the task definition is for the specific station by matching station_id via sequence_order
