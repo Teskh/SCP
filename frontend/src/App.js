@@ -11,7 +11,7 @@ import HouseTypesManager from './components/admin/HouseTypesManager';
 import HouseParametersManager from './components/admin/HouseParametersManager';
 import SpecialtiesManager from './components/admin/SpecialtiesManager';
 import AdminTeamManager from './components/admin/AdminTeamManager';
-import ProjectsManager from './components/admin/ProjectsManager';
+// import ProjectsManager from './components/admin/ProjectsManager'; // Removed
 import ActiveProductionDashboard from './components/admin/ActiveProductionDashboard'; // Import ActiveProductionDashboard
 import StationContextSelector from './components/admin/StationContextSelector'; // Import StationContextSelector
 // Import other pages/components as needed
@@ -157,7 +157,7 @@ function App() {
                     <Route path="house-parameters" element={<HouseParametersManager />} />
                     <Route path="specialties" element={<SpecialtiesManager />} />
                     <Route path="admin-team" element={<AdminTeamManager />} />
-                    <Route path="projects" element={<ProjectsManager />} />
+                    {/* <Route path="projects" element={<ProjectsManager />} /> Removed */}
                     <Route path="production-status" element={<ActiveProductionDashboard />} />
                     <Route path="station-context" element={<StationContextSelector allStations={allStations} isLoadingAllStations={isLoadingAllStations} />} />
                     <Route index element={

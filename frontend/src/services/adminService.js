@@ -369,8 +369,7 @@ export const deleteHouseParameter = async (id) => {
 };
 
 
-// === Project related functions are REMOVED as per new structure ===
-// Project management is now part of Module Production Plan
+// === ProjectModules related functions are removed as they are deprecated ===
 
 
 // === House SubTypes (formerly Tipologias) ===
@@ -461,15 +460,12 @@ export const addModuleProductionPlanItem = async (itemData) => {
     return handleResponse(response);
 };
 
-export const addModuleProductionPlan = async (planData) => {
-    // planData: { project_name, house_type_id, house_identifier_base, number_of_houses, modules_per_house (optional) }
-    // This function might be for bulk creation based on project parameters.
-    // If it's intended for single item creation, it might be redundant with addModuleProductionPlanItem
-    // or its endpoint/payload needs to be distinct. For now, keeping as is.
-    const response = await fetch(`${API_BASE_URL}/module-production-plan/bulk`, { // Assuming a different endpoint for bulk based on original comment
+export const addModuleProductionPlanBatch = async (batchData) => {
+    // batchData: { project_name, house_type_id, house_identifier_base, number_of_houses }
+    const response = await fetch(`${API_BASE_URL}/module-production-plan/generate-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planData),
+        body: JSON.stringify(batchData),
     });
     return handleResponse(response);
 };

@@ -86,14 +86,7 @@ function AdminDashboard() {
                     <li style={{...navItemStyles, marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #ddd'}}>
                         <strong style={{ display: 'block', padding: '8px 12px', color: '#555' }}>Planificación y Producción</strong>
                     </li>
-                    <li style={navItemStyles}>
-                        <Link
-                            to="/admin/projects" // This route now renders the ModuleProductionPlanManager
-                            style={{ ...navLinkStyles, ...(isActive('/admin/projects') ? navLinkActiveStyles : {}) }}
-                        >
-                            Plan de Producción (Módulos)
-                        </Link>
-                    </li>
+                    {/* Link to old ProjectsManager (Plan de Producción) removed */}
                     <li style={navItemStyles}>
                         <Link
                             to="/admin/production-status"

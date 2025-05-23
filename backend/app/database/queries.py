@@ -16,65 +16,68 @@ def get_max_planned_sequence():
     max_seq = cursor.fetchone()[0]
     return max_seq if max_seq is not None else 0
 
-def generate_module_production_plan(project_name, house_type_id, house_identifier_base, number_of_houses, modules_per_house, initial_sequence_offset=0):
+def generate_module_production_plan(project_name, house_type_id, house_identifier_base, number_of_houses):
     """
-    Generates ModuleProductionPlan items for a given project and house type.
-    Each house will have 'modules_per_house' entries in the plan.
+    Generates ModuleProductionPlan items in batch for a given project and house type.
+    Infers modules_per_house from HouseTypes.
+    planned_start_datetime auto-increments by 1 hour per module.
+    Status defaults to 'Planned'. Sequence is appended.
     """
     db = get_db()
     items_to_add = []
-    current_sequence = get_max_planned_sequence() + 1 + initial_sequence_offset
-    assembly_lines = ['A', 'B', 'C'] # Default lines, can be customized or made more dynamic
-    line_index = 0
-    # Base time for planning, can be adjusted or made a parameter
-    start_datetime_base = datetime.now()
-
-    # Fetch house type details, specifically number_of_modules if not passed directly
+    
+    # Fetch house type details to get number_of_modules
     ht_cursor = db.execute("SELECT number_of_modules FROM HouseTypes WHERE house_type_id = ?", (house_type_id,))
     ht_data = ht_cursor.fetchone()
     if not ht_data:
         logging.error(f"HouseType ID {house_type_id} not found for plan generation.")
-        return False
-    # Use actual modules_per_house from DB unless an override is provided (e.g. for partial planning)
-    actual_modules_per_house = ht_data['number_of_modules'] if modules_per_house is None else modules_per_house
+        raise ValueError(f"HouseType ID {house_type_id} not found.")
+    actual_modules_per_house = ht_data['number_of_modules']
+    if actual_modules_per_house <= 0:
+        logging.error(f"HouseType ID {house_type_id} has invalid number_of_modules: {actual_modules_per_house}.")
+        raise ValueError(f"HouseType ID {house_type_id} has 0 or negative modules.")
 
+    current_max_sequence = get_max_planned_sequence()
+    current_sequence = current_max_sequence + 1
+    
+    # Base time for planning starts now, increments by 1 hour for each module added in this batch
+    current_planned_datetime = datetime.now()
+
+    assembly_lines = ['A', 'B', 'C'] 
+    line_index = (current_max_sequence % len(assembly_lines)) # Try to continue line cycle from last item
 
     for i in range(number_of_houses): # For each house instance
-        # Construct unique house identifier, e.g., "ProjectAlpha-Lot1", "ProjectAlpha-Lot2"
         house_identifier = f"{house_identifier_base}-{i+1}"
 
         for module_num in range(1, actual_modules_per_house + 1): # For each module within the house
             planned_assembly_line = assembly_lines[line_index % len(assembly_lines)]
-
-            # Simple date increment logic (e.g., add 8 hours per module) - ADJUST AS NEEDED
-            # This logic should be more sophisticated in a real system
-            planned_start_dt = start_datetime_base + timedelta(hours=(current_sequence - (get_max_planned_sequence() + 1)) * 8)
-            planned_start_datetime_str = planned_start_dt.strftime('%Y-%m-%d %H:%M:%S')
+            planned_start_datetime_str = current_planned_datetime.strftime('%Y-%m-%d %H:%M:%S')
 
             items_to_add.append((
                 project_name,
                 house_type_id,
-                house_identifier, # Unique identifier for the house instance
-                module_num,       # Module number within this house (1 to N)
+                house_identifier, 
+                module_num,       
                 current_sequence,
                 planned_start_datetime_str,
                 planned_assembly_line,
-                None, # sub_type_id - Set to NULL initially, can be updated later
+                None, # sub_type_id - Set to NULL initially
                 'Planned' # Default status
             ))
             current_sequence += 1
-            line_index += 1 # Alternate line per module
+            line_index += 1 
+            current_planned_datetime += timedelta(hours=1) # Increment time for the next module
 
     if items_to_add:
         try:
-            # Note: add_bulk_module_production_plan_items needs to be defined
             add_bulk_module_production_plan_items(items_to_add)
             logging.info(f"Successfully generated {len(items_to_add)} plan items for project '{project_name}'.")
             return True
         except Exception as e:
             logging.error(f"Error generating bulk plan items for project '{project_name}': {e}", exc_info=True)
-            return False
-    return True # No items needed (e.g., number_of_houses = 0), still success
+            # Re-raise to be caught by the API layer for proper HTTP response
+            raise e
+    return True # No items to add (e.g., number_of_houses = 0), still considered success
 
 def remove_planned_items_for_project_name(project_name):
     """Removes 'Planned' or 'Scheduled' ModuleProductionPlan items for a given project_name."""
@@ -133,7 +136,11 @@ def add_bulk_module_production_plan_items(items_data):
         return False
 
 def get_module_production_plan(filters=None, sort_by='planned_sequence', sort_order='ASC', limit=None, offset=None):
-    """Fetches module production plan items with optional filtering, sorting, and pagination."""
+    """
+    Fetches module production plan items, excluding 'Completed' status,
+    with optional filtering, sorting, and pagination.
+    Default sort is by planned_sequence ASC.
+    """
     db = get_db()
     base_query = """
         SELECT
@@ -147,21 +154,25 @@ def get_module_production_plan(filters=None, sort_by='planned_sequence', sort_or
         JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
         LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
     """
-    where_clauses = []
+    where_clauses = ["mpp.status != 'Completed'"] # Default filter
     params = []
 
     if filters:
         if filters.get('project_name'):
-            where_clauses.append("mpp.project_name LIKE ?") # Use LIKE for partial matches
+            where_clauses.append("mpp.project_name LIKE ?")
             params.append(f"%{filters['project_name']}%")
         if filters.get('house_type_id'):
             where_clauses.append("mpp.house_type_id = ?")
             params.append(filters['house_type_id'])
-        if filters.get('status'):
+        # Status filter might still be useful for other non-completed statuses
+        if filters.get('status') and filters['status'].lower() != 'completed':
             statuses = filters['status'].split(',')
-            placeholders = ','.join('?' * len(statuses))
-            where_clauses.append(f"mpp.status IN ({placeholders})")
-            params.extend(statuses)
+            # Ensure 'Completed' is not part of the filter if explicitly passed
+            statuses = [s for s in statuses if s.lower() != 'completed']
+            if statuses:
+                placeholders = ','.join('?' * len(statuses))
+                where_clauses.append(f"mpp.status IN ({placeholders})")
+                params.extend(statuses)
         if filters.get('start_date_after'):
             where_clauses.append("mpp.planned_start_datetime >= ?")
             params.append(filters['start_date_after'])
@@ -172,13 +183,21 @@ def get_module_production_plan(filters=None, sort_by='planned_sequence', sort_or
     if where_clauses:
         base_query += " WHERE " + " AND ".join(where_clauses)
 
+    # Default sort is planned_sequence ASC, other sorts are secondary or override
     allowed_sort_columns = ['plan_id', 'project_name', 'house_type_name', 'house_identifier', 'module_number', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status', 'created_at', 'updated_at', 'sub_type_name']
-    if sort_by not in allowed_sort_columns:
-        sort_by = 'planned_sequence'
-    if sort_order.upper() not in ['ASC', 'DESC']:
-        sort_order = 'ASC'
+    
+    final_sort_by = 'mpp.planned_sequence' # Primary sort
+    final_sort_order = 'ASC'
 
-    base_query += f" ORDER BY {sort_by} {sort_order}"
+    if sort_by in allowed_sort_columns and sort_by != 'planned_sequence':
+        # If a different primary sort is requested, apply it, then sequence as secondary
+        final_sort_by = f"{sort_by} {sort_order.upper() if sort_order.upper() in ['ASC', 'DESC'] else 'ASC'}, mpp.planned_sequence ASC"
+    elif sort_by == 'planned_sequence' and sort_order.upper() == 'DESC':
+        final_sort_order = 'DESC'
+        final_sort_by = f"mpp.planned_sequence {final_sort_order}"
+    # else it's default planned_sequence ASC
+
+    base_query += f" ORDER BY {final_sort_by}"
 
     if limit is not None:
         base_query += " LIMIT ?"
@@ -1330,8 +1349,8 @@ def get_station_status_and_upcoming_modules():
         FROM ModuleProductionPlan mpp
         JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
         LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE mpp.status IN ('Planned', 'Panels', 'Magazine') -- Relevant statuses for "upcoming"
-        ORDER BY mpp.planned_sequence ASC, mpp.planned_start_datetime ASC
+        WHERE mpp.status != 'Completed' -- Filter out completed items
+        ORDER BY mpp.planned_sequence ASC -- Ensure sorting by sequence
     """
     upcoming_cursor = db.execute(upcoming_query)
     upcoming_items = [dict(row) for row in upcoming_cursor.fetchall()]
@@ -1574,58 +1593,7 @@ def delete_parameter_from_house_type_module_sub_type(house_type_id, parameter_id
         logging.error(f"Error deleting house type parameter by composite key: {e}", exc_info=True)
         return False
 
-# === ProjectModules (Simplified - No direct project link in this table anymore) ===
-# This table might be used to define templates of house types for a "project concept" if needed elsewhere,
-# but it's not directly tied to ModuleProductionPlan's project_name for active production tracking.
-# For now, providing basic CRUD assuming it's managed independently if still used.
-
-def get_all_project_modules():
-    """Fetches all project module configurations."""
-    db = get_db()
-    query = """
-        SELECT pm.project_module_id, pm.house_type_id, ht.name as house_type_name, pm.quantity
-        FROM ProjectModules pm
-        JOIN HouseTypes ht ON pm.house_type_id = ht.house_type_id
-        ORDER BY ht.name
-    """
-    cursor = db.execute(query)
-    return [dict(row) for row in cursor.fetchall()]
-
-def add_project_module(house_type_id, quantity):
-    """Adds a project module configuration."""
-    db = get_db()
-    try:
-        cursor = db.execute(
-            "INSERT INTO ProjectModules (house_type_id, quantity) VALUES (?, ?)",
-            (house_type_id, quantity)
-        )
-        db.commit()
-        return cursor.lastrowid
-    except sqlite3.Error as e:
-        logging.error(f"Error adding project module: {e}", exc_info=True)
-        return None
-
-def update_project_module(project_module_id, house_type_id, quantity):
-    """Updates a project module configuration."""
-    db = get_db()
-    try:
-        cursor = db.execute(
-            "UPDATE ProjectModules SET house_type_id = ?, quantity = ? WHERE project_module_id = ?",
-            (house_type_id, quantity, project_module_id)
-        )
-        db.commit()
-        return cursor.rowcount > 0
-    except sqlite3.Error as e:
-        logging.error(f"Error updating project module {project_module_id}: {e}", exc_info=True)
-        return False
-
-def delete_project_module(project_module_id):
-    """Deletes a project module configuration."""
-    db = get_db()
-    try:
-        cursor = db.execute("DELETE FROM ProjectModules WHERE project_module_id = ?", (project_module_id,))
-        db.commit()
-        return cursor.rowcount > 0
-    except sqlite3.Error as e:
-        logging.error(f"Error deleting project module {project_module_id}: {e}", exc_info=True)
-        return False
+# ProjectModules table and its related functions are considered deprecated by the new batch planning approach.
+# They are removed to avoid confusion. If ProjectModules table is still needed for other purposes,
+# its functions should be reviewed and potentially kept, but they are not part of this refactor's scope
+# for production planning.

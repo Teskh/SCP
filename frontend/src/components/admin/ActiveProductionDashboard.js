@@ -6,6 +6,7 @@ import {
     PointerSensor,
     useSensor,
     useSensors,
+    DragOverlay
 } from '@dnd-kit/core';
 import {
     arrayMove,
@@ -17,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import SetSubTypeModal from './SetSubTypeModal'; // Renamed from SetTipologiaModal
 import SetDateTimeModal from './SetDateTimeModal';
+import AddProductionBatchModal from './AddProductionBatchModal'; // New Modal
 import * as adminService from '../../services/adminService';
 import styles from './AdminComponentStyles';
 
@@ -224,6 +226,11 @@ function ActiveProductionDashboard() {
     const [dateTimeCurrentValue, setDateTimeCurrentValue] = useState(null);
     const [isSavingDateTime, setIsSavingDateTime] = useState(false);
 
+    const [isAddBatchModalOpen, setIsAddBatchModalOpen] = useState(false);
+    const [allHouseTypes, setAllHouseTypes] = useState([]);
+    const [isLoadingHouseTypes, setIsLoadingHouseTypes] = useState(false);
+
+
     const fetchData = useCallback(async () => {
         setSelectedItemIds(new Set());
         setLastClickedItemId(null);
@@ -237,13 +244,30 @@ function ActiveProductionDashboard() {
                 return acc;
             }, {});
             setStationStatusMap(statusMap);
-            setUpcomingItems(data.upcoming_items || []);
+            setUpcomingItems(data.upcoming_items || []); // These are already filtered by backend
             setLastUpdated(new Date());
         } catch (err) {
             setError(`Error fetching production status: ${err.message}`);
             console.error(err);
         } finally {
             setIsLoading(false);
+        }
+    }, []);
+
+    const fetchHouseTypesForModal = useCallback(async () => {
+        setIsLoadingHouseTypes(true);
+        try {
+            const typesData = await adminService.getHouseTypes(); // Fetches all details
+            setAllHouseTypes(typesData.map(ht => ({ // Simplify for dropdown
+                house_type_id: ht.house_type_id,
+                name: ht.name,
+                number_of_modules: ht.number_of_modules 
+            })) || []);
+        } catch (err) {
+            setError(`Error fetching house types for batch modal: ${err.message}`);
+            setAllHouseTypes([]);
+        } finally {
+            setIsLoadingHouseTypes(false);
         }
     }, []);
     
@@ -507,6 +531,34 @@ function ActiveProductionDashboard() {
         } catch (err) { setUpcomingItems(originalItems); throw err; } finally { setIsSavingDateTime(false); }
     };
 
+    const handleOpenAddBatchModal = () => {
+        fetchHouseTypesForModal(); // Fetch/refresh house types when opening
+        setIsAddBatchModalOpen(true);
+        setError(''); // Clear previous errors
+    };
+
+    const handleCloseAddBatchModal = () => {
+        setIsAddBatchModalOpen(false);
+    };
+
+    const handleAddProductionBatch = async (batchData) => {
+        setIsLoading(true); // Use main loading indicator or a specific one for the modal
+        setError('');
+        try {
+            await adminService.addModuleProductionPlanBatch(batchData); // Updated service call
+            await fetchData(); // Refresh the entire dashboard data
+            handleCloseAddBatchModal();
+            setLastUpdated(new Date());
+        } catch (err) {
+            setError(`Error adding production batch: ${err.message}`);
+            // Modal can display this error, or it can be shown on the main page
+            // For now, error state is on main page.
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+
     const renderStation = (stationId) => {
         const station = stationStatusMap[stationId]; // Use map for direct access
         if (!station) return <div key={`error-${stationId}`} style={stationBoxStyle}>Error: Estación {stationId} no encontrada</div>;
@@ -576,9 +628,14 @@ function ActiveProductionDashboard() {
             <h2 style={styles.header}>Estado Actual de Producción</h2>
             {error && <p style={styles.error}>{error}</p>}
             {isLoading && !stationStatusData.station_status.length && <p>Cargando...</p>}
-            <div style={{ marginBottom: '10px', fontSize: '0.8em', color: '#666' }}>
-                Última actualización: {lastUpdated ? lastUpdated.toLocaleTimeString() : 'N/A'}
-                <button onClick={fetchData} disabled={isLoading} style={{ marginLeft: '10px', padding: '2px 5px', fontSize: '0.9em' }}>Refrescar</button>
+            <div style={{ marginBottom: '10px', fontSize: '0.8em', color: '#666', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Última actualización: {lastUpdated ? lastUpdated.toLocaleTimeString() : 'N/A'}</span>
+                <div>
+                    <button onClick={fetchData} disabled={isLoading} style={{ ...styles.button, ...styles.buttonSecondary, padding: '5px 10px', fontSize: '0.9em', marginRight: '10px' }}>Refrescar</button>
+                    <button onClick={handleOpenAddBatchModal} disabled={isLoading || isLoadingHouseTypes} style={{ ...styles.button, ...styles.buttonPrimary, padding: '5px 10px', fontSize: '0.9em' }}>
+                        Añadir Lote de Producción
+                    </button>
+                </div>
             </div>
 
             <h3>Línea de Paneles (W)</h3>{renderLine('W')}
@@ -653,6 +710,16 @@ function ActiveProductionDashboard() {
                         onSave={handleSetDateTime}
                         onClose={handleCloseDateTimeModal}
                         isLoading={isSavingDateTime}
+                    />
+                )}
+                {isAddBatchModalOpen && (
+                    <AddProductionBatchModal
+                        isOpen={isAddBatchModalOpen}
+                        onClose={handleCloseAddBatchModal}
+                        onAddBatch={handleAddProductionBatch}
+                        houseTypes={allHouseTypes}
+                        isLoadingHouseTypes={isLoadingHouseTypes}
+                        // Pass any other necessary props like error display callback or loading state for the modal itself
                     />
                 )}
             </div>
