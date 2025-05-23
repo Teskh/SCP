@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS TaskPauses;
 DROP TABLE IF EXISTS TaskLogs;
 DROP TABLE IF EXISTS TaskDefinitions;
 DROP TABLE IF EXISTS Modules;
-DROP TABLE IF EXISTS ProductionPlan; -- Added: Drop new table
+DROP TABLE IF EXISTS ModuleProductionPlan; -- Added: Drop new table
 DROP TABLE IF EXISTS ProjectModules;
 DROP TABLE IF EXISTS HouseTypePanels;
 DROP TABLE IF EXISTS Multiwalls;
@@ -17,8 +17,6 @@ DROP TABLE IF EXISTS Workers; -- Drop Workers before Specialties if supervisor F
 DROP TABLE IF EXISTS Specialties;
 DROP TABLE IF EXISTS AdminTeam;
 
-
--- Recreate tables
 
 CREATE TABLE Specialties (
     specialty_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,15 +34,6 @@ CREATE TABLE Workers (
     is_active INTEGER DEFAULT 1, -- Boolean (0=false, 1=true)
     FOREIGN KEY (specialty_id) REFERENCES Specialties(specialty_id),
     FOREIGN KEY (supervisor_id) REFERENCES AdminTeam(admin_team_id) ON DELETE SET NULL
-);
-
--- ========= Projects =========
-
-CREATE TABLE Projects (
-    project_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE, -- e.g., 'Maple Street Development - Phase 1'
-    description TEXT,
-    status TEXT DEFAULT 'Planned' -- e.g., 'Planned', 'Active', 'Completed', 'On Hold'
 );
 
 CREATE TABLE ProjectModules (
@@ -67,53 +56,33 @@ CREATE TABLE Stations (
 
 -- ========= Production Plan =========
 
-CREATE TABLE ProductionPlan (
+CREATE TABLE ModuleProductionPlan (
     plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER NOT NULL,
+    project TEXT NOT NULL,
     house_type_id INTEGER NOT NULL,
     house_identifier TEXT NOT NULL, -- Unique identifier for this house instance within the project (e.g., "ProjectX-Lot-12")
-    module_sequence_in_house INTEGER NOT NULL, -- Which module of the house this plan item represents (1-based)
+    module_number INTEGER NOT NULL, -- Which module of the house this plan item represents
     planned_sequence INTEGER NOT NULL, -- Overall production order across all projects/plans
     planned_start_datetime TEXT NOT NULL, -- ISO8601 format recommended (YYYY-MM-DD HH:MM:SS)
     planned_assembly_line TEXT NOT NULL CHECK(planned_assembly_line IN ('A', 'B', 'C')), -- Which line it's planned for
-    tipologia_id INTEGER, -- Added: Link to the specific tipologia for this planned item
-    status TEXT NOT NULL DEFAULT 'Planned' CHECK(status IN ('Planned', 'Scheduled', 'In Progress', 'Completed', 'On Hold', 'Cancelled')), -- Status of this planned item
+    sub_type_id INTEGER, -- Added: Link to the specific tipologia for this planned item
+    status TEXT NOT NULL DEFAULT 'Planned' CHECK(status IN ('Planned', 'Panels', 'Magazine', 'Assembly', 'Completed')), -- Status of this planned item
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP, -- Consider adding triggers to update this automatically
     FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE, -- If project deleted, delete plan items
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE RESTRICT, -- Don't allow deleting house type if planned
     FOREIGN KEY (tipologia_id) REFERENCES HouseTypeTipologias(tipologia_id) ON DELETE SET NULL, -- Added FK: If tipologia deleted, set plan item's tipologia to NULL
-    -- Ensure house identifier + module sequence is unique within a project
     UNIQUE (project_id, house_identifier, module_sequence_in_house)
-    -- UNIQUE (planned_sequence) -- Should sequence be globally unique? Maybe not strictly necessary, allows reordering.
 );
 
--- Indexes for ProductionPlan
-CREATE INDEX idx_productionplan_project ON ProductionPlan (project_id);
-CREATE INDEX idx_productionplan_house_type ON ProductionPlan (house_type_id);
-CREATE INDEX idx_productionplan_sequence ON ProductionPlan (planned_sequence);
-CREATE INDEX idx_productionplan_start_datetime ON ProductionPlan (planned_start_datetime);
-CREATE INDEX idx_productionplan_status ON ProductionPlan (status);
-CREATE INDEX idx_productionplan_tipologia ON ProductionPlan (tipologia_id); -- Added index for tipologia FK
--- Updated index for the unique constraint
-CREATE INDEX idx_productionplan_identifier_module ON ProductionPlan (project_id, house_identifier, module_sequence_in_house);
-
-
-CREATE TABLE Modules (
-    module_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER NOT NULL,
-    house_type_id INTEGER NOT NULL, -- Which type of house this module belongs to
-    module_sequence_in_house INTEGER, -- e.g., 1 of 2, 2 of 2 for a 2-module house
-    planned_assembly_line TEXT, -- 'A', 'B', or 'C'. Relevant for modules leaving M1. Nullable initially.
-    current_station_id TEXT, -- Foreign Key to Stations table. Tracks the module's physical location. Nullable if not yet on the line.
-    status TEXT DEFAULT 'Planned', -- e.g., 'Planned', 'In Progress', 'Completed', 'On Hold'
-    last_moved_at TEXT, -- Timestamp of the last move, useful for tracking flow
-    plan_id INTEGER, -- Added: Link back to the specific production plan item this module belongs to
-    FOREIGN KEY (project_id) REFERENCES Projects(project_id),
-    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id),
-    FOREIGN KEY (current_station_id) REFERENCES Stations(station_id) ON UPDATE CASCADE ON DELETE SET NULL, -- Or RESTRICT? Decide policy.
-    FOREIGN KEY (plan_id) REFERENCES ProductionPlan(plan_id) ON DELETE SET NULL -- If plan item is deleted, unlink module but don't delete module? Or CASCADE? Let's use SET NULL for now.
-);
+-- Indexes for ModuleProductionPlan
+CREATE INDEX idx_ModuleProductionPlan_project ON ModuleProductionPlan (project_id);
+CREATE INDEX idx_ModuleProductionPlan_house_type ON ModuleProductionPlan (house_type_id);
+CREATE INDEX idx_ModuleProductionPlan_sequence ON ModuleProductionPlan (planned_sequence);
+CREATE INDEX idx_ModuleProductionPlan_start_datetime ON ModuleProductionPlan (planned_start_datetime);
+CREATE INDEX idx_ModuleProductionPlan_status ON ModuleProductionPlan (status);
+CREATE INDEX idx_ModuleProductionPlan_tipologia ON ModuleProductionPlan (tipologia_id); -- Added index for tipologia FK
+CREATE INDEX idx_ModuleProductionPlan_identifier_module ON ModuleProductionPlan (project_id, house_identifier, module_sequence_in_house);
 
 -- ========= Task Definitions =========
 
@@ -122,7 +91,7 @@ CREATE TABLE TaskDefinitions (
     name TEXT NOT NULL UNIQUE, -- e.g., 'Install Window Frame', 'Run Hot Water Line', 'Attach Exterior Cladding'
     description TEXT,
     house_type_id INTEGER, -- Which type of house this task applies to (can be NULL if generic)
-    specialty_id INTEGER, -- Optional: Link task to a specific specialty
+    specialty_id INTEGER, -- Optional: Link task to a specific specialty (cna be NULL if generic)
     station_sequence_order INTEGER, -- Optional: Link task to a specific production sequence step (e.g., 1 for W1, 7 for A1/B1/C1)
     task_dependencies TEXT, -- Comma-separated list of prerequisite task_definition_ids (e.g., "1,5,8")
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE SET NULL, -- Allow house type deletion without deleting task def
@@ -137,7 +106,26 @@ CREATE TABLE TaskLogs (
     module_id INTEGER NOT NULL, -- Which specific module instance
     task_definition_id INTEGER NOT NULL, -- Which task definition was performed
     worker_id INTEGER NOT NULL, -- Who performed it
-    panel_id INTEGER, -- Added: Optional link to a specific panel if the task is panel-specific
+    status TEXT NOT NULL, -- 'Not Started', 'In Progress', 'Completed', 'Paused'
+    started_at TEXT, -- Timestamp (ISO8601 format)
+    completed_at TEXT, -- Timestamp (ISO8601 format)
+    station_start TEXT, -- Added: Record the station where the task was started
+    station_finish TEXT, -- Renamed: Record the actual station where it was marked complete (Nullable)
+    notes TEXT, -- Optional field for worker comments
+    FOREIGN KEY (module_id) REFERENCES Modules(module_id),
+    FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id),
+    FOREIGN KEY (worker_id) REFERENCES Workers(worker_id),
+    FOREIGN KEY (panel_id) REFERENCES HouseTypePanels(house_type_panel_id) ON DELETE SET NULL, -- Added FK: If panel definition is deleted, set task log's panel_id to NULL
+    FOREIGN KEY (station_start) REFERENCES Stations(station_id) ON DELETE SET NULL, -- Added FK: If station is deleted, set station_start to NULL
+    FOREIGN KEY (station_finish) REFERENCES Stations(station_id) ON DELETE RESTRICT -- Renamed FK: Don't allow deleting station if tasks were completed there
+);
+
+CREATE TABLE PanelTaskLogs (
+    panel_task_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_id INTEGER NOT NULL, -- Which specific module instance
+    panel_definition_id INTEGER NOT NULL, -- Which specific panel definition instance
+    task_definition_id INTEGER NOT NULL, -- Which task definition was performed
+    worker_id INTEGER NOT NULL, -- Who performed it
     status TEXT NOT NULL, -- 'Not Started', 'In Progress', 'Completed', 'Paused'
     started_at TEXT, -- Timestamp (ISO8601 format)
     completed_at TEXT, -- Timestamp (ISO8601 format)
@@ -155,6 +143,7 @@ CREATE TABLE TaskLogs (
 CREATE TABLE TaskPauses (
     task_pause_id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_log_id INTEGER NOT NULL, -- Links to the specific task instance being paused
+    panel_task_log_id INTEGER, -- Links to the specific panel task instance being paused
     paused_by_worker_id INTEGER NOT NULL,
     paused_at TEXT NOT NULL, -- Timestamp (ISO8601 format)
     resumed_at TEXT, -- Timestamp (ISO8601 format), Nullable if still paused
@@ -164,7 +153,6 @@ CREATE TABLE TaskPauses (
 );
 
 -- ========= Indexes for Performance =========
--- Index frequently queried foreign keys and status columns
 CREATE INDEX idx_modules_current_station ON Modules (current_station_id);
 CREATE INDEX idx_modules_project ON Modules (project_id);
 CREATE INDEX idx_modules_status ON Modules (status);
@@ -196,8 +184,8 @@ CREATE TABLE HouseTypes (
 );
 
 -- Added: Table for Tipologias associated with a HouseType
-CREATE TABLE HouseTypeTipologias (
-    tipologia_id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE HouseSubType (
+    sub_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
     house_type_id INTEGER NOT NULL,
     name TEXT NOT NULL, -- e.g., 'Single', 'Duplex', 'Standard', 'Premium'
     description TEXT,
@@ -216,9 +204,9 @@ CREATE TABLE HouseTypeParameters (
     house_type_id INTEGER NOT NULL,
     parameter_id INTEGER NOT NULL,
     module_sequence_number INTEGER NOT NULL, -- Which module within the house type this value applies to (1-based index)
-    tipologia_id INTEGER, -- Nullable FK: If NULL, applies to all typologies for the module. If set, applies only to this specific typology.
     value REAL NOT NULL, -- Using REAL to accommodate various numeric types (integers, decimals)
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    FOREIGN KEY (sub_type_id) REFERENCES HouseSubType(sub_type_id) ON DELETE CASCADE,
     FOREIGN KEY (parameter_id) REFERENCES HouseParameters(parameter_id) ON DELETE CASCADE,
     FOREIGN KEY (tipologia_id) REFERENCES HouseTypeTipologias(tipologia_id) ON DELETE CASCADE, -- If typology deleted, delete specific param values
     -- Ensure only one value per parameter per module sequence *per specific typology* OR one value for *all typologies* (NULL)
@@ -233,17 +221,18 @@ CREATE INDEX idx_housetypeparameters_module_seq ON HouseTypeParameters (module_s
 CREATE INDEX idx_housetypeparameters_tipologia ON HouseTypeParameters (tipologia_id); -- Index for Tipologia FK
 CREATE INDEX idx_housetypeparameters_composite ON HouseTypeParameters (house_type_id, parameter_id, module_sequence_number, tipologia_id); -- Index for the unique constraint
 
--- ========= House Type Panels =========
+-- ========= Panel Definitions =========
 
-CREATE TABLE HouseTypePanels (
-    house_type_panel_id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE PanelDefinitions (
+    panel_definition_id INTEGER PRIMARY KEY AUTOINCREMENT,
     house_type_id INTEGER NOT NULL,
     module_sequence_number INTEGER NOT NULL, -- Which module within the house type this panel belongs to (1-based index)
     panel_group TEXT NOT NULL CHECK(panel_group IN ('Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros')), -- Category of the panel
     panel_code TEXT NOT NULL, -- Identifier/name of the panel
-    typology TEXT, -- Optional: Specific typology this panel applies to (NULL means applies to all)
+    sub_type_id INTEGER, -- Optional: Specific house sub-type this panel applies to (NULL means applies to all)
     multiwall_id INTEGER, -- Optional: Link to a Multiwall
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
+    FOREIGN KEY (sub_type_id) REFERENCES HouseSubType(sub_type_id) ON DELETE SET NULL,
     FOREIGN KEY (multiwall_id) REFERENCES Multiwalls(multiwall_id) ON DELETE SET NULL, -- If multiwall is deleted, unlink panels
     -- Ensure panel code is unique within the same house type, module, and group (allowing same code in different groups/modules)
     -- Note: Uniqueness constraint does not involve multiwall_id directly. A panel code must be unique within its group/module regardless of multiwall assignment.
@@ -260,13 +249,10 @@ CREATE INDEX idx_housetypepanels_multiwall ON HouseTypePanels (multiwall_id); --
 
 CREATE TABLE Multiwalls (
     multiwall_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    house_type_id INTEGER NOT NULL,
-    module_sequence_number INTEGER NOT NULL,
     panel_group TEXT NOT NULL CHECK(panel_group IN ('Paneles de Piso', 'Paneles de Cielo', 'Paneles Perimetrales', 'Tabiques Interiores', 'Vigas Cajón', 'Otros')), -- Must match panel group
     multiwall_code TEXT NOT NULL, -- Identifier for the multiwall (e.g., MW-01)
-    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE CASCADE,
-    -- Ensure multiwall code is unique within the same house type, module, and group
-    UNIQUE (house_type_id, module_sequence_number, panel_group, multiwall_code)
+    FOREIGN KEY (panel_definition_id) REFERENCES PanelDefinitions(panel_definition_id) ON DELETE CASCADE,
+    UNIQUE (house_type_id, panel_group, multiwall_code)
 );
 
 -- Indexes for Multiwalls
