@@ -542,6 +542,19 @@ export const setModuleProductionPlanItemsDateTimeBulk = async (planIds, newDateT
     return handleResponse(response);
 };
 
+// === Potential Task Dependencies ===
+export const getPotentialTaskDependencies = async (stationSequenceOrder, isPanelTask) => {
+    const params = new URLSearchParams();
+    if (stationSequenceOrder !== null && stationSequenceOrder !== undefined) {
+        params.append('station_sequence_order', stationSequenceOrder);
+    }
+    if (isPanelTask !== null && isPanelTask !== undefined) {
+        params.append('is_panel_task', isPanelTask);
+    }
+    const response = await fetch(`${API_BASE_URL}/task_definitions/potential_dependencies?${params.toString()}`);
+    return handleResponse(response);
+};
+
 
 // === Production Status Dashboard / Station Overview ===
 
