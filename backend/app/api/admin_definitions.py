@@ -362,6 +362,41 @@ def delete_house_parameter_route(parameter_id): # Renamed
         logger.error(f"Error in delete_house_parameter_route {parameter_id}: {e}", exc_info=True)
         return jsonify(error="Failed to delete house parameter"), 500
 
+# === Module Production Plan Batch Generation ===
+@admin_definitions_bp.route('/module-production-plan/generate-batch', methods=['POST'])
+def generate_module_production_plan_batch_route():
+    data = request.get_json()
+    required_fields = ['project_name', 'house_type_id', 'house_identifier_base', 'number_of_houses']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    project_name = data['project_name']
+    house_identifier_base = data['house_identifier_base']
+    try:
+        house_type_id = int(data['house_type_id'])
+        number_of_houses = int(data['number_of_houses'])
+        if number_of_houses <= 0:
+            return jsonify(error="Number of houses must be positive."), 400
+    except (ValueError, TypeError):
+        return jsonify(error="house_type_id and number_of_houses must be integers."), 400
+
+    try:
+        success = queries.generate_module_production_plan(
+            project_name, house_type_id, house_identifier_base, number_of_houses
+        )
+        if success:
+            return jsonify(message=f"Successfully generated production plan items for project '{project_name}'."), 201
+        else:
+            # This path might not be hit if queries.generate_module_production_plan raises exceptions for failures
+            return jsonify(error="Failed to generate module production plan batch."), 500
+    except ValueError as ve:
+        logger.warning(f"ValueError generating production plan batch for project {project_name}: {ve}")
+        return jsonify(error=str(ve)), 400
+    except Exception as e:
+        logger.error(f"Error generating production plan batch for project {project_name}: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while generating the production plan batch."), 500
+
 
 # === House Type Parameters (Linking) Routes ===
 
