@@ -461,7 +461,8 @@ export const addModuleProductionPlanItem = async (itemData) => {
 };
 
 export const addModuleProductionPlanBatch = async (batchData) => {
-    // batchData: { project_name, house_type_id, house_identifier_base, number_of_houses }
+    // batchData: { project_name, house_type_id, number_of_houses }
+    // house_identifier_base is removed from payload
     const response = await fetch(`${API_BASE_URL}/module-production-plan/generate-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

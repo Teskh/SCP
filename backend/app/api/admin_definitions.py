@@ -366,13 +366,12 @@ def delete_house_parameter_route(parameter_id): # Renamed
 @admin_definitions_bp.route('/module-production-plan/generate-batch', methods=['POST'])
 def generate_module_production_plan_batch_route():
     data = request.get_json()
-    required_fields = ['project_name', 'house_type_id', 'house_identifier_base', 'number_of_houses']
+    required_fields = ['project_name', 'house_type_id', 'number_of_houses']
     if not data or not all(field in data for field in required_fields):
         missing = [field for field in required_fields if field not in data]
         return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
 
     project_name = data['project_name']
-    house_identifier_base = data['house_identifier_base']
     try:
         house_type_id = int(data['house_type_id'])
         number_of_houses = int(data['number_of_houses'])
@@ -383,7 +382,7 @@ def generate_module_production_plan_batch_route():
 
     try:
         success = queries.generate_module_production_plan(
-            project_name, house_type_id, house_identifier_base, number_of_houses
+            project_name, house_type_id, number_of_houses
         )
         if success:
             return jsonify(message=f"Successfully generated production plan items for project '{project_name}'."), 201

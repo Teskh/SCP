@@ -16,10 +16,38 @@ def get_max_planned_sequence():
     max_seq = cursor.fetchone()[0]
     return max_seq if max_seq is not None else 0
 
-def generate_module_production_plan(project_name, house_type_id, house_identifier_base, number_of_houses):
+def _get_next_house_number_for_project(project_name):
+    """
+    Determines the next available house number for a given project.
+    House identifiers are expected to be in the format 'ProjectName-Number'.
+    """
+    db = get_db()
+    cursor = db.execute(
+        "SELECT house_identifier FROM ModuleProductionPlan WHERE project_name = ?",
+        (project_name,)
+    )
+    existing_identifiers = cursor.fetchall()
+    
+    max_house_num = 0
+    if existing_identifiers:
+        for row in existing_identifiers:
+            identifier = row['house_identifier']
+            try:
+                # Assuming format ProjectName-HouseNum or similar that ends with -Num
+                num_part = int(identifier.split('-')[-1])
+                if num_part > max_house_num:
+                    max_house_num = num_part
+            except (ValueError, IndexError):
+                # Handle cases where house_identifier might not match the expected format
+                logging.warning(f"Could not parse house number from identifier: {identifier} for project {project_name}")
+                pass # Or raise an error if strict format is required
+    return max_house_num + 1
+
+def generate_module_production_plan(project_name, house_type_id, number_of_houses):
     """
     Generates ModuleProductionPlan items in batch for a given project and house type.
     Infers modules_per_house from HouseTypes.
+    House identifiers are auto-incremented based on existing houses for the project.
     planned_start_datetime auto-increments by 1 hour per module.
     Status defaults to 'Planned'. Sequence is appended.
     """
@@ -42,12 +70,14 @@ def generate_module_production_plan(project_name, house_type_id, house_identifie
     
     # Base time for planning starts now, increments by 1 hour for each module added in this batch
     current_planned_datetime = datetime.now()
+    start_house_number_for_project = _get_next_house_number_for_project(project_name)
 
     assembly_lines = ['A', 'B', 'C'] 
     line_index = (current_max_sequence % len(assembly_lines)) # Try to continue line cycle from last item
 
     for i in range(number_of_houses): # For each house instance
-        house_identifier = f"{house_identifier_base}-{i+1}"
+        current_house_num_in_project = start_house_number_for_project + i
+        house_identifier = f"{project_name}-{current_house_num_in_project}"
 
         for module_num in range(1, actual_modules_per_house + 1): # For each module within the house
             planned_assembly_line = assembly_lines[line_index % len(assembly_lines)]

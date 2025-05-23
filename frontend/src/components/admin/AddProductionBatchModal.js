@@ -27,7 +27,7 @@ const modalContentStyle = {
 
 const initialFormState = {
     project_name: '',
-    house_identifier_base: 'Lote', // Default value
+    // house_identifier_base: 'Lote', // Removed
     number_of_houses: 1,
     house_type_id: '',
 };
@@ -55,10 +55,7 @@ function AddProductionBatchModal({ isOpen, onClose, onAddBatch, houseTypes, isLo
             setFormError('El nombre del proyecto es obligatorio.');
             return;
         }
-        if (!formData.house_identifier_base.trim()) {
-            setFormError('El identificador base de la vivienda es obligatorio.');
-            return;
-        }
+        // house_identifier_base validation removed
         const numHouses = parseInt(formData.number_of_houses, 10);
         if (isNaN(numHouses) || numHouses < 1) {
             setFormError('El número de viviendas debe ser un entero positivo.');
@@ -77,7 +74,7 @@ function AddProductionBatchModal({ isOpen, onClose, onAddBatch, houseTypes, isLo
 
         onAddBatch({
             project_name: formData.project_name.trim(),
-            house_identifier_base: formData.house_identifier_base.trim(),
+            // house_identifier_base removed
             number_of_houses: numHouses,
             house_type_id: parseInt(formData.house_type_id, 10),
         });
@@ -103,18 +100,7 @@ function AddProductionBatchModal({ isOpen, onClose, onAddBatch, houseTypes, isLo
                             required
                         />
                     </div>
-                    <div style={styles.formGroup}>
-                        <label style={styles.label} htmlFor="batch_house_identifier_base">Identificador Base de Vivienda (ej: Lote, Manzana):</label>
-                        <input
-                            style={styles.input}
-                            type="text"
-                            id="batch_house_identifier_base"
-                            name="house_identifier_base"
-                            value={formData.house_identifier_base}
-                            onChange={handleInputChange}
-                            required
-                        />
-                    </div>
+                    {/* house_identifier_base input field removed */}
                     <div style={styles.formGroup}>
                         <label style={styles.label} htmlFor="batch_number_of_houses">Número de Viviendas en este Lote:</label>
                         <input
