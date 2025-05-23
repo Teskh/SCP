@@ -451,9 +451,22 @@ export const deleteParameterFromHouseTypeModule = async (houseTypeId, parameterI
 // === Module Production Plan ===
 // (Replaces old Production Plan and Project management)
 
+export const addModuleProductionPlanItem = async (itemData) => {
+    // itemData: { project_name, house_identifier, module_number, house_type_id, sub_type_id, planned_sequence, planned_start_datetime, planned_assembly_line, status }
+    const response = await fetch(`${API_BASE_URL}/module-production-plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(itemData),
+    });
+    return handleResponse(response);
+};
+
 export const addModuleProductionPlan = async (planData) => {
     // planData: { project_name, house_type_id, house_identifier_base, number_of_houses, modules_per_house (optional) }
-    const response = await fetch(`${API_BASE_URL}/module-production-plan`, {
+    // This function might be for bulk creation based on project parameters.
+    // If it's intended for single item creation, it might be redundant with addModuleProductionPlanItem
+    // or its endpoint/payload needs to be distinct. For now, keeping as is.
+    const response = await fetch(`${API_BASE_URL}/module-production-plan/bulk`, { // Assuming a different endpoint for bulk based on original comment
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(planData),
