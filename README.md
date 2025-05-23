@@ -22,7 +22,7 @@ Pay close attention to:
 *   The renaming of `HouseTypeTipologias` to `HouseSubType` and `tipologia_id` to `sub_type_id`.
 *   Changes to the production planning workflow, focusing on direct manipulation of `ModuleProductionPlan` items.
 
-**List of Files to Check:**
+**List of Files to Check (tick them off as you complete them!!):**
 *   `backend/app/api/admin_definitions.py`
 *   `backend/app/api/admin_personnel.py`
 *   `backend/app/api/admin_projects.py`
