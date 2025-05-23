@@ -1,5 +1,54 @@
+# Project Refactoring Status (For AI Agent)
+
+**Task:** Review and update codebase files based on recent significant schema changes (detailed in `backend/app/database/new_schema.sql`) and this updated `README.md`.
+
+**Summary of Key Schema and Workflow Changes:**
+1.  **No More `Projects` Table:** The `Projects` table has been removed. Project identification is now handled by a `project_name` (TEXT field) directly within the `ModuleProductionPlan` table.
+2.  **Dedicated `PanelTaskLogs`:** A new table, `PanelTaskLogs`, has been introduced to specifically track tasks related to individual panels. Consequently, the `panel_id` field has been removed from the general `TaskLogs` table (which now logs module-level tasks). TaskDefinitions now has an `is_panel_task` flag.
+3.  **"Typology" Renamed to "SubType":** The concept previously referred to as "Typology" (and its table `HouseTypeTipologias`) has been renamed to "SubType" (with the table `HouseSubType`). All related fields and references have been updated (e.g., `tipologia_id` is now `sub_type_id`).
+4.  **Direct Production Planning:** The workflow for production planning has shifted. Instead of creating a "Project" entity first, administrators will now directly create and manage production items (module instances for specific projects) within the `ModuleProductionPlan` table. This table includes all necessary project-related information (like `project_name`, `house_identifier`, `module_number`).
+
+**Files Updated in This Step:**
+*   `backend/app/database/new_schema.sql` (perfected schema reflecting the above changes)
+*   `README.md` (this file, updated to reflect the new schema and workflow)
+
+**Files Requiring Review and Update (Instruction for AI Agent):**
+Please review the following files one by one. For each file, identify and propose changes necessary to align its database interactions (queries in `backend/app/database/queries.py`), API endpoint logic (in `backend/app/api/`), frontend service calls (`frontend/src/services/`), component data handling, and UI elements (in `frontend/src/components/` and `frontend/src/pages/`) with the updated `new_schema.sql` and this `README.md`.
+
+Pay close attention to:
+*   Removal of the `Projects` table and all associated CRUD operations or data fetching.
+*   Usage of `project_name` in `ModuleProductionPlan` instead of a `project_id`.
+*   Introduction of `PanelTaskLogs` and the modification of `TaskLogs`. This will affect how tasks are fetched, displayed, and logged, particularly distinguishing between module tasks and panel tasks.
+*   The renaming of `HouseTypeTipologias` to `HouseSubType` and `tipologia_id` to `sub_type_id`.
+*   Changes to the production planning workflow, focusing on direct manipulation of `ModuleProductionPlan` items.
+
+**List of Files to Check:**
+*   `backend/app/api/admin_definitions.py`
+*   `backend/app/api/admin_personnel.py`
+*   `backend/app/api/admin_projects.py`
+*   `backend/app/api/auth.py`
+*   `backend/app/database/connection.py`
+*   `backend/app/database/queries.py`
+*   `backend/app/__init__.py`
+*   `config.py`
+*   `run.py`
+*   `frontend/src/App.js`
+*   `frontend/src/components/admin/ActiveProductionDashboard.js`
+*   `frontend/src/components/admin/AdminTeamManager.js`
+*   `frontend/src/components/admin/HouseParametersManager.js`
+*   `frontend/src/components/admin/HouseTypePanelsModal.js`
+*   `frontend/src/components/admin/HouseTypesManager.js`
+*   `frontend/src/components/admin/ProjectsManager.js` (Likely needs significant changes or replacement)
+*   `frontend/src/components/admin/SpecialtiesManager.js`
+*   `frontend/src/components/admin/TaskDefinitionManager.js`
+*   `frontend/src/components/admin/WorkersManager.js`
+*   `frontend/src/pages/AdminDashboard.js`
+*   `frontend/src/services/adminService.js`
+
+---
+
 1. Project Goal:
-To develop a simple, low-stakes internal web application in Spanish for tracking task completion on a modular construction production line. The primary aim is to provide workers with an easy way to register tasks as completed for specific modules at their assigned stations, improving visibility into the production process across its distinct stages. All user-facing text in the application will be developed in Spanish.
+To develop a simple, low-stakes internal web application in Spanish for tracking task completion on a modular construction production line. The primary aim is to provide workers with an easy way to register tasks as completed for specific modules or panels at their assigned stations, improving visibility into the production process. All user-facing text in the application will be developed in Spanish.
 
 2. Target Users & Environment:
 Users: Production line workers and supervisors (for module movement and admin tasks).
@@ -30,22 +79,22 @@ interact with the database, process QR code data (if received from the frontend)
 Database:
 Technology: SQLite3.
 Reasoning: Simplicity, file-based, sufficient for the low-concurrency, low-stakes nature of this internal application.
-Schema Outline: Contains tables for Projects, Modules (tracking current_station_id), Stations (defining W1-C6 layout), HouseTypes, HouseParameters, HouseTypeParameters (linking parameters to specific modules within a type), Multiwalls (defining groups of panels), HouseTypePanels (defining panels per module within a type, optionally linked to a Multiwall), TaskDefinitions, Workers (with PIN), Specialties, TaskLogs (execution records), and TaskPauses. (Detailed schema defined separately).
+Schema Outline: Contains tables for `ModuleProductionPlan` (includes `project_name`, `house_identifier`, `module_number` to define planned module instances), `Modules` (physical instances tracking `current_station_id`, linked to `ModuleProductionPlan`), `Stations` (W1-C6 layout), `HouseTypes`, `HouseSubType` (formerly Tipologias, e.g., 'Standard', 'Premium'), `HouseParameters`, `HouseTypeParameters` (linking parameters to specific modules within a type and sub-type), `Multiwalls`, `PanelDefinitions` (defining panels per module within a type/sub-type, optionally linked to a Multiwall), `TaskDefinitions` (now with `is_panel_task` flag), `Workers` (with PIN), `Specialties`, `TaskLogs` (for module-level task execution), `PanelTaskLogs` (for panel-specific task execution), and `TaskPauses`. (Detailed schema in `backend/app/database/new_schema.sql`).
 4. Core User Workflow:
 Login: Worker approaches the tablet, logs in via PIN (primary) or potentially QR code (secondary, experimental).
-Context Awareness: Application identifies the station_id based on tablet configuration. Should ask user to identify if Line A, B, or C if at that station (since there's only one tablet for each station, for each of the three parallel lines)
-Module Identification: System determines the module_id currently at this station_id.
-Task Presentation: Displays relevant pending tasks for the module, station, and worker's specialty.
+Context Awareness: Application identifies the `station_id` based on tablet configuration. Should ask user to identify if Line A, B, or C if at that station.
+Module/Panel Identification: System determines the `module_id` (and potentially relevant `panel_definition_id`s) currently at this `station_id`.
+Task Presentation: Displays relevant pending tasks for the module (or its panels), station, and worker's specialty, distinguishing between module tasks and panel tasks based on `TaskDefinitions.is_panel_task`.
 Task Completion: Worker selects and marks a task as done.
-Logging: System records the completion in TaskLogs, including the start and finish station, and optionally linking to a specific panel if the task is panel-specific.
-Admin Interface: A separate section/route accessible after admin login allows for managing Workers, Projects, Modules, Task Definitions, House Types (including defining parameters and panels per module), Specialties, etc.
+Logging: System records the completion in `TaskLogs` (for module tasks) or `PanelTaskLogs` (for panel tasks), including start/finish station.
+Admin Interface: A separate section/route accessible after admin login allows for managing Workers, `ModuleProductionPlan` items (defining project name, house details, modules), `TaskDefinitions`, `HouseTypes` (including defining `HouseSubType`s, parameters, and panels per module/sub-type), Specialties, etc.
 Logout/Idle: Automatic logout after inactivity or manual logout.
 5. Login Mechanisms:
 Primary: PIN entry.
 Secondary: QR Code scanning. (QR scanner should always be working in the background -unless turned off at settings-, if the user flashes a QR code in front of the camera, it should log him in inmediately. Alternatively, the user can select his name from the list of relevant workers for that station and enter his PIN)
 6. Module Tracking & Movement:
 Production Flow Logic: System understands W1 -> ... -> W5 -> M1 -> [A1 | B1 | C1] -> ... -> [A6 | B6 | C6].
-Mechanism: Initial manual entry via admin/supervisor interface, including specifying the target line (A/B/C) when moving from M1. Though it's predefined at the planning level (e.g. our production plan already considers which line they'll end up in, therefore it shouldn't be defined manually at the production level, but at the planning level instead)
+Mechanism: Module movement is driven by updates to `Modules.current_station_id`. The target assembly line (A/B/C) for a module is defined in its `ModuleProductionPlan` item.
 Clash Resolution: Basic auto-advance logic for clashes within the same line segment; specific validation needed for M1 and branching.
 Future Enhancement: Automatic tracking envisioned but out of initial scope.
 7. Key Features & Constraints:
@@ -53,9 +102,9 @@ Internal Use Only: Simplified security.
 Low Stakes: Focus on visibility, not critical enforcement (initially).
 Full-Screen SPA (React): Essential for tablet kiosk experience.
 Defined Production Flow: Logic tied to the specific station layout.
-Task Dependencies: Tasks can specify prerequisite tasks via comma-separated task_definition_ids.
+Task Dependencies: Tasks can specify prerequisite tasks via comma-separated `task_definition_ids`.
 Station-Context Driven: Core logic relies on fixed tablet location.
-Separate Admin Interface: For data management (List of tasks, List of workers/specialties, Production planning, House Types including Parameters and Panels per module)
+Separate Admin Interface: For data management (Task Definitions, Workers/Specialties, Production Planning via `ModuleProductionPlan`, House Types including SubTypes, Parameters and Panels per module/sub-type).
 Ensure keeping this document in context when making any change, as well as our schema and App.js.
 This is the structure of this codebase, keep it up to date when new changes modify it:
 .
