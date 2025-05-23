@@ -33,14 +33,23 @@ def _get_next_house_number_for_project(project_name):
         for row in existing_identifiers:
             identifier = row['house_identifier']
             try:
-                # Assuming format ProjectName-HouseNum or similar that ends with -Num
-                num_part = int(identifier.split('-')[-1])
+                # Assuming house_identifier is now just a number string (e.g., "1", "2")
+                num_part = int(identifier)
                 if num_part > max_house_num:
                     max_house_num = num_part
-            except (ValueError, IndexError):
-                # Handle cases where house_identifier might not match the expected format
-                logging.warning(f"Could not parse house number from identifier: {identifier} for project {project_name}")
-                pass # Or raise an error if strict format is required
+            except ValueError:
+                # Handle cases where house_identifier might not be a simple integer string
+                # This could happen with legacy data or if the format assumption is broken.
+                logging.warning(f"Could not parse house number from identifier: '{identifier}' for project '{project_name}'. Expected a simple number.")
+                # Attempt to parse legacy format ProjectName-Num as a fallback
+                try:
+                    legacy_num_part = int(identifier.split('-')[-1])
+                    if legacy_num_part > max_house_num:
+                        max_house_num = legacy_num_part
+                    logging.info(f"Successfully parsed legacy identifier '{identifier}' to {legacy_num_part} for project '{project_name}'.")
+                except (ValueError, IndexError):
+                    logging.warning(f"Failed to parse identifier '{identifier}' as legacy format for project '{project_name}'.")
+                    pass # Or raise an error if strict format is required
     return max_house_num + 1
 
 def generate_module_production_plan(project_name, house_type_id, number_of_houses):
@@ -77,7 +86,7 @@ def generate_module_production_plan(project_name, house_type_id, number_of_house
 
     for i in range(number_of_houses): # For each house instance
         current_house_num_in_project = start_house_number_for_project + i
-        house_identifier = f"{project_name}-{current_house_num_in_project}"
+        house_identifier = str(current_house_num_in_project) # Identifier is now just the number as a string
 
         for module_num in range(1, actual_modules_per_house + 1): # For each module within the house
             planned_assembly_line = assembly_lines[line_index % len(assembly_lines)]
