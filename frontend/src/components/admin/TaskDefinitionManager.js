@@ -1,97 +1,87 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as adminService from '../../services/adminService';
 
-// Basic styling
+// Basic styling (styles assumed to be similar, with potential additions for checkbox)
 const styles = {
     container: { margin: '20px', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' },
     table: { width: '100%', borderCollapse: 'collapse', marginTop: '15px' },
     th: { border: '1px solid #ddd', padding: '8px', backgroundColor: '#f2f2f2', textAlign: 'left' },
-    td: { border: '1px solid #ddd', padding: '8px', verticalAlign: 'top' }, // Align top for better readability if desc is long
-    button: { marginLeft: '5px', cursor: 'pointer', padding: '5px 10px' },
+    td: { border: '1px solid #ddd', padding: '8px', verticalAlign: 'top' },
+    button: { marginLeft: '5px', cursor: 'pointer', padding: '5px 10px', border: 'none', color: 'white', borderRadius: '4px' },
+    buttonEdit: { backgroundColor: '#ffc107', color: '#212529'},
+    buttonDelete: { backgroundColor: '#dc3545'},
+    buttonPrimary: { backgroundColor: '#007bff'},
+    buttonSecondary: { backgroundColor: '#6c757d'},
     form: { marginBottom: '20px', padding: '15px', border: '1px solid #eee', borderRadius: '5px', display: 'flex', flexDirection: 'column', gap: '10px' },
-    formRow: { display: 'flex', gap: '10px', alignItems: 'center' },
-    label: { minWidth: '100px', textAlign: 'right' },
+    formRow: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' },
+    label: { minWidth: '120px', textAlign: 'right', marginRight: '10px' }, // Adjusted for alignment
     input: { padding: '8px', border: '1px solid #ccc', borderRadius: '4px', flexGrow: 1 },
     select: { padding: '8px', border: '1px solid #ccc', borderRadius: '4px', flexGrow: 1 },
     textarea: { padding: '8px', border: '1px solid #ccc', borderRadius: '4px', flexGrow: 1, minHeight: '60px' },
+    checkboxContainer: { display: 'flex', alignItems: 'center', gap: '5px', flexGrow: 1 },
+    checkboxLabel: { fontWeight: 'normal', minWidth: 'auto', marginRight: 0 },
     error: { color: 'red', marginTop: '10px' },
     loading: { fontStyle: 'italic' }
 };
 
-// NOTE: Keep initialFormState keys in English
 const initialFormState = {
     name: '',
     description: '',
-    house_type_id: '', // Renamed from module_type_id
+    house_type_id: '',
     specialty_id: '',
-    station_sequence_order: '', // Changed from station_id
+    station_sequence_order: '',
+    is_panel_task: false, // Added new field, default to false (Module Task)
+    task_dependencies: [], // Assuming this might be added later
 };
 
-// Helper to generate descriptive stage options based on sequence order
 const generateStageOptions = (stations) => {
-    // Define the desired labels for each sequence order
     const stageLabels = {
-        1: 'Linea de Paneles 1 (W1)',
-        2: 'Linea de Paneles 2 (W2)',
-        3: 'Linea de Paneles 3 (W3)',
-        4: 'Linea de Paneles 4 (W4)',
-        5: 'Linea de Paneles 5 (W5)',
-        6: 'Magazine (M1)',
-        7: 'Linea de Ensamblaje 1 (A1/B1/C1)',
-        8: 'Linea de Ensamblaje 2 (A2/B2/C2)',
-        9: 'Linea de Ensamblaje 3 (A3/B3/C3)',
-        10: 'Linea de Ensamblaje 4 (A4/B4/C4)',
-        11: 'Linea de Ensamblaje 5 (A5/B5/C5)',
-        12: 'Linea de Ensamblaje 6 (A6/B6/C6)',
+        1: 'Linea de Paneles 1 (W1)', 2: 'Linea de Paneles 2 (W2)', 3: 'Linea de Paneles 3 (W3)',
+        4: 'Linea de Paneles 4 (W4)', 5: 'Linea de Paneles 5 (W5)', 6: 'Magazine (M1)',
+        7: 'Linea de Ensamblaje 1 (A1/B1/C1)', 8: 'Linea de Ensamblaje 2 (A2/B2/C2)',
+        9: 'Linea de Ensamblaje 3 (A3/B3/C3)', 10: 'Linea de Ensamblaje 4 (A4/B4/C4)',
+        11: 'Linea de Ensamblaje 5 (A5/B5/C5)', 12: 'Linea de Ensamblaje 6 (A6/B6/C6)',
     };
-
-    // Get unique sequence orders present in the stations data
     const existingOrders = [...new Set(stations.map(s => s.sequence_order))].sort((a, b) => a - b);
-
-    // Map existing orders to the desired label format
     return existingOrders.map(order => ({
-        value: order.toString(), // The value stored will be the sequence number as a string
-        label: stageLabels[order] || `Etapa Desconocida (${order})` // Use defined label or fallback
+        value: order.toString(),
+        label: stageLabels[order] || `Etapa Desconocida (${order})`
     }));
 };
 
 
 function TaskDefinitionManager() {
     const [taskDefs, setTaskDefs] = useState([]);
-    const [houseTypes, setHouseTypes] = useState([]); // Renamed from moduleTypes
+    const [houseTypes, setHouseTypes] = useState([]);
     const [specialties, setSpecialties] = useState([]);
     const [stations, setStations] = useState([]);
+    const [potentialDependencies, setPotentialDependencies] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [editMode, setEditMode] = useState(null); // null or task_definition_id
+    const [editMode, setEditMode] = useState(null);
     const [formData, setFormData] = useState(initialFormState);
 
-    // Create a map from sequence order to label for efficient lookup in the table
     const stageLabelMap = useMemo(() => {
-        const options = generateStageOptions(stations); // Use the existing helper
+        const options = generateStageOptions(stations);
         const map = new Map();
-        options.forEach(option => {
-            // Ensure the value is treated as a number for the map key
-            map.set(parseInt(option.value, 10), option.label);
-        });
+        options.forEach(option => map.set(parseInt(option.value, 10), option.label));
         return map;
-    }, [stations]); // Recalculate only when stations change
+    }, [stations]);
 
-    // Fetch all necessary data (task defs and related entities for dropdowns)
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
             const [defsData, houseTypesData, specsData, stationsData] = await Promise.all([
                 adminService.getTaskDefinitions(),
-                adminService.getHouseTypes(), // Use renamed service function
+                adminService.getHouseTypes(),
                 adminService.getSpecialties(),
                 adminService.getStations()
             ]);
-            setTaskDefs(defsData);
-            setHouseTypes(houseTypesData); // Use renamed state setter
-            setSpecialties(specsData);
-            setStations(stationsData);
+            setTaskDefs(defsData || []);
+            setHouseTypes(houseTypesData || []);
+            setSpecialties(specsData || []);
+            setStations(stationsData || []);
         } catch (err) {
             setError(err.message || 'Failed to fetch data');
         } finally {
@@ -103,22 +93,57 @@ function TaskDefinitionManager() {
         fetchData();
     }, [fetchData]);
 
+    // Fetch potential dependencies when station_sequence_order or is_panel_task changes in form
+    useEffect(() => {
+        const fetchDependencies = async () => {
+            // Only fetch if a station sequence is selected OR if is_panel_task is defined (true/false)
+            // This allows fetching general tasks (no station) if is_panel_task is specified.
+            if (formData.station_sequence_order || typeof formData.is_panel_task === 'boolean') {
+                try {
+                    const deps = await adminService.getPotentialTaskDependencies(
+                        formData.station_sequence_order || null, // Pass null if empty
+                        formData.is_panel_task // Pass the boolean value
+                    );
+                    // Filter out the task being edited from its own potential dependencies
+                    setPotentialDependencies(deps.filter(dep => dep.task_definition_id !== editMode) || []);
+                } catch (err) {
+                    console.error("Failed to fetch potential dependencies:", err);
+                    setPotentialDependencies([]);
+                }
+            } else {
+                setPotentialDependencies([]);
+            }
+        };
+        fetchDependencies();
+    }, [formData.station_sequence_order, formData.is_panel_task, editMode]);
+
+
     const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
     };
+    
+    const handleDependenciesChange = (e) => {
+        const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+        setFormData(prev => ({ ...prev, task_dependencies: selectedOptions.map(String) }));
+    };
+
 
     const handleEdit = (taskDef) => {
         setEditMode(taskDef.task_definition_id);
         setFormData({
             name: taskDef.name || '',
             description: taskDef.description || '',
-            // Ensure IDs are strings for select value matching, handle nulls
-            house_type_id: taskDef.house_type_id?.toString() || '', // Renamed field
+            house_type_id: taskDef.house_type_id?.toString() || '',
             specialty_id: taskDef.specialty_id?.toString() || '',
-            station_sequence_order: taskDef.station_sequence_order?.toString() || '', // Changed from station_id
+            station_sequence_order: taskDef.station_sequence_order?.toString() || '',
+            is_panel_task: taskDef.is_panel_task || false, // Set from taskDef
+            task_dependencies: Array.isArray(taskDef.task_dependencies) ? taskDef.task_dependencies.map(String) : (taskDef.task_dependencies ? String(taskDef.task_dependencies).split(',').map(String) : [])
         });
-        window.scrollTo(0, 0); // Scroll to top to see the form
+        window.scrollTo(0, 0);
     };
 
     const handleCancelEdit = () => {
@@ -132,12 +157,13 @@ function TaskDefinitionManager() {
         setError('');
         setIsLoading(true);
 
-        // Convert empty strings back to null for IDs if necessary, or handle in service
         const payload = {
             ...formData,
-            house_type_id: formData.house_type_id || null, // Renamed field
+            house_type_id: formData.house_type_id || null,
             specialty_id: formData.specialty_id || null,
-            station_sequence_order: formData.station_sequence_order || null, // Changed from station_id
+            station_sequence_order: formData.station_sequence_order ? parseInt(formData.station_sequence_order, 10) : null,
+            is_panel_task: Boolean(formData.is_panel_task), // Ensure boolean
+            task_dependencies: formData.task_dependencies.join(','), // Convert to comma-separated string for backend
         };
 
         try {
@@ -147,7 +173,7 @@ function TaskDefinitionManager() {
                 await adminService.addTaskDefinition(payload);
             }
             handleCancelEdit();
-            await fetchData(); // Refresh list and related data
+            await fetchData();
         } catch (err) {
             setError(err.message || `Error al ${editMode ? 'actualizar' : 'añadir'} la definición de tarea`);
         } finally {
@@ -156,13 +182,12 @@ function TaskDefinitionManager() {
     };
 
     const handleDelete = async (id) => {
-        // Confirmation dialog in Spanish
         if (window.confirm('¿Está seguro de que desea eliminar esta definición de tarea?')) {
             setError('');
-            setIsLoading(true); // Prevent other actions during delete
+            setIsLoading(true);
             try {
                 await adminService.deleteTaskDefinition(id);
-                await fetchData(); // Refresh list
+                await fetchData();
             } catch (err) {
                 setError(err.message || 'Error al eliminar la definición de tarea');
             } finally {
@@ -180,85 +205,63 @@ function TaskDefinitionManager() {
                  <h3>{editMode ? 'Editar Definición de Tarea' : 'Añadir Nueva Definición de Tarea'}</h3>
                  <div style={styles.formRow}>
                      <label style={styles.label} htmlFor="taskName">Nombre:</label>
-                     <input
-                         id="taskName"
-                         type="text"
-                         name="name"
-                         placeholder="Nombre Tarea (ej: Instalar Marco Ventana)"
-                         value={formData.name}
-                         onChange={handleInputChange}
-                         required
-                         style={styles.input}
-                     />
+                     <input id="taskName" type="text" name="name" placeholder="Nombre Tarea (ej: Instalar Marco Ventana)" value={formData.name} onChange={handleInputChange} required style={styles.input}/>
                  </div>
                  <div style={styles.formRow}>
                      <label style={styles.label} htmlFor="taskDesc">Descripción:</label>
-                     <textarea
-                         id="taskDesc"
-                         name="description"
-                         placeholder="Descripción detallada (Opcional)"
-                         value={formData.description}
-                         onChange={handleInputChange}
-                         style={styles.textarea}
-                     />
+                     <textarea id="taskDesc" name="description" placeholder="Descripción detallada (Opcional)" value={formData.description} onChange={handleInputChange} style={styles.textarea}/>
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="houseType">Tipo Vivienda:</label> {/* Changed label */}
-                     <select
-                         id="houseType"
-                         name="house_type_id" /* Changed name */
-                         value={formData.house_type_id} /* Changed value */
-                         onChange={handleInputChange}
-                         style={styles.select}
-                     >
-                         <option value="">-- Opcional: Seleccionar Tipo Vivienda --</option> {/* Changed text */}
-                         {houseTypes.map(ht => ( /* Changed variable name */
-                             <option key={ht.house_type_id} value={ht.house_type_id}> {/* Changed key/value */}
-                                 {ht.name}
-                             </option>
-                         ))}
+                    <label style={styles.label} htmlFor="is_panel_task">Tarea de Panel?:</label>
+                    <div style={styles.checkboxContainer}>
+                        <input type="checkbox" id="is_panel_task" name="is_panel_task" checked={formData.is_panel_task} onChange={handleInputChange} style={{ margin: '0px'}}/>
+                        <label htmlFor="is_panel_task" style={styles.checkboxLabel}>(Marcar si esta tarea aplica a paneles individuales)</label>
+                    </div>
+                 </div>
+                 <div style={styles.formRow}>
+                     <label style={styles.label} htmlFor="houseType">Tipo Vivienda:</label>
+                     <select id="houseType" name="house_type_id" value={formData.house_type_id} onChange={handleInputChange} style={styles.select}>
+                         <option value="">-- Opcional: Para todos los Tipos --</option>
+                         {houseTypes.map(ht => (<option key={ht.house_type_id} value={ht.house_type_id}>{ht.name}</option>))}
                      </select>
                  </div>
                  <div style={styles.formRow}>
                      <label style={styles.label} htmlFor="specialty">Especialidad:</label>
-                     <select
-                         id="specialty"
-                         name="specialty_id"
-                         value={formData.specialty_id}
-                         onChange={handleInputChange}
-                         style={styles.select}
-                     >
-                         <option value="">-- Opcional: Seleccionar Especialidad --</option>
-                         {specialties.map(spec => (
-                             <option key={spec.specialty_id} value={spec.specialty_id}>
-                                 {spec.name}
-                             </option>
-                         ))}
+                     <select id="specialty" name="specialty_id" value={formData.specialty_id} onChange={handleInputChange} style={styles.select} >
+                         <option value="">-- Opcional: Para todas las Especialidades --</option>
+                         {specialties.map(spec => (<option key={spec.specialty_id} value={spec.specialty_id}>{spec.name}</option>))}
                      </select>
                  </div>
                  <div style={styles.formRow}>
-                     <label style={styles.label} htmlFor="stationSequence">Etapa (Secuencia):</label> {/* Changed label */}
-                     <select
-                         id="stationSequence"
-                         name="station_sequence_order" // Changed name
-                         value={formData.station_sequence_order} // Changed value
-                         onChange={handleInputChange}
-                         style={styles.select}
-                     >
-                         <option value="">-- Opcional: Seleccionar Etapa --</option>
-                         {generateStageOptions(stations).map(stage => (
-                             <option key={stage.value} value={stage.value}>
-                                 {stage.label} {/* Display the descriptive label */}
-                             </option>
-                         ))}
+                     <label style={styles.label} htmlFor="stationSequence">Etapa (Secuencia):</label>
+                     <select id="stationSequence" name="station_sequence_order" value={formData.station_sequence_order} onChange={handleInputChange} style={styles.select} >
+                         <option value="">-- Opcional: Tarea General (No en Estación) --</option>
+                         {generateStageOptions(stations).map(stage => (<option key={stage.value} value={stage.value}>{stage.label}</option>))}
                      </select>
                  </div>
+                 <div style={styles.formRow}>
+                    <label style={styles.label} htmlFor="task_dependencies">Dependencias (Pre-requisitos):</label>
+                    <select
+                        id="task_dependencies"
+                        name="task_dependencies"
+                        multiple
+                        value={formData.task_dependencies}
+                        onChange={handleDependenciesChange}
+                        style={{...styles.select, height: '100px'}} // Allow multiple selections
+                    >
+                        {potentialDependencies.map(dep => (
+                            <option key={dep.task_definition_id} value={dep.task_definition_id.toString()}>
+                                {dep.name} (Etapa: {stageLabelMap.get(dep.station_sequence_order) || dep.station_sequence_order || 'N/A'}, Tipo: {dep.is_panel_task ? "Panel" : "Módulo"})
+                            </option>
+                        ))}
+                    </select>
+                </div>
                  <div>
-                     <button type="submit" disabled={isLoading} style={styles.button}>
+                     <button type="submit" disabled={isLoading} style={{...styles.button, ...styles.buttonPrimary}}>
                          {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Definición' : 'Añadir Definición')}
                      </button>
                      {editMode && (
-                         <button type="button" onClick={handleCancelEdit} style={styles.button} disabled={isLoading}>
+                         <button type="button" onClick={handleCancelEdit} style={{...styles.button, ...styles.buttonSecondary}} disabled={isLoading}>
                              Cancelar
                          </button>
                      )}
@@ -268,21 +271,37 @@ function TaskDefinitionManager() {
             {isLoading && !taskDefs.length ? <p style={styles.loading}>Cargando definiciones de tareas...</p> : (
                 <table style={styles.table}>
                     <thead>
-                        <tr><th style={styles.th}>Nombre</th><th style={styles.th}>Descripción</th><th style={styles.th}>Tipo Vivienda</th><th style={styles.th}>Especialidad</th><th style={styles.th}>Etapa (Secuencia)</th><th style={styles.th}>Acciones</th></tr>
+                        <tr>
+                            <th style={styles.th}>Nombre</th>
+                            <th style={styles.th}>Descripción</th>
+                            <th style={styles.th}>Tipo Tarea</th>
+                            <th style={styles.th}>Tipo Vivienda</th>
+                            <th style={styles.th}>Especialidad</th>
+                            <th style={styles.th}>Etapa (Secuencia)</th>
+                            <th style={styles.th}>Dependencias</th>
+                            <th style={styles.th}>Acciones</th>
+                        </tr>
                     </thead>
                     <tbody>
                         {taskDefs.map((td) => (
                             <tr key={td.task_definition_id}>
                                 <td style={styles.td}>{td.name}</td>
                                 <td style={styles.td}>{td.description}</td>
-                                <td style={styles.td}>{td.house_type_name || 'N/A'}</td> {/* Changed field */}
+                                <td style={styles.td}>{td.is_panel_task ? 'Panel' : 'Módulo'}</td>
+                                <td style={styles.td}>{td.house_type_name || 'N/A'}</td>
                                 <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
-                                {/* Look up the label using the map, fallback to the number or N/A */}
-                                {/* Added parentheses to clarify operator precedence */}
                                 <td style={styles.td}>{(stageLabelMap.get(td.station_sequence_order) || td.station_sequence_order) ?? 'N/A'}</td>
                                 <td style={styles.td}>
-                                    <button onClick={() => handleEdit(td)} style={styles.button} disabled={isLoading}>Editar</button>
-                                    <button onClick={() => handleDelete(td.task_definition_id)} style={styles.button} disabled={isLoading}>Eliminar</button>
+                                    {td.task_dependencies ? 
+                                        String(td.task_dependencies).split(',').map(depId => {
+                                            const depTask = taskDefs.find(t => t.task_definition_id === parseInt(depId));
+                                            return depTask ? depTask.name : `ID ${depId}`;
+                                        }).join(', ')
+                                        : 'Ninguna'}
+                                </td>
+                                <td style={styles.td}>
+                                    <button onClick={() => handleEdit(td)} style={{...styles.button, ...styles.buttonEdit}} disabled={isLoading}>Editar</button>
+                                    <button onClick={() => handleDelete(td.task_definition_id)} style={{...styles.button, ...styles.buttonDelete}} disabled={isLoading}>Eliminar</button>
                                 </td>
                             </tr>
                         ))}

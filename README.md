@@ -23,27 +23,27 @@ Pay close attention to:
 *   Changes to the production planning workflow, focusing on direct manipulation of `ModuleProductionPlan` items.
 
 **List of Files to Check (tick them off as you complete them!!):**
-*   `backend/app/api/admin_definitions.py`
-*   `backend/app/api/admin_personnel.py`
-*   `backend/app/api/admin_projects.py`
-*   `backend/app/api/auth.py`
-*   `backend/app/database/connection.py`
-*   `backend/app/database/queries.py`
-*   `backend/app/__init__.py`
-*   `config.py`
-*   `run.py`
-*   `frontend/src/App.js`
-*   `frontend/src/components/admin/ActiveProductionDashboard.js`
-*   `frontend/src/components/admin/AdminTeamManager.js`
-*   `frontend/src/components/admin/HouseParametersManager.js`
-*   `frontend/src/components/admin/HouseTypePanelsModal.js`
-*   `frontend/src/components/admin/HouseTypesManager.js`
-*   `frontend/src/components/admin/ProjectsManager.js` (Likely needs significant changes or replacement)
-*   `frontend/src/components/admin/SpecialtiesManager.js`
-*   `frontend/src/components/admin/TaskDefinitionManager.js`
-*   `frontend/src/components/admin/WorkersManager.js`
-*   `frontend/src/pages/AdminDashboard.js`
-*   `frontend/src/services/adminService.js`
+*   [x] `backend/app/api/admin_definitions.py`
+*   [x] `backend/app/api/admin_personnel.py`
+*   [x] `backend/app/api/admin_projects.py`
+*   [x] `backend/app/api/auth.py`
+*   [x] `backend/app/database/connection.py`
+*   [x] `backend/app/database/queries.py`
+*   [x] `backend/app/__init__.py`
+*   [x] `config.py`
+*   [x] `run.py`
+*   [x] `frontend/src/App.js`
+*   [x] `frontend/src/components/admin/ActiveProductionDashboard.js`
+*   [x] `frontend/src/components/admin/AdminTeamManager.js`
+*   [x] `frontend/src/components/admin/HouseParametersManager.js`
+*   [x] `frontend/src/components/admin/HouseTypePanelsModal.js`
+*   [x] `frontend/src/components/admin/HouseTypesManager.js`
+*   [x] `frontend/src/components/admin/ProjectsManager.js` (Likely needs significant changes or replacement)
+*   [x] `frontend/src/components/admin/SpecialtiesManager.js`
+*   [x] `frontend/src/components/admin/TaskDefinitionManager.js`
+*   [x] `frontend/src/components/admin/WorkersManager.js`
+*   [x] `frontend/src/pages/AdminDashboard.js`
+*   [x] `frontend/src/services/adminService.js`
 
 ---
 

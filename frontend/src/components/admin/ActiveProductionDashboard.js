@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     DndContext,
     closestCenter,
@@ -14,13 +14,12 @@ import {
     verticalListSortingStrategy,
     useSortable
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities'; // For transform/transition styles
-import SetTipologiaModal from './SetTipologiaModal';
-import SetDateTimeModal from './SetDateTimeModal'; // Import the new modal
+import { CSS } from '@dnd-kit/utilities';
+import SetSubTypeModal from './SetSubTypeModal'; // Renamed from SetTipologiaModal
+import SetDateTimeModal from './SetDateTimeModal';
 import * as adminService from '../../services/adminService';
-import styles from './AdminComponentStyles'; // Assuming shared styles
+import styles from './AdminComponentStyles';
 
-// Define station layout structure (can be enhanced)
 const stationLayout = {
     'W': ['W1', 'W2', 'W3', 'W4', 'W5'],
     'M': ['M1'],
@@ -31,555 +30,214 @@ const stationLayout = {
 
 const lineStyles = {
     display: 'flex',
-    flexDirection: 'row', // Default for W, M
+    flexDirection: 'row',
     marginBottom: '20px',
     paddingBottom: '10px',
     borderBottom: '1px solid #eee',
-    overflowX: 'auto', // Allow horizontal scroll if needed
-    minHeight: '120px', // Ensure line container has height even if empty
+    overflowX: 'auto',
+    minHeight: '180px', // Increased minHeight to accommodate more task details
 };
 
 const assemblyLinesContainer = {
     display: 'flex',
     flexDirection: 'row',
-    justifyContent: 'space-between', // Space out lines A, B, C
+    justifyContent: 'space-between',
 };
 
 const stationBoxStyle = {
     border: '1px solid #ccc',
-    padding: '10px 15px', // Increased padding
+    padding: '10px 15px',
     margin: '5px',
-    minWidth: '150px', // Ensure minimum width
-    maxWidth: '250px', // Max width before text wraps aggressively
-    minHeight: '100px', // Ensure minimum height
+    minWidth: '200px', // Increased minWidth
+    maxWidth: '300px',
+    minHeight: '150px', // Increased minHeight
     borderRadius: '4px',
     backgroundColor: '#f9f9f9',
-    textAlign: 'center', // Center station ID
+    textAlign: 'left', // Changed to left for task lists
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between', // Space out title and content
+    justifyContent: 'flex-start', // Changed to flex-start
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    fontSize: '0.9em', // Slightly smaller font for content
+    fontSize: '0.9em',
 };
 
 const stationTitleStyle = {
     fontWeight: 'bold',
-    marginBottom: '8px', // Space below title
-    fontSize: '1em', // Reset font size for title
+    marginBottom: '8px',
+    fontSize: '1em',
     color: '#333',
+    textAlign: 'center', // Keep station title centered
 };
 
 const moduleInfoStyle = {
-    fontSize: '0.85em', // Smaller font for module details
+    fontSize: '0.85em',
     color: '#555',
-    wordWrap: 'break-word', // Allow long identifiers to wrap
+    wordWrap: 'break-word',
+    marginBottom: '5px',
+};
+
+const taskListStyle = {
+    listStyleType: 'none',
+    paddingLeft: '0',
+    margin: '5px 0',
+    fontSize: '0.8em',
+};
+
+const taskItemStyle = {
+    padding: '2px 0',
+    borderBottom: '1px dotted #eee',
+};
+const completedTaskStyle = {
+    textDecoration: 'line-through',
+    color: '#888',
+};
+
+const panelContainerStyle = {
+    marginTop: '5px',
+    paddingLeft: '10px',
+    borderLeft: '2px solid #007bff'
 };
 
 const emptyStationStyle = {
     color: '#aaa',
     fontStyle: 'italic',
+    textAlign: 'center',
+    paddingTop: '30px', // Center "Vacío" text a bit
 };
 
-const upcomingListStyle = {
-    listStyle: 'none',
-    padding: 0,
-};
-
+const upcomingListStyle = { listStyle: 'none', padding: 0 };
 const upcomingItemStyle = {
-    border: '1px solid #eee',
-    padding: '8px',
-    marginBottom: '5px',
-    borderRadius: '3px',
-    backgroundColor: '#fff',
-    fontSize: '0.9em',
-    userSelect: 'none', // Prevent text selection during drag
-    transition: 'background-color 0.2s ease', // Smooth background transition
-    cursor: 'pointer', // Indicate items are clickable
-    // Add styles for when dragging
+    border: '1px solid #eee', padding: '8px', marginBottom: '5px', borderRadius: '3px',
+    backgroundColor: '#fff', fontSize: '0.9em', userSelect: 'none',
+    transition: 'background-color 0.2s ease', cursor: 'pointer',
 };
-
-const selectedListItemStyle = {
-    backgroundColor: '#d6eaff', // A distinct background for selected items
-    borderLeft: '3px solid #007bff', // Add a visual indicator on the left
-};
-
-const draggingListItemStyle = {
-    backgroundColor: '#e6f7ff', // Light blue background when dragging
-    boxShadow: '0 4px 8px rgba(0,0,0,0.2)', // Add a shadow for a "lifted" effect
-    opacity: 0.9, // Slightly reduce opacity
-    cursor: 'grabbing', // Change cursor during drag
-    zIndex: 100, // Ensure dragged item is visually on top
-};
-
-const dragHandleStyle = { // Optional: Style for a dedicated drag handle
-    display: 'inline-block',
-    marginRight: '10px',
-    cursor: 'grab',
-    color: '#aaa',
-};
-
-// Style for the module sequence badge
-const moduleBadgeStyle = {
-    display: 'inline-block',
-    padding: '2px 5px',
-    borderRadius: '3px',
-    backgroundColor: '#6c757d', // Bootstrap secondary color (grey)
-    color: 'white',
-    fontSize: '0.8em',
-    fontWeight: 'bold',
-    marginRight: '5px', // Add some space after the badge
-    verticalAlign: 'middle', // Align badge nicely with text
-};
-
-// Style for the House Type badge
-const houseTypeBadgeStyle = {
-    display: 'inline-block',
-    padding: '2px 5px',
-    borderRadius: '3px',
-    backgroundColor: '#007bff', // Bootstrap primary color (blue)
-    color: 'white',
-    fontSize: '0.8em',
-    fontWeight: 'bold',
-    marginRight: '5px', // Add some space after the badge
-    verticalAlign: 'middle', // Align badge nicely with text
-};
+const selectedListItemStyle = { backgroundColor: '#d6eaff', borderLeft: '3px solid #007bff' };
+const draggingListItemStyle = { backgroundColor: '#e6f7ff', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', opacity: 0.9, cursor: 'grabbing', zIndex: 100 };
+const moduleBadgeStyle = { display: 'inline-block', padding: '2px 5px', borderRadius: '3px', backgroundColor: '#6c757d', color: 'white', fontSize: '0.8em', fontWeight: 'bold', marginRight: '5px', verticalAlign: 'middle' };
+const houseTypeBadgeStyle = { display: 'inline-block', padding: '2px 5px', borderRadius: '3px', backgroundColor: '#007bff', color: 'white', fontSize: '0.8em', fontWeight: 'bold', marginRight: '5px', verticalAlign: 'middle' };
 
 
-// --- Line Indicator Component ---
-// Extracted for clarity and reusability
 const LineIndicator = ({ line, isActive, isClickable, onClick }) => {
-    const baseStyle = {
-        display: 'inline-block',
-        padding: '3px 6px',
-        borderRadius: '4px',
-        fontWeight: 'bold',
-        fontSize: '0.8em',
-        minWidth: '20px',
-        textAlign: 'center',
-        margin: '0 2px', // Add small horizontal margin between indicators
-        border: '1px solid transparent', // Placeholder for border consistency
-    };
-
-    const activeStyle = {
-        color: 'white',
-        backgroundColor: line === 'A' ? '#dc3545' : line === 'B' ? '#28a745' : '#007bff', // Red, Green, Blue
-    };
-
-    const inactiveClickableStyle = {
-        color: '#aaa',
-        backgroundColor: '#f0f0f0',
-        cursor: 'pointer',
-        border: '1px solid #ccc',
-        '&:hover': { // Note: Pseudo-classes need specific handling in React (e.g., state or styled-components)
-            backgroundColor: '#e0e0e0',
-        }
-    };
-
-    // Basic hover effect using inline style state (more advanced with libraries)
+    const baseStyle = { display: 'inline-block', padding: '3px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.8em', minWidth: '20px', textAlign: 'center', margin: '0 2px', border: '1px solid transparent' };
+    const activeStyle = { color: 'white', backgroundColor: line === 'A' ? '#dc3545' : line === 'B' ? '#28a745' : '#007bff' };
+    const inactiveClickableStyle = { color: '#aaa', backgroundColor: '#f0f0f0', cursor: 'pointer', border: '1px solid #ccc' };
     const [isHovering, setIsHovering] = React.useState(false);
-
-    const combinedStyle = {
-        ...baseStyle,
-        ...(isActive ? activeStyle : (isClickable ? inactiveClickableStyle : {})),
-        ...(isClickable && !isActive && isHovering ? { backgroundColor: '#e0e0e0' } : {}) // Apply hover style
-    };
-
-    return (
-        <div
-            style={combinedStyle}
-            onClick={isClickable && !isActive ? onClick : undefined} // Only trigger onClick if clickable and not active
-            onMouseEnter={() => isClickable && !isActive && setIsHovering(true)}
-            onMouseLeave={() => setIsHovering(false)}
-        >
-            {line}
-        </div>
-    );
+    const combinedStyle = { ...baseStyle, ...(isActive ? activeStyle : (isClickable ? inactiveClickableStyle : {})), ...(isClickable && !isActive && isHovering ? { backgroundColor: '#e0e0e0' } : {}) };
+    return <div style={combinedStyle} onClick={isClickable && !isActive ? onClick : undefined} onMouseEnter={() => isClickable && !isActive && setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>{line}</div>;
 };
 
-// --- Helper Function to get unique projects from items ---
-const getUniqueProjects = (items) => {
+const getUniqueProjectsFromUpcoming = (items) => {
     const projects = new Map();
     items.forEach(item => {
-        if (!projects.has(item.project_id)) {
-            projects.set(item.project_id, {
-                id: item.project_id,
+        if (!projects.has(item.project_name)) { // Use project_name
+            projects.set(item.project_name, {
+                // id: item.project_id, // project_id is no longer available directly on upcoming_items
                 name: item.project_name,
-                // Collect all unique module sequences for this project from the items
-                moduleSequences: new Set(items.filter(i => i.project_id === item.project_id).map(i => i.module_sequence_in_house))
+                moduleNumbers: new Set(items.filter(i => i.project_name === item.project_name).map(i => i.module_number)) // Use module_number
             });
+        } else {
+            projects.get(item.project_name).moduleNumbers.add(item.module_number);
         }
     });
-    // Convert map values to array and sort sequences numerically within each project
     return Array.from(projects.values()).map(proj => ({
         ...proj,
-        moduleSequences: Array.from(proj.moduleSequences).sort((a, b) => a - b)
-    })).sort((a, b) => a.name.localeCompare(b.name)); // Sort projects by name
+        moduleNumbers: Array.from(proj.moduleNumbers).sort((a, b) => a - b)
+    })).sort((a, b) => a.name.localeCompare(b.name));
 };
 
-// --- Helper Function to generate a random color suitable for text ---
-const generateDeterministicColor = (projectId) => {
-    // Use a prime number to distribute hues across the spectrum
-    const prime = 1117; // A prime number
-    const hue = (projectId * prime) % 360;
-    const saturation = 70; // Keep saturation constant for consistency
-    const lightness = 40; // Keep lightness constant for readability
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+const generateDeterministicColor = (projectName) => {
+    let hash = 0;
+    for (let i = 0; i < projectName.length; i++) {
+        hash = projectName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = hash % 360;
+    return `hsl(${hue}, 70%, 40%)`;
 };
 
-
-// --- Sortable Item Component (for dnd-kit) ---
-// Moved outside ActiveProductionDashboard for correct component definition scope
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick }) { // Added onDateTimeBadgeClick prop
-    const {
-        attributes,
-        listeners: dndListeners, // Original dnd-kit listeners
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({
-        id,
-        disabled // Pass the disabled prop to useSortable hook
-    });
-    // Extract the pointerDown handler for merging selection logic
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick }) {
+    const { attributes, listeners: dndListeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
     const { onPointerDown: dndOnPointerDown, ...listeners } = dndListeners;
 
-    // Combine base, conditional, and dnd-kit styles for the draggable element
     const draggableElementStyle = {
-        ...upcomingItemStyle, // Start with base item style
-        ...(isDragging
-            ? draggingListItemStyle // Apply dragging style if dragging
-            : (isSelected ? selectedListItemStyle : {})), // Otherwise, apply selected style if selected
-        transform: CSS.Transform.toString(transform), // Apply dnd-kit transform
-        transition, // Apply dnd-kit transition
-        // Add top border/margin if it's the start of a new project in the flat list
+        ...upcomingItemStyle,
+        ...(isDragging ? draggingListItemStyle : (isSelected ? selectedListItemStyle : {})),
+        transform: CSS.Transform.toString(transform), transition,
         borderTop: showProjectSeparator ? '2px solid #ccc' : (isSelected && !isDragging ? selectedListItemStyle.border : upcomingItemStyle.border),
         marginTop: showProjectSeparator ? '10px' : upcomingItemStyle.marginBottom,
-        display: 'flex',
-        alignItems: 'center',
-        padding: '8px',
-        flexGrow: 1,
-        marginRight: '10px',
-        position: 'relative', // Needed for zIndex from draggingListItemStyle
-        // Ensure zIndex is applied correctly when dragging
-        zIndex: isDragging ? draggingListItemStyle.zIndex : 'auto',
-        outline: 'none', // Remove default browser focus outline
-        cursor: disabled ? 'pointer' : (isDragging ? 'grabbing' : 'grab'), // Change cursor based on disabled/dragging state
+        display: 'flex', alignItems: 'center', padding: '8px', flexGrow: 1, marginRight: '10px', position: 'relative',
+        zIndex: isDragging ? draggingListItemStyle.zIndex : 'auto', outline: 'none',
+        cursor: disabled ? 'pointer' : (isDragging ? 'grabbing' : 'grab'),
     };
+    const lineIndicatorContainerStyle = { display: 'flex', flexDirection: 'row', alignItems: 'center', minWidth: '100px' };
 
-    // Style for the container holding the line indicators
-    const lineIndicatorContainerStyle = {
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        minWidth: '100px', // Ensure enough space for indicators
-    };
-
-    // Apply drag listeners and onClick handler to the draggable element
-    // onClick logic is now gated by Shift key inside handleItemClick
     return (
-        // Outer container - NOT draggable, holds both parts
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: upcomingItemStyle.marginBottom }}>
-            {/* Draggable Content - Apply styles, ref, attributes, listeners, and onClick */}
-            <div
-                ref={setNodeRef}
-                style={draggableElementStyle}
-                {...attributes}
-                {...listeners} // Apply drag-kit listeners directly
-                onPointerDown={(e) => {
-                    // Single left-click with Shift selects item
-                    if (e.nativeEvent.shiftKey && e.nativeEvent.button === 0) {
-                        onClick(e, id);
-                    }
-                    // Then always invoke dnd-kit pointerDown for drag (if allowed)
-                    if (dndOnPointerDown) {
-                        dndOnPointerDown(e);
-                    }
-                }}
-            >
-                {/* Sequence Number - Placed inside draggable part */}
+            <div ref={setNodeRef} style={draggableElementStyle} {...attributes} {...listeners}
+                onPointerDown={(e) => { if (e.nativeEvent.shiftKey && e.nativeEvent.button === 0) { onClick(e, id); } if (dndOnPointerDown) { dndOnPointerDown(e); } }}>
                 <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
-                {/* Main text content - Now using JSX with colored project name and module badge */}
                 <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <span style={{ color: projectColor, fontWeight: 'bold' }}>[{item.project_name}]</span>
                     {` ${item.house_identifier} `}
-                    <span style={moduleBadgeStyle}>MD{item.module_sequence_in_house}</span>
-                    {/* House Type Badge */}
-                    <span
-                        style={houseTypeBadgeStyle}
-                        data-house-type-badge="true" // Keep data attribute for clarity/potential future use
-                        onPointerDown={e => {
-                            // Stop propagation immediately on pointer down to prevent drag sensor activation
-                            e.stopPropagation();
-                        }}
-                        onClick={e => {
-                            // No need to stop propagation here again, but keep for modal logic
-                            // e.stopPropagation(); // Can be removed if onPointerDown handles it
-                            onHouseTypeBadgeClick(item.house_type_id, item.plan_id);
-                        }}
-                    >
+                    <span style={moduleBadgeStyle}>MD{item.module_number}</span> {/* Changed from module_sequence_in_house */}
+                    <span style={houseTypeBadgeStyle} data-house-type-badge="true" onPointerDown={e => e.stopPropagation()} onClick={e => onHouseTypeBadgeClick(item.house_type_id, item.house_type_name, item.plan_id, item.sub_type_id)}>
                         [{item.house_type_name}]
-                        {item.tipologia_name && `[${item.tipologia_name}]`} {/* Use tipologia_name from item */}
+                        {item.sub_type_name && ` [${item.sub_type_name}]`} {/* Changed from tipologia_name */}
                     </span>
-                    {/* Make date clickable */}
-                    <span
-                        style={{ cursor: 'pointer', textDecoration: 'underline', marginLeft: '5px' }}
-                        data-datetime-badge="true" // Add data attribute
-                        onPointerDown={e => {
-                            // Stop propagation immediately on pointer down to prevent drag sensor activation
-                            e.stopPropagation();
-                        }}
-                        onClick={e => {
-                            // Call the handler passed from the parent
-                            onDateTimeBadgeClick(item.plan_id, item.planned_start_datetime);
-                        }}
-                    >
+                    <span style={{ cursor: 'pointer', textDecoration: 'underline', marginLeft: '5px' }} data-datetime-badge="true" onPointerDown={e => e.stopPropagation()} onClick={e => onDateTimeBadgeClick(item.plan_id, item.planned_start_datetime)}>
                         {formatPlannedDate(item.planned_start_datetime)}
                     </span>
                 </span>
            </div>
-
-           {/* Line Indicator Container - NOT draggable */}
             <div style={lineIndicatorContainerStyle}>
-                <LineIndicator
-                    line="A"
-                    isActive={item.planned_assembly_line === 'A'}
-                    isClickable={true}
-                    onClick={() => onChangeLine(id, 'A')}
-                />
-                <LineIndicator
-                    line="B"
-                    isActive={item.planned_assembly_line === 'B'}
-                    isClickable={true}
-                    onClick={() => onChangeLine(id, 'B')}
-                />
-                <LineIndicator
-                    line="C"
-                    isActive={item.planned_assembly_line === 'C'}
-                    isClickable={true}
-                    onClick={() => onChangeLine(id, 'C')}
-                />
+                <LineIndicator line="A" isActive={item.planned_assembly_line === 'A'} isClickable={true} onClick={() => onChangeLine(id, 'A')} />
+                <LineIndicator line="B" isActive={item.planned_assembly_line === 'B'} isClickable={true} onClick={() => onChangeLine(id, 'B')} />
+                <LineIndicator line="C" isActive={item.planned_assembly_line === 'C'} isClickable={true} onClick={() => onChangeLine(id, 'C')} />
             </div>
         </div>
     );
 }
-// --- End Sortable Item Component ---
-
 
 function ActiveProductionDashboard() {
-    const [stationStatus, setStationStatus] = useState([]);
-    const [upcomingItems, setUpcomingItems] = useState([]);
+    const [stationStatusData, setStationStatusData] = useState({ station_status: [], upcoming_items: [] });
+    const [stationStatusMap, setStationStatusMap] = useState({}); // For quick lookup
+    const [upcomingItems, setUpcomingItems] = useState([]); // For DND list
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [lastUpdated, setLastUpdated] = useState(null);
-    // Removed collapsedProjects state
-    const [selectedItemIds, setSelectedItemIds] = useState(new Set()); // State for selected item IDs
-    const [lastClickedItemId, setLastClickedItemId] = useState(null); // State for shift-click logic
-    const [draggedItemIds, setDraggedItemIds] = useState(null); // State to hold IDs being dragged (single or group)
-    const [isUpdatingLine, setIsUpdatingLine] = useState(false); // State to track line update API call
-    const [projectColorMap, setProjectColorMap] = useState(new Map()); // State to store project colors
-    const [isShiftKeyDown, setIsShiftKeyDown] = useState(false); // State to track Shift key globally
-    // --- Set Tipologia Modal State & Handlers ---
-    const [tipologiaModalOpen, setTipologiaModalOpen] = useState(false);
-    const [tipologiaHouseTypeId, setTipologiaHouseTypeId] = useState(null);
-    const [tipologiaHouseTypeName, setTipologiaHouseTypeName] = useState(''); // Store name for display
-    const [tipologiaPlanIds, setTipologiaPlanIds] = useState([]);
-    const [availableTipologias, setAvailableTipologias] = useState(null); // Store fetched tipologias
-    const [isLoadingTipologias, setIsLoadingTipologias] = useState(false);
-    const [currentTipologiaId, setCurrentTipologiaId] = useState(undefined); // State for pre-selecting in modal
-    // --- Set DateTime Modal State & Handlers ---
+    const [selectedItemIds, setSelectedItemIds] = useState(new Set());
+    const [lastClickedItemId, setLastClickedItemId] = useState(null);
+    const [draggedItemIds, setDraggedItemIds] = useState(null);
+    const [isUpdatingLine, setIsUpdatingLine] = useState(false);
+    const [projectColorMap, setProjectColorMap] = useState(new Map());
+    const [isShiftKeyDown, setIsShiftKeyDown] = useState(false); // Not used in current logic, but kept if needed
+
+    const [subTypeModalOpen, setSubTypeModalOpen] = useState(false); // Renamed
+    const [subTypeHouseTypeId, setSubTypeHouseTypeId] = useState(null); // Renamed
+    const [subTypeHouseTypeName, setSubTypeHouseTypeName] = useState(''); // Renamed
+    const [subTypePlanIds, setSubTypePlanIds] = useState([]); // Renamed
+    const [availableSubTypes, setAvailableSubTypes] = useState(null); // Renamed
+    const [isLoadingSubTypes, setIsLoadingSubTypes] = useState(false); // Renamed
+    const [currentSubTypeIdForModal, setCurrentSubTypeIdForModal] = useState(undefined); // Renamed
+
     const [dateTimeModalOpen, setDateTimeModalOpen] = useState(false);
     const [dateTimePlanIds, setDateTimePlanIds] = useState([]);
-    const [dateTimeCurrentValue, setDateTimeCurrentValue] = useState(null); // Store current datetime for pre-fill
-    const [isSavingDateTime, setIsSavingDateTime] = useState(false); // Separate loading state for saving datetime
-
-
-    const handleOpenTipologiaModal = async (houseTypeId, houseTypeName, planId) => {
-        setIsLoadingTipologias(true);
-        setTipologiaModalOpen(true);
-        setTipologiaHouseTypeId(houseTypeId);
-        setTipologiaHouseTypeName(houseTypeName);
-
-        // Determine which plan IDs to affect
-        const ids = (selectedItemIds.size > 0 && selectedItemIds.has(planId))
-            ? Array.from(selectedItemIds)
-            : [planId];
-        setTipologiaPlanIds(ids);
-
-        // Check if all selected items belong to the *same* houseTypeId
-        let allSameHouseType = true;
-        let firstTipologiaId = undefined;
-        let commonTipologiaFound = true;
-
-        if (ids.length > 0) {
-            const firstItem = upcomingItems.find(item => item.plan_id === ids[0]);
-            if (!firstItem || firstItem.house_type_id !== houseTypeId) {
-                allSameHouseType = false; // Should not happen if logic is correct, but check
-            } else {
-                firstTipologiaId = firstItem.tipologia_id; // Initialize with the first item's tipologia
-            }
-
-            for (let i = 1; i < ids.length; i++) {
-                const currentItem = upcomingItems.find(item => item.plan_id === ids[i]);
-                if (!currentItem || currentItem.house_type_id !== houseTypeId) {
-                    allSameHouseType = false;
-                    break;
-                }
-                // Check if tipologia is the same as the first one
-                if (currentItem.tipologia_id !== firstTipologiaId) {
-                    commonTipologiaFound = false;
-                    // Don't break here, continue checking house type consistency
-                }
-            }
-        } else {
-             allSameHouseType = false; // No items selected/passed
-        }
-
-
-        if (!allSameHouseType) {
-            setError("Error: Los elementos seleccionados deben pertenecer al mismo Tipo de Casa para establecer la tipología.");
-            handleCloseTipologiaModal(); // Close modal immediately
-            return;
-        }
-
-        // Set current tipologia for pre-selection only if it's common among all selected items
-        setCurrentTipologiaId(commonTipologiaFound ? firstTipologiaId : undefined);
-
-
-        // Fetch available tipologias for this house type
-        try {
-            setError(''); // Clear previous errors
-            const tipologiasData = await adminService.getHouseTypeTipologias(houseTypeId);
-            setAvailableTipologias(tipologiasData || []); // Ensure it's an array
-        } catch (err) {
-            setError(`Error cargando tipologías: ${err.message}`);
-            setAvailableTipologias([]); // Set empty on error
-            console.error(err);
-        } finally {
-            setIsLoadingTipologias(false);
-        }
-    };
-
-    const handleCloseTipologiaModal = () => {
-        setTipologiaModalOpen(false);
-        setTipologiaHouseTypeId(null);
-        setTipologiaHouseTypeName('');
-        setTipologiaPlanIds([]);
-        setAvailableTipologias(null); // Clear fetched data
-        setCurrentTipologiaId(undefined); // Clear current selection
-        setError(''); // Clear modal-specific errors
-    };
-
-    // Handler for saving the tipologia from the modal
-    const handleSetTipologia = async (planIdsToUpdate, newTipologiaId) => {
-        // Optimistic UI update (optional, but good for responsiveness)
-        const originalItems = [...upcomingItems];
-        const updatedItemsOptimistic = originalItems.map(item => {
-            if (planIdsToUpdate.includes(item.plan_id)) {
-                // Find the name of the new tipologia (if not null)
-                const newTipologia = availableTipologias?.find(t => t.tipologia_id === newTipologiaId);
-                return {
-                    ...item,
-                    tipologia_id: newTipologiaId,
-                    tipologia_name: newTipologia ? newTipologia.name : null // Update name locally
-                };
-            }
-            return item;
-        });
-        setUpcomingItems(updatedItemsOptimistic);
-
-        try {
-            await adminService.setProductionPlanItemsTipologiaBulk(planIdsToUpdate, newTipologiaId);
-            // Success! Data is already updated optimistically. Maybe show a success message briefly?
-            setLastUpdated(new Date()); // Update timestamp
-            // Optional: Refetch data to ensure consistency? Or trust optimistic update.
-            // await fetchData(); // Uncomment to refetch after save
-        } catch (err) {
-            // Revert optimistic update on error
-            setUpcomingItems(originalItems);
-            // Re-throw the error so the modal can display it
-            throw err;
-        }
-    };
-    // --- End Tipologia Modal Handlers ---
-
-    // --- Set DateTime Modal Handlers ---
-    const handleOpenDateTimeModal = (planId, currentDateTime) => {
-        // Determine which plan IDs to affect
-        const ids = (selectedItemIds.size > 0 && selectedItemIds.has(planId))
-            ? Array.from(selectedItemIds)
-            : [planId];
-        setDateTimePlanIds(ids);
-
-        // Determine the datetime to pre-fill
-        // If multiple items are selected, use the datetime of the first one in the current list order
-        let dateTimeToPreFill = null;
-        if (ids.length > 0) {
-            // Find the item corresponding to the *first* ID in the selection list `ids`
-            const firstItemId = ids[0];
-            const firstItem = upcomingItems.find(item => item.plan_id === firstItemId);
-            dateTimeToPreFill = firstItem ? firstItem.planned_start_datetime : null;
-        }
-        setDateTimeCurrentValue(dateTimeToPreFill);
-
-        setDateTimeModalOpen(true);
-        setError(''); // Clear general errors when opening modal
-    };
-
-    const handleCloseDateTimeModal = () => {
-        setDateTimeModalOpen(false);
-        setDateTimePlanIds([]);
-        setDateTimeCurrentValue(null);
-        setError(''); // Clear modal-specific errors
-    };
-
-    const handleSetDateTime = async (planIdsToUpdate, newDateTimeString) => {
-        // Optimistic UI update
-        const originalItems = [...upcomingItems];
-        const updatedItemsOptimistic = originalItems.map(item => {
-            if (planIdsToUpdate.includes(item.plan_id)) {
-                return { ...item, planned_start_datetime: newDateTimeString };
-            }
-            return item;
-        });
-        // Sort optimistically based on the new date? Maybe not, backend reorder is separate.
-        // Let's just update the date visually for now. Re-fetch or manual reorder might be needed.
-        setUpcomingItems(updatedItemsOptimistic);
-        setIsSavingDateTime(true); // Use dedicated saving state
-
-        try {
-            await adminService.setProductionPlanItemsDateTimeBulk(planIdsToUpdate, newDateTimeString);
-            setLastUpdated(new Date());
-            // Optional: Refetch data to get potentially re-ordered list if backend adjusts sequence based on time
-            // await fetchData(); // Uncomment to refetch after save
-        } catch (err) {
-            // Revert optimistic update on error
-            setUpcomingItems(originalItems);
-            // Re-throw the error so the modal can display it
-            throw err;
-        } finally {
-            setIsSavingDateTime(false);
-        }
-    };
-    // --- End DateTime Modal Handlers ---
-
+    const [dateTimeCurrentValue, setDateTimeCurrentValue] = useState(null);
+    const [isSavingDateTime, setIsSavingDateTime] = useState(false);
 
     const fetchData = useCallback(async () => {
-        // Preserve selection if items still exist after fetch? For now, clear on fetch.
-        // If preservation is needed, logic would compare old/new items.
         setSelectedItemIds(new Set());
         setLastClickedItemId(null);
         setIsLoading(true);
         setError('');
         try {
-            const statusData = await adminService.getProductionStatus(); // Fetch status and ALL upcoming items
-            // Process station data into a map for easy lookup
-            const statusMap = statusData.station_status.reduce((acc, station) => {
+            const data = await adminService.getStationStatusOverview();
+            setStationStatusData(data);
+            const statusMap = (data.station_status || []).reduce((acc, station) => {
                 acc[station.station_id] = station;
                 return acc;
             }, {});
-            setStationStatus(statusMap);
-            setUpcomingItems(statusData.upcoming_items);
+            setStationStatusMap(statusMap);
+            setUpcomingItems(data.upcoming_items || []);
             setLastUpdated(new Date());
         } catch (err) {
             setError(`Error fetching production status: ${err.message}`);
@@ -588,413 +246,325 @@ function ActiveProductionDashboard() {
             setIsLoading(false);
         }
     }, []);
+    
+    const uniqueProjects = React.useMemo(() => getUniqueProjectsFromUpcoming(upcomingItems), [upcomingItems]);
 
-    // --- Derived State ---
-    // Get unique project details from the flat upcomingItems list
-    const uniqueProjects = React.useMemo(() => getUniqueProjects(upcomingItems), [upcomingItems]);
-
-    // Effect to assign random colors to projects when uniqueProjects changes
     useEffect(() => {
         setProjectColorMap(prevMap => {
             const newMap = new Map(prevMap);
             let updated = false;
             uniqueProjects.forEach(project => {
-                if (!newMap.has(project.id)) {
-                    newMap.set(project.id, generateDeterministicColor(project.id)); // Use deterministic color
+                if (!newMap.has(project.name)) { // Use project.name as key
+                    newMap.set(project.name, generateDeterministicColor(project.name));
                     updated = true;
                 }
-            }
-            );
-            return updated ? newMap : prevMap; // Only update state if changes were made
+            });
+            return updated ? newMap : prevMap;
         });
-    }, [uniqueProjects]); // Dependency: uniqueProjects
+    }, [uniqueProjects]);
 
     useEffect(() => {
         fetchData();
-        // Optional: Set up auto-refresh interval
-        const intervalId = setInterval(fetchData, 30000); // Refresh every 30 seconds
-        return () => clearInterval(intervalId); // Cleanup on unmount
+        const intervalId = setInterval(fetchData, 30000); 
+        return () => clearInterval(intervalId);
     }, [fetchData]);
 
-    // Removed toggleProjectCollapse function
-
-    // --- dnd-kit Setup ---
     const sensors = useSensors(
-        useSensor(PointerSensor, {
-            // Prevent drag activation if Shift key is pressed, allowing Shift+Click for selection only
-            activationConstraint: {
-                // distance: 5, // Default is 0, uncomment/adjust if needed
-                // delay: 100, // Default is 0 (PointerSensor), 250 (MouseSensor), uncomment/adjust if needed
-                shouldActivate: (event) => {
-                    // Check if Shift key is pressed
-                    const isShiftPressed = event.nativeEvent && typeof event.nativeEvent.shiftKey !== 'undefined' && event.nativeEvent.shiftKey;
-                    if (isShiftPressed) {
-                        return false; // Don't activate drag if Shift is pressed
-                    }
-
-                    // Check if the event target is the house type badge or inside it
-                    const targetElement = event.nativeEvent.target;
-                    // Use closest to check if the click originated from the badge or its children
-                    const houseTypeBadge = targetElement.closest('[data-house-type-badge="true"]');
-                    const dateTimeBadge = targetElement.closest('[data-datetime-badge="true"]'); // Check for datetime badge
-
-                    if (houseTypeBadge || dateTimeBadge) { // Prevent drag if clicking either badge
-                        return false;
-                    }
-
-                    // Otherwise, allow drag activation
-                    return true;
-                }
-            }
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
+        useSensor(PointerSensor, { activationConstraint: { shouldActivate: (event) => {
+            const isShiftPressed = event.nativeEvent && typeof event.nativeEvent.shiftKey !== 'undefined' && event.nativeEvent.shiftKey;
+            if (isShiftPressed) return false;
+            const targetElement = event.nativeEvent.target;
+            const houseTypeBadge = targetElement.closest('[data-house-type-badge="true"]');
+            const dateTimeBadge = targetElement.closest('[data-datetime-badge="true"]');
+            if (houseTypeBadge || dateTimeBadge) return false;
+            return true;
+        }}}),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
     const handleDragStart = useCallback((event) => {
         const { active } = event;
-        // Check if the dragged item is part of the current selection
         if (selectedItemIds.has(active.id)) {
-            // If yes, we are dragging the whole selection
             setDraggedItemIds(selectedItemIds);
         } else {
-            // If no, we are dragging a single, unselected item
             setDraggedItemIds(new Set([active.id]));
-            // Optional: Clear selection when dragging an unselected item?
-            // setSelectedItemIds(new Set());
-            // setLastClickedItemId(null);
         }
     }, [selectedItemIds]);
 
     const handleDragEnd = useCallback(async (event) => {
         const { active, over } = event;
-
-        // Ensure draggedItemIds is set (should be by handleDragStart)
-        if (!draggedItemIds) {
-            console.warn("Drag end called without draggedItemIds being set.");
-            return;
-        }
-
-        // Reset dragged items state regardless of outcome
+        if (!draggedItemIds) return;
         setDraggedItemIds(null);
 
         if (over && active.id !== over.id) {
-            const originalItems = [...upcomingItems]; // Store original order for potential revert
+            const originalItems = [...upcomingItems];
             let reorderedItems = originalItems;
-
-            // Check if we dragged a group (more than one item)
             const isGroupDrag = draggedItemIds.size > 1;
 
             if (isGroupDrag) {
-                // --- Group Drag Logic ---
-                // Ensure 'over.id' is not part of the dragged group itself
-                if (draggedItemIds.has(over.id)) {
-                    console.log("Cannot drop group onto itself. No change.");
-                    return; // Prevent dropping group onto one of its own items
-                }
-
-                // 1. Get the items being dragged, preserving their relative order
+                if (draggedItemIds.has(over.id)) return;
                 const groupBeingDragged = originalItems.filter(item => draggedItemIds.has(item.plan_id));
-
-                // 2. Create a list of items *not* being dragged
                 const itemsWithoutGroup = originalItems.filter(item => !draggedItemIds.has(item.plan_id));
-
-                // 3. Find the index where the 'over' item is in the list *without* the group
                 const newIndexInFilteredList = itemsWithoutGroup.findIndex(item => item.plan_id === over.id);
-
-                if (newIndexInFilteredList === -1) {
-                    console.error("Could not find the 'over' item index in the filtered list.");
-                    return; // Should not happen if over.id is valid and not in the group
-                }
-
-                // 4. Insert the dragged group into the filtered list at the target index
-                // newIndexInFilteredList is the index of 'over.id' in the list of items *not* being dragged.
-                // To place the dragged group *before* the 'over.id' item (consistent with dropping "between" items,
-                // or matching single item drop behavior where item moves to the 'over.id' position),
-                // we insert the group at this newIndexInFilteredList.
-                reorderedItems = [
-                    ...itemsWithoutGroup.slice(0, newIndexInFilteredList), // Items before 'over.id' in the filtered list
-                    ...groupBeingDragged,                                   // The dragged group
-                    ...itemsWithoutGroup.slice(newIndexInFilteredList)      // Items from 'over.id' onwards in the filtered list
-                ];
-
+                if (newIndexInFilteredList === -1) return;
+                reorderedItems = [...itemsWithoutGroup.slice(0, newIndexInFilteredList), ...groupBeingDragged, ...itemsWithoutGroup.slice(newIndexInFilteredList)];
             } else {
-                // --- Single Item Drag Logic (Existing) ---
                 const oldIndex = originalItems.findIndex((item) => item.plan_id === active.id);
                 const newIndex = originalItems.findIndex((item) => item.plan_id === over.id);
-
-                if (oldIndex === -1 || newIndex === -1) {
-                    console.error("Could not find dragged item indices for single drag.");
-                    return;
-                }
+                if (oldIndex === -1 || newIndex === -1) return;
                 reorderedItems = arrayMove(originalItems, oldIndex, newIndex);
             }
 
-            // --- Apply Changes (Optimistic Update & Backend Call) ---
-            // Update planned_sequence locally for immediate visual feedback
-            const itemsWithUpdatedSequence = reorderedItems.map((item, index) => ({
-                ...item,
-                planned_sequence: index + 1, // Update sequence based on new position (1-based)
-            }));
-
-            setUpcomingItems(itemsWithUpdatedSequence); // Update local state immediately with new sequence numbers
-
+            const itemsWithUpdatedSequence = reorderedItems.map((item, index) => ({ ...item, planned_sequence: index + 1 }));
+            setUpcomingItems(itemsWithUpdatedSequence);
             const orderedPlanIds = itemsWithUpdatedSequence.map(item => item.plan_id);
 
             try {
-                setIsLoading(true);
-                setError('');
-                await adminService.reorderProductionPlan(orderedPlanIds);
+                setIsLoading(true); setError('');
+                await adminService.reorderModuleProductionPlan(orderedPlanIds); // Updated service call
                 setLastUpdated(new Date());
-                // Optional: Clear selection after successful drag?
-                // setSelectedItemIds(new Set());
-                // setLastClickedItemId(null);
             } catch (err) {
-                setError(`Error reordering plan: ${err.message}. Reverting local changes.`);
-                console.error("Reorder error:", err);
-                setUpcomingItems(originalItems); // Revert optimistic update
+                setError(`Error reordenando plan: ${err.message}. Revirtiendo cambios locales.`);
+                setUpcomingItems(originalItems);
             } finally {
                 setIsLoading(false);
             }
         }
-    }, [upcomingItems, draggedItemIds]); // Removed fetchData dependency to prevent loop, rely on manual refresh or interval
+    }, [upcomingItems, draggedItemIds]);
 
-     const handleDragCancel = useCallback(() => {
-        // Reset dragged items state if drag is cancelled
-        setDraggedItemIds(null);
-    }, []);
-    // --- End dnd-kit Setup ---
+    const handleDragCancel = useCallback(() => setDraggedItemIds(null), []);
 
-    // --- Selection Logic ---
     const handleItemClick = useCallback((event, clickedItemId) => {
-        event.stopPropagation(); // Prevent click from bubbling to the deselect handler
-
-        const isShiftPressed = event.nativeEvent.shiftKey; // Check if Shift key was held
-
-        // --- Only perform selection/deselection if Shift key is pressed ---
-        if (!isShiftPressed) {
-            // If Shift is not pressed, do nothing regarding selection.
-            // This allows normal click-and-drag without affecting selection.
-            return;
-        }
-
-        // --- Proceed with selection logic only if Shift is pressed ---
+        event.stopPropagation();
+        if (!event.nativeEvent.shiftKey) return;
         setSelectedItemIds(prevSelectedIds => {
             const newSelectedIds = new Set(prevSelectedIds);
-
-            // Check if it's a range selection (Shift + Click on a different item than the last anchor)
             if (lastClickedItemId && lastClickedItemId !== clickedItemId) {
-                // Shift + Click: Select range using the flat upcomingItems list
-                const itemsInOrder = upcomingItems; // Use the flat list directly
+                const itemsInOrder = upcomingItems;
                 const lastClickedIndex = itemsInOrder.findIndex(item => item.plan_id === lastClickedItemId);
                 const currentClickedIndex = itemsInOrder.findIndex(item => item.plan_id === clickedItemId);
-
                 if (lastClickedIndex !== -1 && currentClickedIndex !== -1) {
                     const start = Math.min(lastClickedIndex, currentClickedIndex);
                     const end = Math.max(lastClickedIndex, currentClickedIndex);
-                    // Clear previous selection before applying range? Or add to it? Let's clear for simplicity.
-                    // newSelectedIds.clear(); // Uncomment to clear previous selection first
                     for (let i = start; i <= end; i++) {
-                        if (itemsInOrder[i]) {
-                            newSelectedIds.add(itemsInOrder[i].plan_id);
-                        }
+                        if (itemsInOrder[i]) newSelectedIds.add(itemsInOrder[i].plan_id);
                     }
                 } else {
-                    // Fallback if indices not found (shouldn't happen): just toggle the clicked item
-                    if (newSelectedIds.has(clickedItemId)) {
-                        newSelectedIds.delete(clickedItemId);
-                    } else {
-                        newSelectedIds.add(clickedItemId);
-                    }
+                    if (newSelectedIds.has(clickedItemId)) newSelectedIds.delete(clickedItemId); else newSelectedIds.add(clickedItemId);
                 }
             } else {
-                // Shift + Click on a single item (or the first item in a potential range)
-                // Toggles the selection state of the clicked item.
-                if (newSelectedIds.has(clickedItemId)) {
-                    newSelectedIds.delete(clickedItemId);
-                } else {
-                    newSelectedIds.add(clickedItemId);
-                }
+                if (newSelectedIds.has(clickedItemId)) newSelectedIds.delete(clickedItemId); else newSelectedIds.add(clickedItemId);
             }
             return newSelectedIds;
         });
-
-        // Update the anchor point for future Shift+Click range selections
         setLastClickedItemId(clickedItemId);
-
-    }, [lastClickedItemId, upcomingItems]); // Dependencies for selection logic
+    }, [lastClickedItemId, upcomingItems]);
 
     const handleDeselectAll = (event) => {
-        // Check if the click target is NOT within a sortable item OR the project header container
         if (!event.target.closest('[role="button"]') && !event.target.closest('[data-project-header-container]')) {
             setSelectedItemIds(new Set());
             setLastClickedItemId(null);
         }
     };
-    // --- End Selection Logic ---
-
-    // --- Line Change Logic ---
+    
     const handleChangeAssemblyLine = useCallback(async (clickedPlanId, newLine) => {
-        // Prevent changing line if already updating or dragging
         if (isUpdatingLine || draggedItemIds) return;
-
         const originalItems = [...upcomingItems];
-        const itemsToUpdateIds = [];
-        let isBulkUpdate = false;
+        const itemsToUpdateIds = (selectedItemIds.size > 1 && selectedItemIds.has(clickedPlanId)) ? Array.from(selectedItemIds) : [clickedPlanId];
+        const actualIdsToUpdate = itemsToUpdateIds.filter(id => originalItems.find(i => i.plan_id === id)?.planned_assembly_line !== newLine);
+        if (actualIdsToUpdate.length === 0) return;
 
-        // Determine if this is a bulk update based on selection
-        if (selectedItemIds.size > 1 && selectedItemIds.has(clickedPlanId)) {
-            isBulkUpdate = true;
-            selectedItemIds.forEach(id => itemsToUpdateIds.push(id));
-        } else {
-            // Single item update (or clicked item not in multi-selection)
-            itemsToUpdateIds.push(clickedPlanId);
-        }
-
-        // Filter out items that already have the target line
-        const actualIdsToUpdate = itemsToUpdateIds.filter(id => {
-            const item = originalItems.find(i => i.plan_id === id);
-            return item && item.planned_assembly_line !== newLine;
-        });
-
-        if (actualIdsToUpdate.length === 0) {
-            console.log("No items need line change.");
-            return; // All items already have the target line or no valid items found
-        }
-
-        // Optimistic UI Update for all items being changed
-        const updatedItemsOptimistic = originalItems.map(item =>
-            actualIdsToUpdate.includes(item.plan_id)
-                ? { ...item, planned_assembly_line: newLine }
-                : item
-        );
-        setUpcomingItems(updatedItemsOptimistic);
-        setIsUpdatingLine(true);
-        setError('');
-
+        setUpcomingItems(originalItems.map(item => actualIdsToUpdate.includes(item.plan_id) ? { ...item, planned_assembly_line: newLine } : item));
+        setIsUpdatingLine(true); setError('');
         try {
-            if (isBulkUpdate) {
-                // Call Bulk API
-                const response = await adminService.changeProductionPlanItemsLineBulk(actualIdsToUpdate, newLine);
-                console.log(`Bulk line change response: ${response.message}`);
-                // Optional: Refetch or update based on response if needed, but optimistic update is done
+            if (actualIdsToUpdate.length > 1) {
+                await adminService.changeModuleProductionPlanItemsLineBulk(actualIdsToUpdate, newLine); // Updated
             } else {
-                // Call Single API (only one ID in actualIdsToUpdate)
-                const singlePlanId = actualIdsToUpdate[0];
-                const updatedItem = await adminService.changeProductionPlanItemLine(singlePlanId, newLine);
-                // Update local state with potentially more complete data from backend (if needed)
-                // This might overwrite other optimistic updates if bulk was intended but only one needed changing.
-                // Consider refetching after bulk OR trust optimistic update. Let's trust optimistic for now.
-                // setUpcomingItems(prevItems => prevItems.map(item =>
-                //     item.plan_id === singlePlanId ? updatedItem : item
-                // ));
+                await adminService.updateModuleProductionPlanItem(actualIdsToUpdate[0], { planned_assembly_line: newLine }); // Updated
             }
             setLastUpdated(new Date());
         } catch (err) {
-            const errorMsg = `Error changing line for item(s) ${actualIdsToUpdate.join(', ')}: ${err.message}. Reverting.`;
-            setError(errorMsg);
-            console.error("Line change error:", err);
-            // Revert optimistic update on error
+            setError(`Error cambiando línea para item(s) ${actualIdsToUpdate.join(', ')}: ${err.message}. Revirtiendo.`);
             setUpcomingItems(originalItems);
         } finally {
             setIsUpdatingLine(false);
         }
-    }, [upcomingItems, isUpdatingLine, draggedItemIds, selectedItemIds]); // Added selectedItemIds dependency
-    // --- End Line Change Logic ---
+    }, [upcomingItems, isUpdatingLine, draggedItemIds, selectedItemIds]);
 
-    // --- Select Module Sequence Logic ---
-    const handleSelectModuleSequenceInProject = useCallback((event, projectId, targetSequence) => {
-        event.stopPropagation(); // Prevent triggering other clicks
-
-        // Filter the flat upcomingItems list
+    const handleSelectModuleNumberInProject = useCallback((event, projectName, targetModuleNumber) => { // Changed from projectID to projectName, sequence to number
+        event.stopPropagation();
         const idsToSelect = upcomingItems
-            .filter(item => item.project_id === projectId && item.module_sequence_in_house === targetSequence)
+            .filter(item => item.project_name === projectName && item.module_number === targetModuleNumber) // Use project_name and module_number
             .map(item => item.plan_id);
-
         if (idsToSelect.length > 0) {
-            setSelectedItemIds(prevSelectedIds => {
-                const newSelectedIds = new Set(prevSelectedIds);
-                idsToSelect.forEach(id => newSelectedIds.add(id));
-                return newSelectedIds;
-            });
-            // Optionally, update lastClickedItemId if needed for subsequent shift-clicks
-            // setLastClickedItemId(idsToSelect[idsToSelect.length - 1]); // Select the last one as anchor? Or keep existing?
+            setSelectedItemIds(prev => new Set([...prev, ...idsToSelect]));
         }
+    }, [upcomingItems]);
 
-    }, [upcomingItems]); // Dependency: flat upcomingItems list
-    // --- End Select Module Sequence Logic ---
-
-    // --- Date Formatting Helper ---
     const formatPlannedDate = (dateString) => {
-        if (!dateString) return '🗓 --'; // Return placeholder if no date
+        if (!dateString) return '🗓 --';
         try {
-            // Replace space with 'T' for better ISO 8601 compatibility if needed, though 'YYYY-MM-DD HH:MM:SS' usually works
-            // const compatibleDateString = dateString.replace(' ', 'T');
-            const date = new Date(dateString);
-
-            // Check if the date object is valid
-            if (isNaN(date.getTime())) {
-                console.error("Invalid Date object created from:", dateString);
-                return `🗓 ErrorFecha`; // Indicate invalid date
-            }
-
+            const date = new Date(dateString.replace(' ', 'T')+'Z'); // Ensure UTC parsing if backend sends naive datetime
+            if (isNaN(date.getTime())) return `🗓 ErrorFecha`;
             const currentYear = new Date().getFullYear();
             const year = date.getFullYear();
-            // Use a specific locale for month name consistency
             const month = date.toLocaleString('es-ES', { month: 'long' });
             const day = date.getDate();
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
-
-            // Capitalize the first letter of the month
             const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+            const yearString = year !== currentYear ? `${year} ` : '';
+            return `🗓 ${yearString}${capitalizedMonth} ${day}, ${hours}:${minutes}`;
+        } catch (e) { return `🗓 Error`; }
+    };
 
-            const yearString = year !== currentYear ? `${year} ` : ''; // Only show year if different from current
+    const handleOpenSubTypeModal = async (houseTypeId, houseTypeNameFromItem, planId, currentItemSubTypeId) => { // Renamed
+        setIsLoadingSubTypes(true); // Renamed
+        setSubTypeModalOpen(true);  // Renamed
+        setSubTypeHouseTypeId(houseTypeId); // Renamed
+        setSubTypeHouseTypeName(houseTypeNameFromItem); // Renamed
 
-            return `🗓 ${yearString}${capitalizedMonth} ${day}, ${hours}:${minutes}`; // Adjusted format slightly
-        } catch (e) {
-            console.error("Error formatting date:", dateString, e);
-            return `🗓 Error`; // Fallback indicating an error occurred
+        const ids = (selectedItemIds.size > 0 && selectedItemIds.has(planId)) ? Array.from(selectedItemIds) : [planId];
+        setSubTypePlanIds(ids); // Renamed
+
+        let allSameHouseType = true;
+        let firstSubTypeId = undefined; // Renamed
+        let commonSubTypeFound = true; // Renamed
+
+        if (ids.length > 0) {
+            const firstItem = upcomingItems.find(item => item.plan_id === ids[0]);
+            if (!firstItem || firstItem.house_type_id !== houseTypeId) {
+                allSameHouseType = false;
+            } else {
+                firstSubTypeId = firstItem.sub_type_id; // Use sub_type_id
+            }
+            for (let i = 1; i < ids.length; i++) {
+                const currentItem = upcomingItems.find(item => item.plan_id === ids[i]);
+                if (!currentItem || currentItem.house_type_id !== houseTypeId) { allSameHouseType = false; break; }
+                if (currentItem.sub_type_id !== firstSubTypeId) commonSubTypeFound = false; // Use sub_type_id
+            }
+        } else { allSameHouseType = false; }
+
+        if (!allSameHouseType) {
+            setError("Error: Los elementos seleccionados deben pertenecer al mismo Tipo de Casa para establecer el Sub-Tipo.");
+            handleCloseSubTypeModal(); return; // Renamed
+        }
+        setCurrentSubTypeIdForModal(commonSubTypeFound ? firstSubTypeId : undefined); // Renamed
+
+        try {
+            setError('');
+            const subTypesData = await adminService.getHouseSubTypes(houseTypeId); // Renamed service call
+            setAvailableSubTypes(subTypesData || []); // Renamed
+        } catch (err) {
+            setError(`Error cargando Sub-Tipos: ${err.message}`);
+            setAvailableSubTypes([]); // Renamed
+        } finally {
+            setIsLoadingSubTypes(false); // Renamed
         }
     };
-    // --- End Date Formatting Helper ---
+
+    const handleCloseSubTypeModal = () => { // Renamed
+        setSubTypeModalOpen(false); setSubTypeHouseTypeId(null); setSubTypeHouseTypeName('');
+        setSubTypePlanIds([]); setAvailableSubTypes(null); setCurrentSubTypeIdForModal(undefined); setError('');
+    };
+
+    const handleSetSubType = async (planIdsToUpdate, newSubTypeId) => { // Renamed
+        const originalItems = [...upcomingItems];
+        const updatedItemsOptimistic = originalItems.map(item => {
+            if (planIdsToUpdate.includes(item.plan_id)) {
+                const newSubType = availableSubTypes?.find(st => st.sub_type_id === newSubTypeId);
+                return { ...item, sub_type_id: newSubTypeId, sub_type_name: newSubType ? newSubType.name : null };
+            }
+            return item;
+        });
+        setUpcomingItems(updatedItemsOptimistic);
+        try {
+            await adminService.setModuleProductionPlanItemsSubTypeBulk(planIdsToUpdate, newSubTypeId); // Updated service call
+            setLastUpdated(new Date());
+        } catch (err) { setUpcomingItems(originalItems); throw err; }
+    };
+
+    const handleOpenDateTimeModal = (planId, currentDateTime) => {
+        const ids = (selectedItemIds.size > 0 && selectedItemIds.has(planId)) ? Array.from(selectedItemIds) : [planId];
+        setDateTimePlanIds(ids);
+        let dateTimeToPreFill = null;
+        if (ids.length > 0) {
+            const firstItem = upcomingItems.find(item => item.plan_id === ids[0]);
+            dateTimeToPreFill = firstItem ? firstItem.planned_start_datetime : null;
+        }
+        setDateTimeCurrentValue(dateTimeToPreFill);
+        setDateTimeModalOpen(true); setError('');
+    };
+    const handleCloseDateTimeModal = () => { setDateTimeModalOpen(false); setDateTimePlanIds([]); setDateTimeCurrentValue(null); setError(''); };
+    const handleSetDateTime = async (planIdsToUpdate, newDateTimeString) => {
+        const originalItems = [...upcomingItems];
+        const updatedItemsOptimistic = originalItems.map(item => planIdsToUpdate.includes(item.plan_id) ? { ...item, planned_start_datetime: newDateTimeString } : item);
+        setUpcomingItems(updatedItemsOptimistic);
+        setIsSavingDateTime(true);
+        try {
+            await adminService.setModuleProductionPlanItemsDateTimeBulk(planIdsToUpdate, newDateTimeString); // Updated
+            setLastUpdated(new Date());
+        } catch (err) { setUpcomingItems(originalItems); throw err; } finally { setIsSavingDateTime(false); }
+    };
 
     const renderStation = (stationId) => {
-        const station = stationStatus[stationId];
-        // Add key to the error div
-        if (!station) return <div key={`error-${stationId}`} style={stationBoxStyle}>Error: Station {stationId} not found</div>;
-
-        const modulePresent = station.module_id;
-
+        const station = stationStatusMap[stationId]; // Use map for direct access
+        if (!station) return <div key={`error-${stationId}`} style={stationBoxStyle}>Error: Estación {stationId} no encontrada</div>;
+    
+        const moduleData = station.current_module; // current_module should be part of station data from API
+    
         return (
             <div key={stationId} style={stationBoxStyle}>
                 <div style={stationTitleStyle}>{station.station_name} ({stationId})</div>
-                {modulePresent ? (
-                    // Add key to the div when module is present
+                {moduleData ? (
                     <div key={`${stationId}-content`} style={moduleInfoStyle}>
-                        <div><strong>ID Casa:</strong> {station.house_identifier || 'N/A'}</div>
-                        {/* Replaced "Tipo: ..." with House Type Badge */}
-                        <div>
-                            <strong>Tipo:</strong>
-                            <span style={houseTypeBadgeStyle}>
-                                [{station.house_type_name}]
-                                {station.house_type_typology && `[${station.house_type_typology}]`} {/* Add typology if it exists */}
-                            </span>
-                        </div>
-                        <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{station.module_sequence_in_house}</span></div> {/* Removed (N total) */}
-                        <div><strong>Proyecto:</strong> {station.project_name}</div>
-                        <div>(ID Mod: {station.module_id})</div>
+                        <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
+                        <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
+                        <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number || moduleData.module_sequence_in_house}</span></div>
+                        <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
+                        
+                        {/* Display Module Tasks */}
+                        {moduleData.module_tasks && moduleData.module_tasks.length > 0 && (
+                            <div style={{marginTop: '5px'}}>
+                                <strong>Tareas de Módulo:</strong>
+                                <ul style={taskListStyle}>
+                                    {moduleData.module_tasks.map(task => (
+                                        <li key={task.task_log_id || task.task_definition_id} style={{...taskItemStyle, ...(task.status === 'Completed' && completedTaskStyle)}}>
+                                            {task.task_name} ({task.status})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+    
+                        {/* Display Panels and their Tasks */}
+                        {moduleData.panels && moduleData.panels.length > 0 && (
+                            <div style={{marginTop: '5px'}}>
+                                <strong>Paneles:</strong>
+                                {moduleData.panels.map(panel => (
+                                    <div key={panel.panel_definition_id} style={panelContainerStyle}>
+                                        <div><em>{panel.panel_code} ({panel.panel_group})</em></div>
+                                        {panel.panel_tasks && panel.panel_tasks.length > 0 ? (
+                                            <ul style={{...taskListStyle, paddingLeft: '10px'}}>
+                                                {panel.panel_tasks.map(ptask => (
+                                                    <li key={ptask.panel_task_log_id || ptask.task_definition_id} style={{...taskItemStyle, ...(ptask.status === 'Completed' && completedTaskStyle)}}>
+                                                        {ptask.task_name} ({ptask.status})
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : <p style={{...taskListStyle, fontSize:'0.8em', color: '#777'}}>Sin tareas de panel</p>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 ) : (
-                    // Add key to the div when module is not present (empty)
                     <div key={`${stationId}-empty`} style={{...moduleInfoStyle, ...emptyStationStyle}}>(Vacío)</div>
                 )}
             </div>
         );
     };
 
-    // Add key prop directly to the returned div based on lineKey
     const renderLine = (lineKey) => (
         <div key={`line-${lineKey}`} style={lineStyles}>
             {stationLayout[lineKey].map(stationId => renderStation(stationId))}
@@ -1002,142 +572,87 @@ function ActiveProductionDashboard() {
     );
 
     return (
-        // Add onClick for deselection to the main container
         <div style={styles.container} onClick={handleDeselectAll}>
             <h2 style={styles.header}>Estado Actual de Producción</h2>
-
             {error && <p style={styles.error}>{error}</p>}
-            {isLoading && <p>Cargando...</p>}
-
+            {isLoading && !stationStatusData.station_status.length && <p>Cargando...</p>}
             <div style={{ marginBottom: '10px', fontSize: '0.8em', color: '#666' }}>
                 Última actualización: {lastUpdated ? lastUpdated.toLocaleTimeString() : 'N/A'}
-                <button onClick={fetchData} disabled={isLoading} style={{ marginLeft: '10px', padding: '2px 5px', fontSize: '0.9em' }}>
-                    Refrescar
-                </button>
+                <button onClick={fetchData} disabled={isLoading} style={{ marginLeft: '10px', padding: '2px 5px', fontSize: '0.9em' }}>Refrescar</button>
             </div>
 
-            {/* Panel Line (W) */}
-            <h3>Línea de Paneles (W)</h3>
-            {renderLine('W')}
-
-            {/* Magazine (M) */}
-            <h3>Magazine (M)</h3>
-            {renderLine('M')}
-
-            {/* Assembly Lines (A, B, C) */}
+            <h3>Línea de Paneles (W)</h3>{renderLine('W')}
+            <h3>Magazine (M)</h3>{renderLine('M')}
             <h3>Líneas de Ensamblaje</h3>
             <div style={assemblyLinesContainer}>
-                {/* Add unique keys to the direct children divs representing each line */}
-                <div key="line-A-wrapper" style={{ flex: 1, marginRight: '10px' }}>
-                    <h4>Línea A</h4>
-                    {stationLayout['A'].map(stationId => renderStation(stationId))}
-                </div>
-                <div key="line-B-wrapper" style={{ flex: 1, marginRight: '10px' }}>
-                    <h4>Línea B</h4>
-                    {stationLayout['B'].map(stationId => renderStation(stationId))}
-                </div>
-                <div key="line-C-wrapper" style={{ flex: 1 }}>
-                    <h4>Línea C</h4>
-                    {stationLayout['C'].map(stationId => renderStation(stationId))}
-                </div>
+                <div key="line-A-wrapper" style={{ flex: 1, marginRight: '10px' }}><h4>Línea A</h4>{stationLayout['A'].map(stationId => renderStation(stationId))}</div>
+                <div key="line-B-wrapper" style={{ flex: 1, marginRight: '10px' }}><h4>Línea B</h4>{stationLayout['B'].map(stationId => renderStation(stationId))}</div>
+                <div key="line-C-wrapper" style={{ flex: 1 }}><h4>Línea C</h4>{stationLayout['C'].map(stationId => renderStation(stationId))}</div>
             </div>
 
-            {/* Project Headers Section */}
-            <div style={{ marginTop: '30px' }} data-project-header-container="true"> {/* Added data attribute */}
-                <h3 style={styles.header}>Proyectos Pendientes</h3>
+            <div style={{ marginTop: '30px' }} data-project-header-container="true">
+                <h3 style={styles.header}>Proyectos Pendientes en Plan</h3>
                 {uniqueProjects.length > 0 ? (
                     uniqueProjects.map(project => (
-                        <div key={project.id} style={{ marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px', padding: '8px 12px', backgroundColor: '#f8f8f8' }}>
+                        <div key={project.name} style={{ marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px', padding: '8px 12px', backgroundColor: '#f8f8f8' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 'bold' }}>
                                 <span>{project.name}</span>
-                                {project.moduleSequences.length > 0 && (
-                                    <div style={styles.moduleSelectContainer}>
-                                        <span style={styles.moduleSelectLabel}>Seleccionar:</span>
-                                        {project.moduleSequences.map(sequence => (
-                                            <button
-                                                key={sequence}
-                                                style={styles.moduleSelectButton}
-                                                title={`Seleccionar todos los módulos #${sequence} en este proyecto`}
-                                                onClick={(e) => handleSelectModuleSequenceInProject(e, project.id, sequence)}
-                                            >
-                                                [M{sequence}]
-                                            </button>
+                                {project.moduleNumbers.length > 0 && (
+                                    <div><span style={{fontSize: '0.9em', marginRight: '5px'}}>Seleccionar Módulos:</span>
+                                        {project.moduleNumbers.map(num => (
+                                            <button key={num} style={{...styles.button, backgroundColor: projectColorMap.get(project.name) || '#6c757d', padding: '2px 6px', fontSize: '0.8em', marginRight: '3px'}} title={`Seleccionar todos los módulos #${num} en ${project.name}`} onClick={(e) => handleSelectModuleNumberInProject(e, project.name, num)}>[M{num}]</button>
                                         ))}
                                     </div>
                                 )}
                             </div>
                         </div>
                     ))
-                ) : (
-                    <p>No hay proyectos con elementos pendientes en el plan.</p>
-                )}
+                ) : (!isLoading && <p>No hay proyectos con elementos pendientes en el plan.</p>)}
             </div>
 
-            {/* Upcoming Items - Single Sortable List using dnd-kit */}
             <div style={{ marginTop: '20px' }}>
                 <h3 style={styles.header}>Plan de Producción Pendiente ({upcomingItems.length} items)</h3>
-                <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragStart={handleDragStart} // Add handler
-                    onDragEnd={handleDragEnd}
-                    onDragCancel={handleDragCancel} // Add handler
-                >
-                    <SortableContext
-                        items={upcomingItems.map(item => item.plan_id)} // Pass array of IDs
-                        strategy={verticalListSortingStrategy}
-                    >
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
+                    <SortableContext items={upcomingItems.map(item => item.plan_id)} strategy={verticalListSortingStrategy}>
                         <div style={upcomingListStyle}>
                             {upcomingItems.length > 0 ? (
                                 upcomingItems.map((item, index) => {
-                                    // Determine if this item starts a new project visually compared to the previous one
                                     const prevItem = index > 0 ? upcomingItems[index - 1] : null;
-                                    const showProjectSeparator = !prevItem || prevItem.project_id !== item.project_id;
-
+                                    const showProjectSeparator = !prevItem || prevItem.project_name !== item.project_name; // Use project_name
                                     return (
                                         <SortableItem
-                                            key={item.plan_id}
-                                            id={item.plan_id}
-                                            item={item}
-                                            isSelected={selectedItemIds.has(item.plan_id)} // Pass selection state
-                                            onClick={handleItemClick} // Pass click handler for selection
-                                            onChangeLine={handleChangeAssemblyLine} // Pass line change handler
-                                            showProjectSeparator={showProjectSeparator} // Pass separator flag
-                                            projectColor={projectColorMap.get(item.project_id) || '#000000'} // Get color from map, default black
-                                            disabled={isShiftKeyDown} // Pass the disabled state
-                                            formatPlannedDate={formatPlannedDate} // Pass the formatting function
-                                           // Pass house type name as well
-                                           onHouseTypeBadgeClick={() => handleOpenTipologiaModal(item.house_type_id, item.house_type_name, item.plan_id)}
-                                           // Pass datetime click handler
+                                            key={item.plan_id} id={item.plan_id} item={item}
+                                            isSelected={selectedItemIds.has(item.plan_id)} onClick={handleItemClick}
+                                            onChangeLine={handleChangeAssemblyLine} showProjectSeparator={showProjectSeparator}
+                                            projectColor={projectColorMap.get(item.project_name) || '#000000'} // Use project_name
+                                            disabled={isShiftKeyDown} formatPlannedDate={formatPlannedDate}
+                                           onHouseTypeBadgeClick={() => handleOpenSubTypeModal(item.house_type_id, item.house_type_name, item.plan_id, item.sub_type_id)} // Pass sub_type_id
                                            onDateTimeBadgeClick={handleOpenDateTimeModal}
                                        />
                                    );
                                })
-                            ) : (
-                                <p>No hay elementos planeados o programados en el plan de producción.</p>
-                            )}
+                            ) : (!isLoading && <p>No hay elementos planeados o programados en el plan de producción.</p>)}
                         </div>
                     </SortableContext>
                 </DndContext>
-                {tipologiaModalOpen && (
-                    <SetTipologiaModal
-                        houseTypeName={tipologiaHouseTypeName}
-                        planIds={tipologiaPlanIds}
-                        availableTipologias={availableTipologias}
-                        currentTipologiaId={currentTipologiaId}
-                        onSave={handleSetTipologia} // Pass the save handler
-                        onClose={handleCloseTipologiaModal}
-                        isLoading={isLoadingTipologias} // Pass loading state
+                {subTypeModalOpen && ( // Renamed modal and props
+                    <SetSubTypeModal
+                        houseTypeName={subTypeHouseTypeName}
+                        planIds={subTypePlanIds}
+                        availableSubTypes={availableSubTypes} // Renamed prop
+                        currentSubTypeId={currentSubTypeIdForModal} // Renamed prop
+                        onSave={handleSetSubType} // Renamed handler
+                        onClose={handleCloseSubTypeModal} // Renamed handler
+                        isLoading={isLoadingSubTypes}
                     />
                 )}
-                {/* Render DateTime Modal */}
                 {dateTimeModalOpen && (
                     <SetDateTimeModal
                         planIds={dateTimePlanIds}
                         currentItemDateTime={dateTimeCurrentValue}
                         onSave={handleSetDateTime}
                         onClose={handleCloseDateTimeModal}
-                        isLoading={isSavingDateTime} // Pass the dedicated loading state
+                        isLoading={isSavingDateTime}
                     />
                 )}
             </div>

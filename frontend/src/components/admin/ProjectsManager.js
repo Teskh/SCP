@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getProjects, addProject, updateProject, deleteProject, getHouseTypes } from '../../services/adminService';
-// Removed incorrect import: import styles from './AdminComponentStyles.js';
+import * as adminService from '../../services/adminService'; // Updated to import all as adminService
 
-// Define styles directly, similar to other admin components
+// Styles (kept similar for brevity, adjust as needed for new layout)
 const styles = {
     container: { margin: '20px', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' },
     header: { marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 },
@@ -12,47 +11,62 @@ const styles = {
     td: { border: '1px solid #ddd', padding: '8px', verticalAlign: 'top' },
     form: { marginBottom: '20px', padding: '15px', border: '1px solid #eee', borderRadius: '5px' },
     formGroup: { marginBottom: '15px' },
-    formRow: { display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '10px', flexWrap: 'wrap' }, // Align items to bottom for button alignment
     label: { display: 'block', marginBottom: '5px', fontWeight: 'bold' },
     input: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' },
-    textarea: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', minHeight: '80px' },
-    select: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', height: '36px' }, // Ensure consistent height
+    select: { width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', height: '36px' },
     button: { cursor: 'pointer', padding: '10px 15px', border: 'none', borderRadius: '4px', color: 'white', backgroundColor: '#007bff' },
     buttonSecondary: { backgroundColor: '#6c757d' },
     buttonDelete: { backgroundColor: '#dc3545', marginLeft: '5px' },
     buttonEdit: { backgroundColor: '#ffc107', color: '#333', marginLeft: '5px' },
     buttonGroup: { marginTop: '15px', display: 'flex', gap: '10px' },
     error: { color: 'red', marginTop: '10px', marginBottom: '10px', padding: '10px', border: '1px solid red', borderRadius: '4px', backgroundColor: '#f8d7da' },
-    loading: { fontStyle: 'italic', color: '#666' }
 };
 
-
-const initialFormState = {
-    name: '',
-    description: '',
+const initialPlanItemFormState = {
+    project_name: '',
+    house_identifier: '',
+    module_number: '',
+    house_type_id: '',
+    sub_type_id: '', // New field
+    planned_sequence: '',
+    planned_start_datetime: '',
+    planned_assembly_line: 'A', // Default value
     status: 'Planned', // Default status
-    house_types: [], // Array of { house_type_id: '', quantity: '' }
 };
 
-const projectStatuses = ['Planned', 'Active', 'Completed', 'On Hold']; // Available statuses
+const planItemStatuses = ['Planned', 'Panels', 'Magazine', 'Assembly', 'Completed'];
+const assemblyLines = ['A', 'B', 'C'];
 
-function ProjectsManager() {
-    const [projects, setProjects] = useState([]);
-    const [allHouseTypes, setAllHouseTypes] = useState([]); // For dropdowns
+// Helper to format datetime for input[type=datetime-local]
+const formatDateForInput = (isoDate) => {
+    if (!isoDate) return '';
+    // ISO 8601 format "YYYY-MM-DD HH:MM:SS" needs to be "YYYY-MM-DDTHH:MM" for datetime-local
+    return isoDate.replace(' ', 'T').substring(0, 16);
+};
+// Helper to format datetime for backend
+const formatDateForBackend = (localDate) => {
+    if (!localDate) return '';
+    return localDate.replace('T', ' ') + ':00'; // Add seconds
+}
+
+function ModuleProductionPlanManager() { // Renamed component
+    const [planItems, setPlanItems] = useState([]);
+    const [allHouseTypes, setAllHouseTypes] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [editMode, setEditMode] = useState(null); // null or project_id
-    const [formData, setFormData] = useState(initialFormState);
+    const [editMode, setEditMode] = useState(null); // plan_id for editing
+    const [formData, setFormData] = useState(initialPlanItemFormState);
+    const [selectedHouseTypeSubTypes, setSelectedHouseTypeSubTypes] = useState([]);
 
-    const fetchData = useCallback(async () => {
+    const fetchPlanItemsAndHouseTypes = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
-            const [projectsData, houseTypesData] = await Promise.all([
-                getProjects(),
-                getHouseTypes() // Fetch house types for the form
+            const [planData, houseTypesData] = await Promise.all([
+                adminService.getModuleProductionPlan(), // Updated service call
+                adminService.getHouseTypes() // Fetches house types for dropdowns
             ]);
-            setProjects(projectsData || []);
+            setPlanItems(planData || []);
             setAllHouseTypes(houseTypesData || []);
         } catch (err) {
             setError(`Error fetching data: ${err.message}`);
@@ -63,83 +77,60 @@ function ProjectsManager() {
     }, []);
 
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        fetchPlanItemsAndHouseTypes();
+    }, [fetchPlanItemsAndHouseTypes]);
+
+    useEffect(() => {
+        // Update sub-types dropdown when house_type_id changes in form
+        if (formData.house_type_id) {
+            const selectedType = allHouseTypes.find(ht => ht.house_type_id === parseInt(formData.house_type_id));
+            setSelectedHouseTypeSubTypes(selectedType ? selectedType.sub_types || [] : []);
+            // Reset sub_type_id if it's not valid for the new house_type
+            if (selectedType && !selectedType.sub_types.find(st => st.sub_type_id === parseInt(formData.sub_type_id))) {
+                setFormData(prev => ({ ...prev, sub_type_id: '' }));
+            }
+        } else {
+            setSelectedHouseTypeSubTypes([]);
+        }
+    }, [formData.house_type_id, allHouseTypes, formData.sub_type_id]);
+
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    // --- House Type Row Management ---
-    const handleHouseTypeChange = (index, field, value) => {
-        const updatedHouseTypes = [...formData.house_types];
-        updatedHouseTypes[index] = { ...updatedHouseTypes[index], [field]: value };
-        setFormData(prev => ({ ...prev, house_types: updatedHouseTypes }));
-    };
-
-    const addHouseTypeRow = () => {
-        setFormData(prev => ({
-            ...prev,
-            house_types: [...prev.house_types, { house_type_id: '', quantity: '' }]
-        }));
-    };
-
-    const removeHouseTypeRow = (index) => {
-        const updatedHouseTypes = formData.house_types.filter((_, i) => i !== index);
-        setFormData(prev => ({ ...prev, house_types: updatedHouseTypes }));
-    };
-    // --- End House Type Row Management ---
-
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
 
-        // Basic validation
-        if (!formData.name.trim()) {
-            setError('Project name is required.');
-            setIsLoading(false);
-            return;
-        }
-        if (!formData.house_types || formData.house_types.length === 0) {
-            setError('At least one house type must be added to the project.');
-            setIsLoading(false);
-            return;
-        }
-        const validHouseTypes = formData.house_types.filter(ht => ht.house_type_id && ht.quantity > 0);
-        if (validHouseTypes.length !== formData.house_types.length) {
-             setError('All added house types must have a type selected and a quantity greater than 0.');
-             setIsLoading(false);
-             return;
-        }
-         // Check for duplicate house types within the form
-        const houseTypeIds = validHouseTypes.map(ht => ht.house_type_id);
-        if (new Set(houseTypeIds).size !== houseTypeIds.length) {
-            setError('Cannot add the same house type multiple times to one project.');
-            setIsLoading(false);
-            return;
-        }
-
-
         const payload = {
             ...formData,
-            house_types: validHouseTypes.map(ht => ({
-                house_type_id: parseInt(ht.house_type_id, 10),
-                quantity: parseInt(ht.quantity, 10)
-            })) // Ensure IDs and quantities are numbers
+            module_number: parseInt(formData.module_number, 10),
+            house_type_id: parseInt(formData.house_type_id, 10),
+            sub_type_id: formData.sub_type_id ? parseInt(formData.sub_type_id, 10) : null,
+            planned_sequence: parseInt(formData.planned_sequence, 10),
+            planned_start_datetime: formData.planned_start_datetime ? formatDateForBackend(formData.planned_start_datetime) : null,
         };
+        
+        // Basic frontend validation (more robust validation should be on backend)
+        if (!payload.project_name || !payload.house_identifier || !payload.module_number || !payload.house_type_id || !payload.planned_sequence || !payload.planned_start_datetime) {
+            setError("Please fill all required fields for the plan item.");
+            setIsLoading(false);
+            return;
+        }
 
         try {
-            if (editMode) {
-                await updateProject(editMode, payload);
+            if (editMode) { // editMode now stores plan_id
+                await adminService.updateModuleProductionPlanItem(editMode, payload);
             } else {
-                await addProject(payload);
+                // Assuming addModuleProductionPlanItem for single item, or adapt if it's bulk generation
+                await adminService.addModuleProductionPlanItem(payload); // This function needs to be added to adminService.js
             }
-            setFormData(initialFormState);
+            setFormData(initialPlanItemFormState);
             setEditMode(null);
-            await fetchData(); // Refresh list
+            await fetchPlanItemsAndHouseTypes(); // Refresh list
         } catch (err) {
             setError(`Operation failed: ${err.message}`);
             console.error("Submit error:", err);
@@ -148,31 +139,32 @@ function ProjectsManager() {
         }
     };
 
-    const handleEdit = (project) => {
-        setEditMode(project.project_id);
-        // Prepare formData for editing, ensuring house_types structure matches form
+    const handleEdit = (item) => {
+        setEditMode(item.plan_id);
         setFormData({
-            name: project.name,
-            description: project.description || '',
-            status: project.status || 'Planned',
-            house_types: project.house_types.map(ht => ({
-                house_type_id: ht.house_type_id.toString(), // Ensure string for select value
-                quantity: ht.quantity.toString() // Ensure string for input value
-            })) || []
+            project_name: item.project_name || '',
+            house_identifier: item.house_identifier || '',
+            module_number: item.module_number || '',
+            house_type_id: item.house_type_id ? item.house_type_id.toString() : '',
+            sub_type_id: item.sub_type_id ? item.sub_type_id.toString() : '',
+            planned_sequence: item.planned_sequence || '',
+            planned_start_datetime: item.planned_start_datetime ? formatDateForInput(item.planned_start_datetime) : '',
+            planned_assembly_line: item.planned_assembly_line || 'A',
+            status: item.status || 'Planned',
         });
-        setError(''); // Clear previous errors
+        setError('');
     };
 
-    const handleDelete = async (id) => {
-        if (window.confirm('Are you sure you want to delete this project? This cannot be undone.')) {
+    const handleDelete = async (planId) => {
+        if (window.confirm('Are you sure you want to delete this plan item? This cannot be undone.')) {
             setIsLoading(true);
             setError('');
             try {
-                await deleteProject(id);
-                await fetchData(); // Refresh list
-                if (editMode === id) { // If deleting the item currently being edited
+                await adminService.deleteModuleProductionPlanItem(planId);
+                await fetchPlanItemsAndHouseTypes(); // Refresh list
+                if (editMode === planId) {
                     setEditMode(null);
-                    setFormData(initialFormState);
+                    setFormData(initialPlanItemFormState);
                 }
             } catch (err) {
                 setError(`Delete failed: ${err.message}`);
@@ -185,112 +177,74 @@ function ProjectsManager() {
 
     const handleCancelEdit = () => {
         setEditMode(null);
-        setFormData(initialFormState);
+        setFormData(initialPlanItemFormState);
         setError('');
     };
 
     return (
         <div style={styles.container}>
-            <h2 style={styles.header}>Gestionar Proyectos</h2>
+            <h2 style={styles.header}>Gestionar Plan de Producción de Módulos</h2>
 
             {error && <p style={styles.error}>{error}</p>}
-            {isLoading && <p>Loading...</p>}
+            {isLoading && <p>Cargando...</p>}
 
-            {/* Form for Adding/Editing */}
             <form onSubmit={handleSubmit} style={styles.form}>
-                <h3 style={styles.subHeader}>{editMode ? 'Editar Proyecto' : 'Añadir Nuevo Proyecto'}</h3>
+                <h3 style={styles.subHeader}>{editMode ? 'Editar Item del Plan' : 'Añadir Nuevo Item al Plan'}</h3>
+                
                 <div style={styles.formGroup}>
-                    <label style={styles.label} htmlFor="name">Nombre del Proyecto:</label>
-                    <input
-                        style={styles.input}
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        required
-                    />
+                    <label style={styles.label} htmlFor="project_name">Nombre del Proyecto:</label>
+                    <input style={styles.input} type="text" id="project_name" name="project_name" value={formData.project_name} onChange={handleInputChange} required />
                 </div>
                 <div style={styles.formGroup}>
-                    <label style={styles.label} htmlFor="description">Descripción:</label>
-                    <textarea
-                        style={styles.textarea}
-                        id="description"
-                        name="description"
-                        value={formData.description}
-                        onChange={handleInputChange}
-                    />
+                    <label style={styles.label} htmlFor="house_identifier">Identificador de Vivienda:</label>
+                    <input style={styles.input} type="text" id="house_identifier" name="house_identifier" value={formData.house_identifier} onChange={handleInputChange} required />
                 </div>
-                 <div style={styles.formGroup}>
-                    <label style={styles.label} htmlFor="status">Estado:</label>
-                    <select
-                        style={styles.select}
-                        id="status"
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
-                    >
-                        {projectStatuses.map(status => (
-                            <option key={status} value={status}>{status}</option>
+                <div style={styles.formGroup}>
+                    <label style={styles.label} htmlFor="module_number">Número de Módulo:</label>
+                    <input style={styles.input} type="number" id="module_number" name="module_number" value={formData.module_number} onChange={handleInputChange} required min="1"/>
+                </div>
+                <div style={styles.formGroup}>
+                    <label style={styles.label} htmlFor="house_type_id">Tipo de Vivienda:</label>
+                    <select style={styles.select} id="house_type_id" name="house_type_id" value={formData.house_type_id} onChange={handleInputChange} required>
+                        <option value="">-- Seleccionar Tipo --</option>
+                        {allHouseTypes.map(type => (
+                            <option key={type.house_type_id} value={type.house_type_id}>{type.name}</option>
                         ))}
                     </select>
                 </div>
-
-                {/* House Types Section */}
-                <h4 style={{...styles.subHeader, marginTop: '20px'}}>Tipos de Vivienda en el Proyecto:</h4>
-                {formData.house_types.map((ht, index) => (
-                    <div key={index} style={styles.formRow}>
-                        <div style={{...styles.formGroup, flex: 3, marginRight: '10px'}}>
-                             <label style={styles.label} htmlFor={`ht-type-${index}`}>Tipo Vivienda:</label>
-                             <select
-                                style={styles.select}
-                                id={`ht-type-${index}`}
-                                value={ht.house_type_id}
-                                onChange={(e) => handleHouseTypeChange(index, 'house_type_id', e.target.value)}
-                                required
-                             >
-                                <option value="">-- Seleccionar Tipo --</option>
-                                {allHouseTypes.map(type => (
-                                    <option key={type.house_type_id} value={type.house_type_id}>
-                                        {type.name}
-                                    </option>
-                                ))}
-                             </select>
-                        </div>
-                         <div style={{...styles.formGroup, flex: 1, marginRight: '10px'}}>
-                             <label style={styles.label} htmlFor={`ht-quantity-${index}`}>Cantidad:</label>
-                             <input
-                                style={styles.input}
-                                type="number"
-                                id={`ht-quantity-${index}`}
-                                min="1"
-                                value={ht.quantity}
-                                onChange={(e) => handleHouseTypeChange(index, 'quantity', e.target.value)}
-                                required
-                             />
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => removeHouseTypeRow(index)}
-                            style={{...styles.button, ...styles.buttonDelete, alignSelf: 'flex-end', marginBottom: '15px'}}
-                        >
-                            Eliminar Fila
-                        </button>
-                    </div>
-                ))}
-                <button
-                    type="button"
-                    onClick={addHouseTypeRow}
-                    style={{...styles.button, ...styles.buttonSecondary, marginTop: '5px', marginBottom: '20px'}}
-                >
-                    + Añadir Tipo de Vivienda
-                </button>
-                {/* End House Types Section */}
-
+                <div style={styles.formGroup}>
+                    <label style={styles.label} htmlFor="sub_type_id">Sub-Tipo (Tipología):</label>
+                    <select style={styles.select} id="sub_type_id" name="sub_type_id" value={formData.sub_type_id} onChange={handleInputChange} disabled={!formData.house_type_id || selectedHouseTypeSubTypes.length === 0}>
+                        <option value="">-- General (Sin Sub-Tipo Específico) --</option>
+                        {selectedHouseTypeSubTypes.map(st => (
+                            <option key={st.sub_type_id} value={st.sub_type_id}>{st.name}</option>
+                        ))}
+                    </select>
+                </div>
+                 <div style={styles.formGroup}>
+                    <label style={styles.label} htmlFor="planned_sequence">Secuencia Planeada:</label>
+                    <input style={styles.input} type="number" id="planned_sequence" name="planned_sequence" value={formData.planned_sequence} onChange={handleInputChange} required min="1"/>
+                </div>
+                <div style={styles.formGroup}>
+                    <label style={styles.label} htmlFor="planned_start_datetime">Fecha/Hora Inicio Planeada:</label>
+                    <input style={styles.input} type="datetime-local" id="planned_start_datetime" name="planned_start_datetime" value={formData.planned_start_datetime} onChange={handleInputChange} required />
+                </div>
+                <div style={styles.formGroup}>
+                    <label style={styles.label} htmlFor="planned_assembly_line">Línea de Ensamblaje Planeada:</label>
+                    <select style={styles.select} id="planned_assembly_line" name="planned_assembly_line" value={formData.planned_assembly_line} onChange={handleInputChange} required>
+                        {assemblyLines.map(line => (<option key={line} value={line}>{line}</option>))}
+                    </select>
+                </div>
+                <div style={styles.formGroup}>
+                    <label style={styles.label} htmlFor="status">Estado:</label>
+                    <select style={styles.select} id="status" name="status" value={formData.status} onChange={handleInputChange} required>
+                        {planItemStatuses.map(s => (<option key={s} value={s}>{s}</option>))}
+                    </select>
+                </div>
 
                 <div style={styles.buttonGroup}>
                     <button type="submit" style={styles.button} disabled={isLoading}>
-                        {editMode ? 'Actualizar Proyecto' : 'Guardar Proyecto'}
+                        {editMode ? 'Actualizar Item' : 'Guardar Item'}
                     </button>
                     {editMode && (
                         <button type="button" onClick={handleCancelEdit} style={{...styles.button, ...styles.buttonSecondary}} disabled={isLoading}>
@@ -300,50 +254,49 @@ function ProjectsManager() {
                 </div>
             </form>
 
-            {/* List of Projects */}
-            <h3 style={{...styles.subHeader, marginTop: '30px'}}>Proyectos Existentes</h3>
+            <h3 style={{...styles.subHeader, marginTop: '30px'}}>Items del Plan de Producción</h3>
             <table style={styles.table}>
                 <thead>
                     <tr>
-                        <th style={styles.th}>Nombre</th>
-                        <th style={styles.th}>Descripción</th>
+                        <th style={styles.th}>ID Plan</th>
+                        <th style={styles.th}>Proyecto</th>
+                        <th style={styles.th}>Ident. Vivienda</th>
+                        <th style={styles.th}>Módulo #</th>
+                        <th style={styles.th}>Tipo Vivienda</th>
+                        <th style={styles.th}>Sub-Tipo</th>
+                        <th style={styles.th}>Secuencia</th>
+                        <th style={styles.th}>Inicio Planeado</th>
+                        <th style={styles.th}>Línea</th>
                         <th style={styles.th}>Estado</th>
-                        <th style={styles.th}>Tipos Vivienda (Cantidad)</th>
                         <th style={styles.th}>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {projects.map(project => (
-                        <tr key={project.project_id}>
-                            <td style={styles.td}>{project.name}</td>
-                            <td style={styles.td}>{project.description}</td>
-                            <td style={styles.td}>{project.status}</td>
+                    {planItems.map(item => (
+                        <tr key={item.plan_id}>
+                            <td style={styles.td}>{item.plan_id}</td>
+                            <td style={styles.td}>{item.project_name}</td>
+                            <td style={styles.td}>{item.house_identifier}</td>
+                            <td style={styles.td}>{item.module_number}</td>
+                            <td style={styles.td}>{item.house_type_name}</td>
+                            <td style={styles.td}>{item.sub_type_name || '-'}</td>
+                            <td style={styles.td}>{item.planned_sequence}</td>
+                            <td style={styles.td}>{item.planned_start_datetime ? new Date(item.planned_start_datetime.replace(' ', 'T')+'Z').toLocaleString() : '-'}</td>
+                            <td style={styles.td}>{item.planned_assembly_line}</td>
+                            <td style={styles.td}>{item.status}</td>
                             <td style={styles.td}>
-                                {project.house_types && project.house_types.length > 0 ? (
-                                    <ul style={{margin: 0, paddingLeft: '15px'}}>
-                                        {project.house_types.map(ht => (
-                                            <li key={ht.house_type_id}>
-                                                {ht.house_type_name || `ID: ${ht.house_type_id}`} ({ht.quantity})
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    'Ninguno'
-                                )}
-                            </td>
-                            <td style={styles.td}>
-                                <button onClick={() => handleEdit(project)} style={{...styles.button, ...styles.buttonEdit, marginRight: '5px'}} disabled={isLoading}>
+                                <button onClick={() => handleEdit(item)} style={{...styles.button, ...styles.buttonEdit, marginRight: '5px'}} disabled={isLoading}>
                                     Editar
                                 </button>
-                                <button onClick={() => handleDelete(project.project_id)} style={{...styles.button, ...styles.buttonDelete}} disabled={isLoading}>
+                                <button onClick={() => handleDelete(item.plan_id)} style={{...styles.button, ...styles.buttonDelete}} disabled={isLoading}>
                                     Eliminar
                                 </button>
                             </td>
                         </tr>
                     ))}
-                    {projects.length === 0 && !isLoading && (
+                    {planItems.length === 0 && !isLoading && (
                         <tr>
-                            <td colSpan="5" style={styles.td}>No hay proyectos definidos.</td>
+                            <td colSpan="11" style={styles.td}>No hay items en el plan de producción.</td>
                         </tr>
                     )}
                 </tbody>
@@ -352,4 +305,4 @@ function ProjectsManager() {
     );
 }
 
-export default ProjectsManager;
+export default ModuleProductionPlanManager; // Renamed component
