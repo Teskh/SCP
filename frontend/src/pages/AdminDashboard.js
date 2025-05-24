@@ -14,6 +14,7 @@ const navStyles = {
     height: 'calc(100vh - 80px)', // Adjust based on header/footer height
     background: '#f8f8f8',
     overflowY: 'auto', // Allow navigation scrolling if many links
+    boxSizing: 'border-box', // Ensure padding and border are included in the height
 };
 
 const navListStyles = { listStyle: 'none', padding: 0, margin: 0 };
@@ -39,6 +40,7 @@ const contentStyles = {
     padding: '20px',
     overflowY: 'auto', // Allow content scrolling
     height: 'calc(100vh - 80px)', // Match nav height
+    boxSizing: 'border-box', // Ensure padding and border are included in the height
 };
 
 
