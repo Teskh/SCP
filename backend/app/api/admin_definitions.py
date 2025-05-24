@@ -953,17 +953,28 @@ def get_stations_route(): # Renamed
 def get_station_context_route(station_id):
     """
     Provides data for the station context: the current or next module to be worked on,
-    and its associated panels with their statuses.
+    its associated panels with their statuses, and relevant tasks.
     """
+    specialty_id_str = request.args.get('specialty_id')
+    specialty_id = None
+    if specialty_id_str and specialty_id_str.lower() != 'null' and specialty_id_str != '':
+        try:
+            specialty_id = int(specialty_id_str)
+        except ValueError:
+            logger.warning(f"Invalid specialty_id '{specialty_id_str}' received for station context {station_id}.")
+            return jsonify(error="Invalid specialty_id parameter, must be an integer."), 400
+    
     try:
-        context_data = queries.get_module_and_panels_for_station(station_id)
+        # Pass specialty_id to the query function
+        context_data = queries.get_module_and_panels_for_station(station_id, specialty_id)
+        
         if context_data:
-            # Ensure module and panels are keyed as expected by frontend
-            # get_module_and_panels_for_station should return {'module': module_data, 'panels': panels_list}
+            # queries.get_module_and_panels_for_station now returns {'module': ..., 'panels': ..., 'tasks': ...}
             return jsonify(context_data)
         else:
             # Return an empty structure if no module is available for the station
-            return jsonify({'module': None, 'panels': []})
+            # Ensure 'tasks' key is present for consistency
+            return jsonify({'module': None, 'panels': [], 'tasks': []})
     except Exception as e:
         logger.error(f"Error fetching station context data for station {station_id}: {e}", exc_info=True)
         return jsonify(error=f"Failed to fetch station context data: {str(e)}"), 500

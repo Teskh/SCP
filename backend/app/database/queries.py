@@ -1204,9 +1204,9 @@ def _get_panel_definitions_for_planned_module(db, plan_house_type_id, plan_modul
     return defined_panels
 
 
-def get_module_and_panels_for_station(station_id):
+def get_module_and_panels_for_station(station_id, specialty_id=None): # Added specialty_id
     """
-    Determines the active or next module for a given station and its panels.
+    Determines the active or next module for a given station, its panels, and relevant tasks.
     Logic:
     1. Check for an existing module 'In Progress' (assembly) or 'Panels' (panel line) at the station.
     2. If station is W1 (or first panel station) and no active module, find next 'Planned' module.
@@ -1225,6 +1225,7 @@ def get_module_and_panels_for_station(station_id):
 
     module_data = None
     panels = []
+    tasks = [] # Initialize tasks list
 
     # Step 1: Find Active Module at the station (using ModuleProductionPlan)
     # An "active" module is one whose status corresponds to the station type.
@@ -1282,8 +1283,18 @@ def get_module_and_panels_for_station(station_id):
             }
             panels = _get_panels_with_status_for_plan(db, module_data['plan_id'], module_data['house_type_id'],
                                                       module_data['module_number'], module_data['sub_type_id'])
-            logging.info(f"Found active plan {module_data['plan_id']} relevant for station {station_id}.")
-            return {'module': module_data, 'panels': panels}
+            
+            # Fetch tasks for the active module
+            # For active modules, we might want to fetch logged tasks eventually,
+            # but for now, let's use get_tasks_for_plan_at_station to show defined tasks.
+            # This part might need refinement if actual logged status is required for active modules.
+            # The user's immediate issue is for 'Planned' modules.
+            module_tasks_active = get_tasks_for_plan_at_station(station_id, module_data['plan_id'], module_data['house_type_id'], specialty_id, is_panel_task=0)
+            panel_tasks_active = get_tasks_for_plan_at_station(station_id, module_data['plan_id'], module_data['house_type_id'], specialty_id, is_panel_task=1)
+            tasks = module_tasks_active + panel_tasks_active
+            
+            logging.info(f"Found active plan {module_data['plan_id']} relevant for station {station_id}. Returning module, panels, and tasks.")
+            return {'module': module_data, 'panels': panels, 'tasks': tasks}
 
     # Step 2: No Active Module - Special handling for W1 (first panel station)
     if station_id == 'W1':
@@ -1327,12 +1338,18 @@ def get_module_and_panels_for_station(station_id):
                                                               next_planned_row['house_type_id'], 
                                                               next_planned_row['module_number'], # This is module_sequence_in_house
                                                               next_planned_row['sub_type_id'])
-            logging.info(f"Found next planned module (plan_id: {next_planned_row['plan_id']}) for W1. Returning its definition and panels.")
-            return {'module': module_data_from_plan, 'panels': panels}
+            
+            # Fetch tasks for this upcoming planned module
+            module_tasks_planned = get_tasks_for_plan_at_station(station_id, module_data_from_plan['plan_id'], module_data_from_plan['house_type_id'], specialty_id, is_panel_task=0)
+            panel_tasks_planned = get_tasks_for_plan_at_station(station_id, module_data_from_plan['plan_id'], module_data_from_plan['house_type_id'], specialty_id, is_panel_task=1)
+            tasks = module_tasks_planned + panel_tasks_planned
+
+            logging.info(f"Found next planned module (plan_id: {next_planned_row['plan_id']}) for W1. Returning its definition, panels, and tasks.")
+            return {'module': module_data_from_plan, 'panels': panels, 'tasks': tasks}
         else:
             logging.info("No 'Planned' modules available for W1.")
             
-    # Step 3: No Active Module - Assembly Stations (A,B,C) - Logic for these stations remains the same
+    # Step 3: No Active Module - Assembly Stations (A,B,C)
     elif station_line_type in ['A', 'B', 'C']:
         logging.info(f"No active module at assembly station {station_id}. Looking for next 'Magazine' module for line {station_line_type}.")
         next_magazine_cursor = db.execute(f"""
@@ -1354,15 +1371,15 @@ def get_module_and_panels_for_station(station_id):
             if success_update:
                 # After updating, this module is now the active one. Re-fetch context.
                 logging.info(f"Plan {plan_id} status updated to Assembly. Re-fetching context for station {station_id}.")
-                return get_module_and_panels_for_station(station_id) # Recursive call
+                return get_module_and_panels_for_station(station_id, specialty_id) # Recursive call, pass specialty_id
             else:
                 logging.error(f"Failed to update plan_id {plan_id} status to 'Assembly' at station {station_id}.")
         else:
             logging.info(f"No 'Magazine' modules available for station {station_id} on line {station_line_type}.")
 
     # If no module determined by any rule
-    logging.info(f"No suitable module found for station {station_id}.")
-    return None
+    logging.info(f"No suitable module found for station {station_id}. Returning empty context.")
+    return {'module': None, 'panels': [], 'tasks': []}
 
 
 def get_next_pending_panel_for_plan(plan_id): # Renamed from get_next_pending_panel_for_module

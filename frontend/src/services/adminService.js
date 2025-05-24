@@ -686,24 +686,19 @@ export const getStationStatusOverview = async () => {
 
 export const getStationOverviewData = async (stationId, specialtyId, panelDefinitionId = null) => {
     // The endpoint /station_overview/{station_id} was replaced by /station-context/{station_id}.
-    // The new endpoint does not accept specialty_id or panel_definition_id as query parameters.
     let url = `${API_BASE_URL}/station-context/${stationId}`;
 
-    // Query parameters for specialty_id and panel_definition_id are removed as they are not used by /station-context.
-    // const params = new URLSearchParams();
-    // if (specialtyId !== undefined && specialtyId !== null) {
-    //     params.append('specialty_id', specialtyId);
-    // } else {
-    //     params.append('specialty_id', 'null');
-    // }
-    // if (panelDefinitionId !== undefined && panelDefinitionId !== null) {
-    //     params.append('panel_definition_id', panelDefinitionId);
-    // }
-    //
-    // const queryString = params.toString();
-    // if (queryString) {
-    //     url += `?${queryString}`;
-    // }
+    const params = new URLSearchParams();
+    if (specialtyId !== undefined && specialtyId !== null) {
+        params.append('specialty_id', specialtyId);
+    }
+    // panelDefinitionId is not used by the /station-context endpoint directly for fetching the main context.
+    // It might be used by other specific calls if needed.
+
+    const queryString = params.toString();
+    if (queryString) {
+        url += `?${queryString}`;
+    }
     const response = await fetch(url);
     return handleResponse(response);
 };
