@@ -15,16 +15,11 @@ Buffer Magazine (M): A single intermediate storage/holding station (M1) followin
 Assembly Lines (A, B, C): 3 parallel lines, each with 6 stations (A1-A6, B1-B6, C1-C6), where panels are assembled into modules and finished. Modules move from M1 onto one of these parallel lines.
 3. System Architecture:
 Frontend:
-Type: (This is very important) Single Page Application (SPA)
+Type: Single Page Application (SPA)
 Framework: React.
-Reasoning: Chosen for its robust component model, declarative UI approach (simplifying DOM updates), strong ecosystem, and suitability for building interactive SPAs. This structure facilitates a seamless full-screen experience without browser chrome reappearing on navigation.
-State Management: Initially, state will be managed using React's built-in features (e.g., useState, useContext, prop drilling). A dedicated global state library (like Redux or Zustand) will not be implemented unless application complexity demonstrably warrants it later.
-Key Libraries (Planned): React, React Router (for SPA navigation), a JavaScript QR code scanning library (jsqr for QR login), standard fetching library (fetch API).
 Backend:
-Technology: Flask (Python microframework) served via Gunicorn.
-Reasoning: Flask is a lightweight and flexible microframework, well-suited for building APIs. Its simplicity, extensive documentation, large community, and wide range of extensions make it a good
-choice. Gunicorn is a robust WSGI server for deploying Flask applications in production. HTTPS will be enforced via Gunicorn configuration using provided certificate and key files, which is necessary
-for secure camera access in modern browsers.
+Technology: Flask (Python microframework).
+Reasoning: Flask is a lightweight and flexible microframework, well-suited for building APIs. Its simplicity, extensive documentation, large community, and wide range of extensions make it a good choice. for secure camera access in modern browsers.
 Responsibilities: Serve the SPA's static build files (or configure Gunicorn/proxy for this), handle API requests (login, task fetching, task completion, module movement, admin CRUD operations),
 interact with the database, process QR code data (if received from the frontend).
 Database:
@@ -39,19 +34,17 @@ Task Presentation: Displays relevant pending tasks for the module (or its panels
 Task Completion: Worker selects and marks a task as done.
 Logging: System records the completion in `TaskLogs` (for module tasks) or `PanelTaskLogs` (for panel tasks), including start/finish station.
 Admin Interface: A separate section/route accessible after admin login allows for managing Workers, `ModuleProductionPlan` items (defining project name, house details, modules), `TaskDefinitions`, `HouseTypes` (including defining `HouseSubType`s, parameters, and panels per module/sub-type), Specialties, etc.
-Logout/Idle: Automatic logout after inactivity or manual logout.
+Logout/Idle: Automatic logout after inactivity and manual logout.
 5. Login Mechanisms:
 Primary: PIN entry.
 Secondary: QR Code scanning. (QR scanner should always be working in the background -unless turned off at settings-, if the user flashes a QR code in front of the camera, it should log him in inmediately. Alternatively, the user can select his name from the list of relevant workers for that station and enter his PIN)
 6. Module Tracking & Movement:
 Production Flow Logic: System understands W1 -> ... -> W5 -> M1 -> [A1 | B1 | C1] -> ... -> [A6 | B6 | C6].
 Mechanism: Module movement is driven by updates to `Modules.current_station_id`. The target assembly line (A/B/C) for a module is defined in its `ModuleProductionPlan` item.
-Clash Resolution: Basic auto-advance logic for clashes within the same line segment; specific validation needed for M1 and branching.
-Future Enhancement: Automatic tracking envisioned but out of initial scope.
+Clash Resolution for modules (not panels): Basic auto-advance logic for clashes within the same line segment; specific validation needed for M1 and branching.
 7. Key Features & Constraints:
 Internal Use Only: Simplified security.
-Low Stakes: Focus on visibility, not critical enforcement (initially).
-Full-Screen SPA (React): Essential for tablet kiosk experience.
+Low Stakes: Focus on visibility, not critical enforcement.
 Defined Production Flow: Logic tied to the specific station layout.
 Task Dependencies: Tasks can specify prerequisite tasks via comma-separated `task_definition_ids`.
 Station-Context Driven: Core logic relies on fixed tablet location.

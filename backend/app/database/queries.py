@@ -1086,6 +1086,32 @@ def delete_worker(worker_id):
 
 # === Station Status and Upcoming Modules ===
 
+def _get_panels_with_status_for_plan(db, plan_id, house_type_id, module_number, sub_type_id):
+    """
+    Helper function to get panels with their production status for a specific plan.
+    Now uses PanelsProductionPlan table to get actual panel status.
+    """
+    query = """
+        SELECT
+            pd.panel_definition_id, pd.panel_group, pd.panel_code,
+            ppp.panel_plan_id, ppp.status, ppp.current_station,
+            mw.multiwall_code
+        FROM PanelDefinitions pd
+        LEFT JOIN PanelsProductionPlan ppp ON pd.panel_definition_id = ppp.panel_definition_id AND ppp.plan_id = ?
+        LEFT JOIN Multiwalls mw ON pd.multiwall_id = mw.multiwall_id
+        WHERE pd.house_type_id = ? AND pd.module_sequence_number = ?
+        AND (pd.sub_type_id = ? OR (pd.sub_type_id IS NULL AND ? IS NULL))
+        ORDER BY pd.panel_group, mw.multiwall_code, pd.panel_code
+    """
+    cursor = db.execute(query, (plan_id, house_type_id, module_number, sub_type_id, sub_type_id))
+    panels = []
+    for row in cursor.fetchall():
+        panel_dict = dict(row)
+        # Map database status to display status
+        panel_dict['status'] = panel_dict['status'] or 'not_started'
+        panels.append(panel_dict)
+    return panels
+
 def get_station_status_and_upcoming_modules():
     """Fetches current module at each station and all upcoming planned/scheduled/magazine items from ModuleProductionPlan."""
     db = get_db()

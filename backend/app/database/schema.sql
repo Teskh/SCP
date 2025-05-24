@@ -68,6 +68,7 @@ CREATE TABLE ModuleProductionPlan (
     planned_assembly_line TEXT NOT NULL CHECK(planned_assembly_line IN ('A', 'B', 'C')), -- Which line it's planned for
     sub_type_id INTEGER, -- Link to the specific sub_type (tipologia) for this planned item
     status TEXT NOT NULL DEFAULT 'Planned' CHECK(status IN ('Planned', 'Panels', 'Magazine', 'Assembly', 'Completed')), -- Status of this planned item
+    current_station TEXT, --Current station of the module. Will be null before being assembled and after it is finished
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP, -- Consider adding triggers to update this automatically
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE RESTRICT, -- Don't allow deleting house type if planned
