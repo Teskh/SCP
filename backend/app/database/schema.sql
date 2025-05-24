@@ -1,4 +1,7 @@
 -- Drop existing tables (order matters for foreign keys, drop dependent tables first)
+DROP TABLE IF EXISTS TaskPauses;
+DROP TABLE IF EXISTS PanelTaskLogs; -- Depends on TaskDefinitions, Workers, PanelDefinitions, Stations, ModuleProductionPlan
+DROP TABLE IF EXISTS TaskLogs; -- Depends on TaskDefinitions, Workers, Stations, ModuleProductionPlan
 -- Modules table is removed
 DROP TABLE IF EXISTS ModuleProductionPlan; -- Depends on HouseTypes, HouseSubType
 DROP TABLE IF EXISTS PanelDefinitions; -- Was HouseTypePanels. Depends on HouseTypes, HouseSubType, Multiwalls
@@ -96,12 +99,84 @@ CREATE TABLE TaskDefinitions (
     -- No direct FK to Stations.sequence_order as it's not unique
 );
 
+-- ========= Task Execution Tracking =========
+
+CREATE TABLE TaskLogs ( -- For tasks related to a Module as a whole
+    task_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL, -- Link to the specific production plan item
+    task_definition_id INTEGER NOT NULL, -- Which task definition was performed (should have is_panel_task = 0)
+    worker_id INTEGER NOT NULL, -- Who performed it
+    status TEXT NOT NULL CHECK(status IN ('Not Started', 'In Progress', 'Completed', 'Paused')),
+    started_at TEXT, -- Timestamp (ISO8601 format)
+    completed_at TEXT, -- Timestamp (ISO8601 format)
+    station_start TEXT, -- Record the station where the task was started
+    station_finish TEXT, -- Record the actual station where it was marked complete (Nullable)
+    notes TEXT, -- Optional field for worker comments
+    FOREIGN KEY (plan_id) REFERENCES ModuleProductionPlan(plan_id) ON DELETE CASCADE,
+    FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id) ON DELETE RESTRICT,
+    FOREIGN KEY (worker_id) REFERENCES Workers(worker_id) ON DELETE RESTRICT,
+    FOREIGN KEY (station_start) REFERENCES Stations(station_id) ON DELETE SET NULL,
+    FOREIGN KEY (station_finish) REFERENCES Stations(station_id) ON DELETE SET NULL -- Changed from RESTRICT to SET NULL for flexibility
+);
+
+CREATE TABLE PanelTaskLogs ( -- For tasks related to specific Panels within a Module
+    panel_task_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL, -- Link to the specific production plan item
+    panel_definition_id INTEGER NOT NULL, -- Which specific panel definition instance
+    task_definition_id INTEGER NOT NULL, -- Which task definition was performed (should have is_panel_task = 1)
+    worker_id INTEGER NOT NULL, -- Who performed it
+    status TEXT NOT NULL CHECK(status IN ('Not Started', 'In Progress', 'Completed', 'Paused')),
+    started_at TEXT, -- Timestamp (ISO8601 format)
+    completed_at TEXT, -- Timestamp (ISO8601 format)
+    station_start TEXT, -- Record the station where the task was started
+    station_finish TEXT, -- Record the actual station where it was marked complete (Nullable)
+    notes TEXT, -- Optional field for worker comments
+    FOREIGN KEY (plan_id) REFERENCES ModuleProductionPlan(plan_id) ON DELETE CASCADE,
+    FOREIGN KEY (panel_definition_id) REFERENCES PanelDefinitions(panel_definition_id) ON DELETE CASCADE,
+    FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id) ON DELETE RESTRICT,
+    FOREIGN KEY (worker_id) REFERENCES Workers(worker_id) ON DELETE RESTRICT,
+    FOREIGN KEY (station_start) REFERENCES Stations(station_id) ON DELETE SET NULL,
+    FOREIGN KEY (station_finish) REFERENCES Stations(station_id) ON DELETE SET NULL -- Changed from RESTRICT to SET NULL
+);
+
+CREATE TABLE TaskPauses (
+    task_pause_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_log_id INTEGER, -- Links to the specific module task instance being paused (Nullable)
+    panel_task_log_id INTEGER, -- Links to the specific panel task instance being paused (Nullable)
+    paused_by_worker_id INTEGER NOT NULL,
+    paused_at TEXT NOT NULL, -- Timestamp (ISO8601 format)
+    resumed_at TEXT, -- Timestamp (ISO8601 format), Nullable if still paused
+    reason TEXT, -- e.g., 'Waiting for materials', 'Shift change', 'Equipment issue'
+    FOREIGN KEY (task_log_id) REFERENCES TaskLogs(task_log_id) ON DELETE CASCADE,
+    FOREIGN KEY (panel_task_log_id) REFERENCES PanelTaskLogs(panel_task_log_id) ON DELETE CASCADE,
+    FOREIGN KEY (paused_by_worker_id) REFERENCES Workers(worker_id) ON DELETE RESTRICT,
+    CHECK ( (task_log_id IS NOT NULL AND panel_task_log_id IS NULL) OR (task_log_id IS NULL AND panel_task_log_id IS NOT NULL) ) -- Ensures pause is linked to one type of log
+);
+
 -- ========= Indexes for Performance =========
 -- TaskDefinitions
 CREATE INDEX idx_taskdefinitions_house_type ON TaskDefinitions (house_type_id);
 CREATE INDEX idx_taskdefinitions_specialty ON TaskDefinitions (specialty_id);
 CREATE INDEX idx_taskdefinitions_station_sequence ON TaskDefinitions (station_sequence_order);
 CREATE INDEX idx_taskdefinitions_is_panel_task ON TaskDefinitions (is_panel_task);
+-- TaskLogs
+CREATE INDEX idx_tasklogs_plan ON TaskLogs (plan_id);
+CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id);
+CREATE INDEX idx_tasklogs_status ON TaskLogs (status);
+CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
+CREATE INDEX idx_tasklogs_station_start ON TaskLogs (station_start);
+CREATE INDEX idx_tasklogs_station_finish ON TaskLogs (station_finish);
+-- PanelTaskLogs
+CREATE INDEX idx_paneltasklogs_plan ON PanelTaskLogs (plan_id);
+CREATE INDEX idx_paneltasklogs_panel_definition ON PanelTaskLogs (panel_definition_id);
+CREATE INDEX idx_paneltasklogs_task_definition ON PanelTaskLogs (task_definition_id);
+CREATE INDEX idx_paneltasklogs_status ON PanelTaskLogs (status);
+CREATE INDEX idx_paneltasklogs_worker ON PanelTaskLogs (worker_id);
+CREATE INDEX idx_paneltasklogs_station_start ON PanelTaskLogs (station_start);
+CREATE INDEX idx_paneltasklogs_station_finish ON PanelTaskLogs (station_finish);
+-- TaskPauses
+CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
+CREATE INDEX idx_taskpauses_paneltasklog ON TaskPauses (panel_task_log_id);
 -- ProjectModules
 -- CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id); -- project_id removed
 CREATE INDEX idx_projectmodules_house_type ON ProjectModules (house_type_id);
