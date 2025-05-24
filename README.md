@@ -66,7 +66,6 @@ This is the structure of this codebase, keep it up to date when new changes modi
 │   │   ├── api                                                        # Contains Flask Blueprints defining API endpoints
 │   │   │   ├── admin_definitions.py                                   # API routes for managing definitions (House Types, Parameters, Panels, Multiwalls, Task Definitions Stations)
 │   │   │   ├── admin_personnel.py                                     # API routes for managing personnel (Workers, Specialties, Admin Team)
-│   │   │   ├── admin_projects.py                                      # API routes for managing projects and the production plan/status
 │   │   │   ├── auth.py                                                # API routes for user authentication (login/logout)
 │   │   │   └── __init__.py                                            # Makes the 'api' directory a Python package
 │   │   ├── database                                                   # Package for database interactions
@@ -103,7 +102,7 @@ This is the structure of this codebase, keep it up to date when new changes modi
 │   │   │       ├── HouseParametersManager.js                          # Component for managing global House Parameter definitions (CRUD)
 │   │   │       ├── HouseTypePanelsModal.js                            # Modal for managing Panels/Multiwalls within specific House Type and Module   
 │   │   │       ├── HouseTypesManager.js                               # Component for managing House Types, Tipologias, and linking Parameters (CRUD)
-│   │   │       ├── AddProductionBatchModal.js                       # Modal for adding new production batches to the plan
+│   │   │       ├── AddProductionBatchModal.js                         # Modal for adding new production batches to the plan
 │   │   │       ├── SpecialtiesManager.js                              # Component for managing Worker Specialties (CRUD)
 │   │   │       ├── TaskDefinitionManager.js                           # Component for managing Task Definitions (CRUD)
 │   │   │       └── WorkersManager.js                                  # Component for managing Workers (CRUD)
