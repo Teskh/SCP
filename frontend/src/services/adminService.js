@@ -80,46 +80,58 @@ export const startOrResumePanelTask = async (planId, taskDefinitionId, workerId,
     // TODO: Revisit panel task starting with specific task_definition_ids.
     // The StationContextSelector currently passes a placeholder taskDefinitionId.
     // This function now calls the generic startTask endpoint.
-    console.log(`Attempting to start/resume panel task via generic startTask endpoint.`);
-    try {
+    // console.log(`Attempting to start/resume panel task via generic startTask endpoint.`);
+    // try {
         // Call the generic startTask function which posts to /api/admin/tasks/start
-        const result = await startTask(planId, taskDefinitionId, workerId, stationId, panelDefinitionId);
+        // const result = await startTask(planId, taskDefinitionId, workerId, stationId, panelDefinitionId);
         // The backend's /tasks/start should return a meaningful response,
         // including new_status if applicable, or log_id.
         // For now, we adapt the expected mock response structure if needed, or rely on startTask's actual return.
-        return { 
-            success: true, // Assuming startTask throws on failure
-            message: result.message || `Panel ${panelDefinitionId} task action processed.`, 
-            panel_id: panelDefinitionId, // Keep for consistency with old mock if needed by UI
-            new_status: result.new_status || "in_progress", // Or derive from result if backend provides it
-            log_id: result.log_id 
-        };
-    } catch (error) {
-        console.error("Error in startOrResumePanelTask calling startTask:", error);
+    //     return { 
+    //         success: true, // Assuming startTask throws on failure
+    //         message: result.message || `Panel ${panelDefinitionId} task action processed.`, 
+    //         panel_id: panelDefinitionId, // Keep for consistency with old mock if needed by UI
+    //         new_status: result.new_status || "in_progress", // Or derive from result if backend provides it
+    //         log_id: result.log_id 
+    //     };
+    // } catch (error) {
+    //     console.error("Error in startOrResumePanelTask calling startTask:", error);
         // Re-throw or handle as per application's error handling strategy
-        throw error; 
+    //     throw error; 
+    // }
+    // This function is largely superseded by direct calls to startTask and the new status update functions.
+    // Keeping it commented out for now in case parts are needed, but it's not directly used by StationPage for pause/complete.
+    console.warn("startOrResumePanelTask is likely deprecated in favor of direct startTask and new status update functions.");
+    return Promise.reject(new Error("startOrResumePanelTask is deprecated."));
+};
+
+// Removed mocked pausePanelTask and finishPanelTask.
+// New functions for updating task statuses:
+
+export const updateModuleTaskStatus = async (taskLogId, newStatus, stationFinish = null, notes = null) => {
+    const payload = { status: newStatus, notes };
+    if (stationFinish) {
+        payload.station_finish = stationFinish;
     }
+    const response = await fetch(`${API_BASE_URL}/module-task-logs/${taskLogId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
 };
 
-export const pausePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    console.log(`adminService.pausePanelTask: panelDefinitionId=${panelDefinitionId}`);
-    // This would call a backend endpoint to update PanelTaskLog status to 'Paused'.
-    // e.g., PUT /api/admin/tasks/panel-log/<log_id>/status { status: "Paused" }
-    // This requires knowing the panel_task_log_id.
-    // TODO: Revisit panel task pausing.
-    console.warn("pausePanelTask is using mock behavior.");
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return { success: true, message: `Panel ${panelDefinitionId} task paused (mocked)`, panel_id: panelDefinitionId, new_status: "paused" };
-};
-
-export const finishPanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    console.log(`adminService.finishPanelTask: panelDefinitionId=${panelDefinitionId}`);
-    // This would call a backend endpoint to update PanelTaskLog status to 'Completed'.
-    // e.g., PUT /api/admin/tasks/panel-log/<log_id>/status { status: "Completed" }
-    // TODO: Revisit panel task finishing.
-    console.warn("finishPanelTask is using mock behavior.");
-    await new Promise(resolve => setTimeout(resolve, 300));
-     return { success: true, message: `Panel ${panelDefinitionId} task finished (mocked)`, panel_id: panelDefinitionId, new_status: "completed" };
+export const updatePanelTaskStatus = async (panelTaskLogId, newStatus, stationFinish = null, notes = null) => {
+    const payload = { status: newStatus, notes };
+    if (stationFinish) {
+        payload.station_finish = stationFinish;
+    }
+    const response = await fetch(`${API_BASE_URL}/panel-task-logs/${panelTaskLogId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
 };
 
 

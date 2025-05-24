@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
-import { getStationOverviewData, startTask } from '../services/adminService'; // Import services
+import { 
+    getStationOverviewData, 
+    startTask,
+    updateModuleTaskStatus, // Added
+    updatePanelTaskStatus   // Added
+} from '../services/adminService'; // Import services
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
@@ -196,6 +201,60 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
     };
 
     // --- End Task Action Handlers ---
+
+    const handlePauseTask = async (task) => {
+        setTaskActionLoading(task.task_definition_id);
+        setTaskActionError(null);
+        try {
+            if (task.is_panel_task) {
+                await updatePanelTaskStatus(task.log_id, 'Paused');
+            } else {
+                await updateModuleTaskStatus(task.log_id, 'Paused');
+            }
+            fetchStationData();
+        } catch (error) {
+            setTaskActionError({ taskId: task.task_definition_id, message: error.message || 'Error al pausar la tarea.' });
+        } finally {
+            setTaskActionLoading(null);
+        }
+    };
+
+    const handleResumeTask = async (task) => {
+        setTaskActionLoading(task.task_definition_id);
+        setTaskActionError(null);
+        try {
+            // Resuming means setting status back to 'In Progress'
+            // The station_start is already logged, so we don't need to pass it again.
+            if (task.is_panel_task) {
+                await updatePanelTaskStatus(task.log_id, 'In Progress');
+            } else {
+                await updateModuleTaskStatus(task.log_id, 'In Progress');
+            }
+            fetchStationData();
+        } catch (error) {
+            setTaskActionError({ taskId: task.task_definition_id, message: error.message || 'Error al reanudar la tarea.' });
+        } finally {
+            setTaskActionLoading(null);
+        }
+    };
+
+    const handleCompleteTask = async (task) => {
+        setTaskActionLoading(task.task_definition_id);
+        setTaskActionError(null);
+        try {
+            if (task.is_panel_task) {
+                await updatePanelTaskStatus(task.log_id, 'Completed', currentSpecificStationId);
+            } else {
+                await updateModuleTaskStatus(task.log_id, 'Completed', currentSpecificStationId);
+            }
+            fetchStationData();
+        } catch (error) {
+            setTaskActionError({ taskId: task.task_definition_id, message: error.message || 'Error al completar la tarea.' });
+        } finally {
+            setTaskActionLoading(null);
+        }
+    };
+
 
     const displayStationName = useMemo(() => {
         if (isLoadingAllStations) return "Cargando info de estación...";
@@ -392,7 +451,42 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                                                         </button>
                                                     </div>
                                                 )}
-                                                {/* Add buttons for Pause/Complete task later based on status */}
+                                                {task.task_status === 'In Progress' && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handlePauseTask(task)}
+                                                            disabled={isLoading}
+                                                            style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black', marginRight: '5px'}}
+                                                        >
+                                                            {isLoading ? 'Pausando...' : 'Pausar'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleCompleteTask(task)}
+                                                            disabled={isLoading}
+                                                            style={{...buttonStyle, backgroundColor: '#28a745'}}
+                                                        >
+                                                            {isLoading ? 'Completando...' : 'Completar'}
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {task.task_status === 'Paused' && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleResumeTask(task)}
+                                                            disabled={isLoading}
+                                                            style={{...buttonStyle, backgroundColor: '#17a2b8', marginRight: '5px'}}
+                                                        >
+                                                            {isLoading ? 'Reanudando...' : 'Reanudar'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleCompleteTask(task)}
+                                                            disabled={isLoading}
+                                                            style={{...buttonStyle, backgroundColor: '#28a745'}}
+                                                        >
+                                                            {isLoading ? 'Completando...' : 'Completar'}
+                                                        </button>
+                                                    </>
+                                                )}
                                                 {error && <p style={errorStyle}>{error}</p>}
                                             </div>
                                         </li>
