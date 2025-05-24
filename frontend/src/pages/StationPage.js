@@ -247,6 +247,10 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
             } else {
                 await updateModuleTaskStatus(task.log_id, 'Completed', currentSpecificStationId);
             }
+            // Clear any panel selection state that might interfere with new task selection
+            setSelectingPanelForTask(null);
+            setSelectedPanelId('');
+            // Refresh station data to get updated context and new available tasks
             fetchStationData();
         } catch (error) {
             setTaskActionError({ taskId: task.task_definition_id, message: error.message || 'Error al completar la tarea.' });

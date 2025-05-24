@@ -1114,17 +1114,30 @@ def update_module_task_log_status_route(task_log_id):
     if new_status not in allowed_statuses:
         return jsonify(error=f"Invalid status. Must be one of: {', '.join(allowed_statuses)}"), 400
 
+    db = connection.get_db()
     try:
-        success = queries.update_task_log_status(task_log_id, new_status, station_finish, notes)
-        if success:
-            updated_log = queries.get_task_log_by_id(task_log_id) # Fetch updated log to return
-            return jsonify(updated_log), 200
-        else:
-            # Check if log exists
-            log_exists = queries.get_task_log_by_id(task_log_id)
-            if not log_exists:
-                return jsonify(error=f"TaskLog ID {task_log_id} not found."), 404
-            return jsonify(error=f"Failed to update TaskLog ID {task_log_id} status."), 500
+        with db: # Transaction for potential status transitions
+            success = queries.update_task_log_status(task_log_id, new_status, station_finish, notes)
+            if success:
+                # If task completed, check if we need to transition module status
+                if new_status == 'Completed':
+                    # Get the task log to find the plan_id
+                    task_log = queries.get_task_log_by_id(task_log_id)
+                    if task_log and task_log.get('plan_id'):
+                        plan_id = task_log['plan_id']
+                        # Check if all tasks for this plan are completed and trigger transitions
+                        # This could involve checking if all panel tasks are done and updating plan status
+                        # For now, we'll let the frontend handle the refresh to get updated context
+                        pass
+                
+                updated_log = queries.get_task_log_by_id(task_log_id) # Fetch updated log to return
+                return jsonify(updated_log), 200
+            else:
+                # Check if log exists
+                log_exists = queries.get_task_log_by_id(task_log_id)
+                if not log_exists:
+                    return jsonify(error=f"TaskLog ID {task_log_id} not found."), 404
+                return jsonify(error=f"Failed to update TaskLog ID {task_log_id} status."), 500
     except Exception as e:
         logger.error(f"Error updating status for TaskLog ID {task_log_id}: {e}", exc_info=True)
         return jsonify(error=f"An unexpected error occurred: {str(e)}"), 500
@@ -1144,16 +1157,29 @@ def update_panel_task_log_status_route(panel_task_log_id):
     if new_status not in allowed_statuses:
         return jsonify(error=f"Invalid status. Must be one of: {', '.join(allowed_statuses)}"), 400
 
+    db = connection.get_db()
     try:
-        success = queries.update_panel_task_log_status(panel_task_log_id, new_status, station_finish, notes)
-        if success:
-            updated_log = queries.get_panel_task_log_by_id(panel_task_log_id) # Fetch updated log
-            return jsonify(updated_log), 200
-        else:
-            log_exists = queries.get_panel_task_log_by_id(panel_task_log_id)
-            if not log_exists:
-                return jsonify(error=f"PanelTaskLog ID {panel_task_log_id} not found."), 404
-            return jsonify(error=f"Failed to update PanelTaskLog ID {panel_task_log_id} status."), 500
+        with db: # Transaction for potential status transitions
+            success = queries.update_panel_task_log_status(panel_task_log_id, new_status, station_finish, notes)
+            if success:
+                # If panel task completed, check if all panels for this plan are done
+                if new_status == 'Completed':
+                    panel_log = queries.get_panel_task_log_by_id(panel_task_log_id)
+                    if panel_log and panel_log.get('plan_id'):
+                        plan_id = panel_log['plan_id']
+                        # Check if all panel tasks for this plan are completed
+                        # If so, we might need to transition the plan status from 'Panels' to 'Magazine'
+                        # This logic is already partially implemented in StationContextSelector
+                        # For now, let the frontend refresh handle getting the updated context
+                        pass
+                
+                updated_log = queries.get_panel_task_log_by_id(panel_task_log_id) # Fetch updated log
+                return jsonify(updated_log), 200
+            else:
+                log_exists = queries.get_panel_task_log_by_id(panel_task_log_id)
+                if not log_exists:
+                    return jsonify(error=f"PanelTaskLog ID {panel_task_log_id} not found."), 404
+                return jsonify(error=f"Failed to update PanelTaskLog ID {panel_task_log_id} status."), 500
     except Exception as e:
         logger.error(f"Error updating status for PanelTaskLog ID {panel_task_log_id}: {e}", exc_info=True)
         return jsonify(error=f"An unexpected error occurred: {str(e)}"), 500
