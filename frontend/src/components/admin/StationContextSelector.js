@@ -348,7 +348,7 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                     <h4>Módulo Seleccionado Automáticamente:</h4>
                     <p><strong>Nombre:</strong> {selectedModule.module_name} (ID: {selectedModule.module_id})</p>
                     <p><strong>Proyecto:</strong> {selectedModule.project_name}</p>
-                    <p><strong>Casa:</strong> {selectedModule.house_identifier} - <strong>Módulo:</strong> {selectedModule.module_number}</p>
+                    <p><strong>Casa:</strong> {selectedModule.house_identifier} - <strong>Módulo:</strong> {selectedModule.module_number} de {selectedModule.number_of_modules}</p>
                     <p><strong>Estado del Módulo:</strong> <span style={{fontWeight: 'bold', color: selectedModule.status === 'in_production' ? 'green' : (selectedModule.status === 'completed' ? 'grey' : 'orange')}}>{selectedModule.status}</span></p>
                     
                     <h5 style={{marginTop: '20px', borderTop: '1px solid #ddd', paddingTop: '15px'}}>Paneles del Módulo:</h5>
