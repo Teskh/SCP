@@ -313,9 +313,9 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                         <div style={moduleInfoBoxStyle}>
                             <h3>Módulo Actual</h3>
                             <p><strong>Proyecto:</strong> {moduleData.project_name}</p>
-                            <p><strong>Tipo de Casa:</strong> {moduleData.house_type_name} {moduleData.tipologia_name ? `(${moduleData.tipologia_name})` : ''}</p>
+                            <p><strong>Tipo de Casa:</strong> {moduleData.house_type_name} {moduleData.sub_type_name ? `(${moduleData.sub_type_name})` : ''}</p>
                             <p><strong>Identificador Casa:</strong> {moduleData.house_identifier}</p>
-                            <p><strong>Módulo:</strong> {moduleData.module_sequence_in_house} de {moduleData.number_of_modules}</p>
+                            <p><strong>Módulo:</strong> {moduleData.module_number} de {moduleData.number_of_modules}</p>
                             <p><strong>Secuencia Planificada:</strong> {moduleData.planned_sequence}</p>
                             <p><strong>Estado Módulo:</strong> {moduleData.module_status}</p>
                         </div>
@@ -323,9 +323,9 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                         <div style={{...moduleInfoBoxStyle, backgroundColor: '#eef'}}> {/* Slightly different background for upcoming */}
                             <h3>Próximo Módulo</h3>
                             <p><strong>Proyecto:</strong> {upcomingModuleData.project_name}</p>
-                            <p><strong>Tipo de Casa:</strong> {upcomingModuleData.house_type_name} {upcomingModuleData.tipologia_name ? `(${upcomingModuleData.tipologia_name})` : ''}</p>
+                            <p><strong>Tipo de Casa:</strong> {upcomingModuleData.house_type_name} {upcomingModuleData.sub_type_name ? `(${upcomingModuleData.sub_type_name})` : ''}</p>
                             <p><strong>Identificador Casa:</strong> {upcomingModuleData.house_identifier}</p>
-                            <p><strong>Módulo:</strong> {upcomingModuleData.module_sequence_in_house} de {upcomingModuleData.number_of_modules}</p>
+                            <p><strong>Módulo:</strong> {upcomingModuleData.module_number} de {upcomingModuleData.number_of_modules}</p>
                             <p><strong>Secuencia Planificada:</strong> {upcomingModuleData.planned_sequence}</p>
                             <p><strong>Estado Plan:</strong> {upcomingModuleData.status}</p>
                         </div>
@@ -371,7 +371,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                                                         >
                                                             <option value="">-- Seleccione Panel --</option>
                                                             {availablePanels.map(panel => (
-                                                                <option key={panel.house_type_panel_id} value={panel.house_type_panel_id}>
+                                                                <option key={panel.panel_definition_id} value={panel.panel_definition_id}>
                                                                     {panel.panel_code} ({panel.panel_group}{panel.multiwall_code ? ` / ${panel.multiwall_code}` : ''})
                                                                 </option>
                                                             ))}
