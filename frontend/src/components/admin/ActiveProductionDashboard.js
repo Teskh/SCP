@@ -156,9 +156,20 @@ const generateDeterministicColor = (projectName) => {
     return `hsl(${hue}, 70%, 40%)`;
 };
 
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick }) {
+function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick, onDeleteItem }) {
     const { attributes, listeners: dndListeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
     const { onPointerDown: dndOnPointerDown, ...listeners } = dndListeners;
+
+    const deleteButtonStyle = {
+        marginLeft: '8px',
+        padding: '3px 6px',
+        fontSize: '0.8em',
+        color: 'white',
+        backgroundColor: '#dc3545',
+        border: 'none',
+        borderRadius: '3px',
+        cursor: 'pointer',
+    };
 
     const draggableElementStyle = {
         ...upcomingItemStyle,
@@ -195,6 +206,16 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                 <LineIndicator line="B" isActive={item.planned_assembly_line === 'B'} isClickable={true} onClick={() => onChangeLine(id, 'B')} />
                 <LineIndicator line="C" isActive={item.planned_assembly_line === 'C'} isClickable={true} onClick={() => onChangeLine(id, 'C')} />
             </div>
+            <button
+                style={deleteButtonStyle}
+                onClick={(e) => {
+                    e.stopPropagation(); // Prevent drag/selection logic from firing
+                    onDeleteItem(id);
+                }}
+                title={`Eliminar item #${item.planned_sequence} (Plan ID: ${id})`}
+            >
+                Eliminar
+            </button>
         </div>
     );
 }
@@ -558,6 +579,31 @@ function ActiveProductionDashboard() {
         }
     };
 
+    const handleDeleteItem = async (planIdToDelete) => {
+        if (window.confirm(`¿Está seguro de que desea eliminar el elemento del plan de producción (ID: ${planIdToDelete})? Esta acción no se puede deshacer.`)) {
+            setIsLoading(true);
+            setError('');
+            try {
+                await adminService.deleteModuleProductionPlanItem(planIdToDelete);
+                setUpcomingItems(prevItems => prevItems.filter(item => item.plan_id !== planIdToDelete));
+                setSelectedItemIds(prevSelected => {
+                    const newSelected = new Set(prevSelected);
+                    newSelected.delete(planIdToDelete);
+                    return newSelected;
+                });
+                if (lastClickedItemId === planIdToDelete) {
+                    setLastClickedItemId(null);
+                }
+                setLastUpdated(new Date());
+                // Optionally, add a success notification here
+            } catch (err) {
+                setError(`Error eliminando item ${planIdToDelete}: ${err.message}`);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
+
 
     const renderStation = (stationId) => {
         const station = stationStatusMap[stationId]; // Use map for direct access
@@ -685,6 +731,7 @@ function ActiveProductionDashboard() {
                                             disabled={isShiftKeyDown} formatPlannedDate={formatPlannedDate}
                                            onHouseTypeBadgeClick={() => handleOpenSubTypeModal(item.house_type_id, item.house_type_name, item.plan_id, item.sub_type_id)} // Pass sub_type_id
                                            onDateTimeBadgeClick={handleOpenDateTimeModal}
+                                           onDeleteItem={handleDeleteItem} // Pass the delete handler
                                        />
                                    );
                                })
