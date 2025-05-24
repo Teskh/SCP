@@ -260,6 +260,7 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                     {/* Display module details from selectedModule state */}
                     <p><strong>ID del Módulo:</strong> {selectedModule.module_id}</p>
                     <p><strong>Plan ID:</strong> {selectedModule.plan_id}</p>
+                    <p><strong>Secuencia Planificada:</strong> {selectedModule.planned_sequence !== undefined ? selectedModule.planned_sequence : 'N/A'}</p>
                     <p><strong>Nombre del Proyecto:</strong> {selectedModule.project_name}</p>
                     <p><strong>Identificador de Casa:</strong> {selectedModule.house_identifier}</p>
                     <p><strong>Tipo de Casa:</strong> {selectedModule.house_type_name} (Módulos: {selectedModule.module_number}/{selectedModule.number_of_modules})</p>

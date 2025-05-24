@@ -77,11 +77,28 @@ export const startOrResumePanelTask = async (planId, taskDefinitionId, workerId,
     // Let's assume the old mock behavior for panel actions for now, and focus on module fetching.
     // TODO: Revisit panel task starting with specific task_definition_ids.
 
-    // Mocking the old behavior for now, as task_definition_id is missing.
-    console.warn("startOrResumePanelTask is using mock behavior due to missing task_definition_id logic in StationContextSelector.");
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return { success: true, message: `Panel ${panelDefinitionId} task started/resumed (mocked)`, panel_id: panelDefinitionId, new_status: "in_progress" };
-
+    // TODO: Revisit panel task starting with specific task_definition_ids.
+    // The StationContextSelector currently passes a placeholder taskDefinitionId.
+    // This function now calls the generic startTask endpoint.
+    console.log(`Attempting to start/resume panel task via generic startTask endpoint.`);
+    try {
+        // Call the generic startTask function which posts to /api/admin/tasks/start
+        const result = await startTask(planId, taskDefinitionId, workerId, stationId, panelDefinitionId);
+        // The backend's /tasks/start should return a meaningful response,
+        // including new_status if applicable, or log_id.
+        // For now, we adapt the expected mock response structure if needed, or rely on startTask's actual return.
+        return { 
+            success: true, // Assuming startTask throws on failure
+            message: result.message || `Panel ${panelDefinitionId} task action processed.`, 
+            panel_id: panelDefinitionId, // Keep for consistency with old mock if needed by UI
+            new_status: result.new_status || "in_progress", // Or derive from result if backend provides it
+            log_id: result.log_id 
+        };
+    } catch (error) {
+        console.error("Error in startOrResumePanelTask calling startTask:", error);
+        // Re-throw or handle as per application's error handling strategy
+        throw error; 
+    }
 };
 
 export const pausePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {

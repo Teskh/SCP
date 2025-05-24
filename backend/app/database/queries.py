@@ -1345,7 +1345,7 @@ def get_module_and_panels_for_station(station_id):
     query_active_module = f"""
         SELECT
             m.module_id, m.plan_id, m.house_type_id, m.module_sequence_in_house, m.status AS module_status,
-            mpp.project_name, mpp.house_identifier, mpp.module_number, mpp.sub_type_id,
+            mpp.project_name, mpp.house_identifier, mpp.module_number, mpp.sub_type_id, mpp.planned_sequence,
             ht.name as house_type_name, ht.number_of_modules,
             hst.name as sub_type_name
         FROM Modules m
