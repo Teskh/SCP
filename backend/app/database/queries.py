@@ -886,36 +886,6 @@ def get_all_house_types_with_details():
     return list(house_types_dict.values())
 
 
-def get_current_module_for_station(station_id):
-    """Fetches the current module at a specific station, using ModuleProductionPlan for project_name."""
-    db = get_db()
-    query = """
-        SELECT
-            m.module_id,
-            m.plan_id,
-            mpp.project_name, -- Get project_name from ModuleProductionPlan
-            m.house_type_id, -- house_type_id is directly in Modules table now
-            ht.name AS house_type_name,
-            mpp.house_identifier,
-            m.module_sequence_in_house, -- This is in Modules table
-            ht.number_of_modules,
-            mpp.sub_type_id, -- Get sub_type_id from ModuleProductionPlan
-            hst.name AS sub_type_name, -- Get sub_type_name from HouseSubType
-            mpp.planned_sequence,
-            m.status AS module_status
-        FROM Modules m
-        JOIN ModuleProductionPlan mpp ON m.plan_id = mpp.plan_id
-        JOIN HouseTypes ht ON m.house_type_id = ht.house_type_id -- Modules.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE m.current_station_id = ? AND m.status = 'In Progress' -- Ensure module is active at station
-        ORDER BY mpp.planned_sequence ASC -- Order by plan sequence if multiple, though current_station_id should be unique for active modules
-        LIMIT 1;
-    """
-    cursor = db.execute(query, (station_id,))
-    module_data = cursor.fetchone()
-    return dict(module_data) if module_data else None
-
-
 def get_logged_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_specialty_id):
     """
     Fetches LOGGED module tasks (is_panel_task = 0) for a given plan_id at a specific station,
