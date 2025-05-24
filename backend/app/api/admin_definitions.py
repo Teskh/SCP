@@ -1022,43 +1022,12 @@ def get_station_overview_data_route(station_id): # Renamed
                  logger.warning(f"Module info for station {station_id} missing module_id or house_type_id.")
 
         elif station_sequence_order == 1: # Or any other logic for "first" station in a line segment
-            upcoming_module_info = queries.get_next_planned_module_for_line_entry()
-            if upcoming_module_info:
-                upcoming_plan_id = upcoming_module_info.get('plan_id')
-                upcoming_house_type_id = upcoming_module_info.get('house_type_id')
-                upcoming_module_number = upcoming_module_info.get('module_number') # from ModuleProductionPlan
-                # upcoming_sub_type_id = upcoming_module_info.get('sub_type_id')
-
-                if upcoming_plan_id and upcoming_house_type_id:
-                    # Fetch module-level tasks for the upcoming plan (is_panel_task = 0)
-                    module_tasks = queries.get_tasks_for_plan_at_station(
-                        station_id=station_id, plan_id=upcoming_plan_id,
-                        house_type_id=upcoming_house_type_id, worker_specialty_id=worker_specialty_id,
-                        is_panel_task=0 
-                    )
-                    # Fetch all defined panels for this upcoming module type/sequence
-                    if upcoming_module_number:
-                        all_station_panels = queries.get_panel_definitions_for_house_type_module(
-                            upcoming_house_type_id, upcoming_module_number, sub_type_id=None # Or upcoming_sub_type_id
-                        )
-                    # If a specific panel_definition_id is provided (though less common for an *upcoming* module)
-                    # It implies the panel_definition_id is known, and we want its tasks.
-                    if panel_definition_id:
-                         panel_tasks = queries.get_tasks_for_plan_at_station(
-                            station_id=station_id, plan_id=upcoming_plan_id,
-                            house_type_id=upcoming_house_type_id, worker_specialty_id=worker_specialty_id,
-                            is_panel_task=1 # Assuming this panel_definition_id implies a panel task
-                         )
-                         # Note: get_tasks_for_plan_at_station doesn't use panel_definition_id directly,
-                         # so this might fetch all panel tasks for the plan, not just for one panel.
-                         # This part might need a more specific query if only tasks for a *specific* panel of an *upcoming* module are needed.
-
-            else:
-                logger.info(f"Station {station_id} (seq 1) is empty, no upcoming module found.")
+            # Removed logic for fetching upcoming_module_info
+            logger.info(f"Station {station_id} (seq 1) is empty, no upcoming module found (logic removed).")
         
         return jsonify(
             current_module=module_info,
-            upcoming_module=upcoming_module_info,
+            upcoming_module=None, # Explicitly set to None as logic is removed
             module_tasks=module_tasks,
             panel_tasks=panel_tasks, # Tasks for a specific panel_definition_id if provided
             station_panels=all_station_panels # All panels defined for the current/upcoming module at this station

@@ -66,21 +66,8 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
             const modules = data || [];
             setAvailableModules(modules);
 
-            let bestModule = null;
-            if (modules.length > 0) {
-                const inProductionModule = modules.find(m => m.status === 'in_production');
-                if (inProductionModule) {
-                    bestModule = inProductionModule;
-                } else {
-                    const sortedNonCompletedModules = modules
-                        .filter(m => m.status !== 'completed')
-                        .sort((a, b) => a.sequence_number - b.sequence_number);
-                    if (sortedNonCompletedModules.length > 0) {
-                        bestModule = sortedNonCompletedModules[0];
-                    }
-                }
-            }
-            const newSelectedModuleId = bestModule ? bestModule.module_id : null;
+            // No automatic "best module" selection. Just set the first available module, or null.
+            const newSelectedModuleId = modules.length > 0 ? modules[0].module_id : null;
             setSelectedModuleId(newSelectedModuleId);
 
             // If the previously selected panel is still part of the newly selected module, keep it.
@@ -142,9 +129,7 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
             // Refresh module data to get the latest statuses
             const updatedModulesAfterPanelAction = await fetchAvailableModulesAndSetState(currentStationId);
 
-            if (actionSuccess && actionType === 'start' && currentStationId === 'W1') {
-                handleStationW1Progression(updatedModulesAfterPanelAction || availableModules); 
-            }
+            // Removed W1 progression logic: if (actionSuccess && actionType === 'start' && currentStationId === 'W1') { handleStationW1Progression(...) }
 
             if (actionSuccess && actionType === 'finish') {
                 const finishedModule = (updatedModulesAfterPanelAction || availableModules).find(m => m.module_id === moduleId);
@@ -207,87 +192,13 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
         }
     };
 
-    const selectNextNotStartedPanelInModule = (moduleToUpdate) => {
-        if (!moduleToUpdate || !moduleToUpdate.panels || moduleToUpdate.panels.length === 0) {
-            setSelectedPanelId(null); // No panels or invalid module
-            return false; // No panel selected
-        }
-        // Order panels by their original sequence if available, or assume array order is correct
-        // For now, we assume panel_id or their order in array implies sequence.
-        // If a specific `panel_sequence_number` existed, we'd sort by that.
-        const notStartedPanels = moduleToUpdate.panels.filter(p => p.status === 'not_started');
-        
-        if (notStartedPanels.length > 0) {
-            // Sort by panel_id as a proxy for sequence if no explicit sequence number
-            // This assumes lower panel_ids are earlier in sequence. Adjust if needed.
-            notStartedPanels.sort((a,b) => a.panel_id - b.panel_id); 
-            setSelectedPanelId(notStartedPanels[0].panel_id);
-            return true; // A panel was selected
-        }
-        // If no 'not_started' panels, but we want to ensure a panel is selected if module is active,
-        // we could select the first panel regardless of status, or the first 'in_progress'.
-        // For now, only 'not_started' triggers an auto-selection here.
-        // setSelectedPanelId(null); // Clearing here might be too aggressive if a panel was already selected and is in_progress
-        return false; // No 'not_started' panel selected
-    };
-
-    const handleStationW1Progression = (currentModulesData) => {
-        if (currentStationId !== 'W1' || !currentModulesData) return;
-
-        let currentModuleForProgression = currentModulesData.find(m => m.module_id === selectedModuleId);
-
-        if (currentModuleForProgression) {
-            // Attempt to find the next not_started panel in the current module
-            const foundNextPanel = selectNextNotStartedPanelInModule(currentModuleForProgression);
-
-            if (foundNextPanel) {
-                // console.log(`W1 Progression: Next panel ${selectedPanelId} in module ${currentModuleForProgression.module_id} selected.`);
-                return; // Panel progression within the current module is done
-            }
-            // If no 'not_started' panel was found in the current module, proceed to module progression
-            // console.log(`W1 Progression: All panels in module ${currentModuleForProgression.module_id} seem started/completed. Looking for next module.`);
-        } else {
-            // console.log(`W1 Progression: No currently selected module, or module not found. Trying to find initial module for W1.`);
-            // This case might happen if the auto-selected module by fetchAvailableModulesAndSetState was already completed or had no not_started panels.
-        }
-        
-        // Module Progression Logic:
-        // Find modules that are not the current one (if any) and not completed
-        // Or, if no currentModuleForProgression, find the first available not-completed module.
-        const potentialNextModules = currentModulesData
-            .filter(m => m.status !== 'completed' && (currentModuleForProgression ? m.module_id !== currentModuleForProgression.module_id : true))
-            .sort((a, b) => a.sequence_number - b.sequence_number);
-
-        if (potentialNextModules.length > 0) {
-            const nextModuleToProgressTo = potentialNextModules[0];
-            // console.log(`W1 Progression: Moving to next module ${nextModuleToProgressTo.module_id}`);
-            
-            // Check if we are actually changing the module, or if the "best module" logic already picked this one
-            if (selectedModuleId !== nextModuleToProgressTo.module_id) {
-                 setSelectedModuleId(nextModuleToProgressTo.module_id);
-            }
-            // After selecting new module (or confirming current one), select its first 'not_started' panel
-            selectNextNotStartedPanelInModule(nextModuleToProgressTo); 
-        } else if (currentModuleForProgression && !currentModuleForProgression.panels.some(p => p.status === 'not_started')) {
-            // console.log("W1 Progression: No more available modules to progress to, and current module has no 'not_started' panels.");
-            // If current module is fully processed (no not_started panels) and no other modules to go to, clear panel selection
-            setSelectedPanelId(null);
-        } else if (!currentModuleForProgression && potentialNextModules.length === 0) {
-            // console.log("W1 Progression: No modules available at all for W1 station.");
-            setSelectedModuleId(null); // Ensure no module is selected
-            setSelectedPanelId(null); // Ensure no panel is selected
-        }
-    };
+    // Removed selectNextNotStartedPanelInModule and handleStationW1Progression functions.
 
     useEffect(() => {
         // Initial fetch when component mounts or currentStationId changes
-        fetchAvailableModulesAndSetState(currentStationId).then(initialModules => {
-            if (currentStationId === 'W1' && initialModules) {
-                // After initial load for W1, apply progression logic to select first panel of first module.
-                handleStationW1Progression(initialModules);
-            }
-        });
-    }, [currentStationId]); // Re-fetch and apply W1 logic when currentStationId changes
+        fetchAvailableModulesAndSetState(currentStationId);
+        // Removed W1 progression logic from initial load: .then(initialModules => { if (currentStationId === 'W1' && initialModules) { handleStationW1Progression(initialModules); } });
+    }, [currentStationId]); // Re-fetch when currentStationId changes
 
     if (isLoadingAllStations && !currentStationName && !currentStationId) return <p>Cargando configuración inicial...</p>;
     // Removed general error display, moduleError is more specific. TaskActionError will be used for task ops.

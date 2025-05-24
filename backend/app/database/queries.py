@@ -1201,32 +1201,6 @@ def get_all_stations():
     return [dict(row) for row in cursor.fetchall()]
 
 
-def get_next_planned_module_for_line_entry():
-    """
-    Fetches the next module from ModuleProductionPlan that is 'Planned' or 'Panels' status,
-    ordered by planned_sequence. This is for modules about to enter the main assembly line (e.g., at M1).
-    """
-    db = get_db()
-    query = """
-        SELECT
-            mpp.plan_id, mpp.project_name,
-            mpp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
-            mpp.house_identifier, mpp.module_number,
-            mpp.planned_sequence, mpp.planned_start_datetime,
-            mpp.planned_assembly_line, mpp.status, mpp.created_at, mpp.updated_at,
-            mpp.sub_type_id, hst.name as sub_type_name
-        FROM ModuleProductionPlan mpp
-        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE mpp.status IN ('Planned', 'Panels', 'Magazine') -- Statuses eligible to enter the main line
-        ORDER BY mpp.planned_sequence ASC
-        LIMIT 1;
-    """
-    cursor = db.execute(query)
-    module_data = cursor.fetchone()
-    return dict(module_data) if module_data else None
-
-
 # === Workers ===
 
 def get_all_workers():
