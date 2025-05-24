@@ -30,7 +30,6 @@ const initialFormState = {
     house_type_id: '',
     specialty_id: '',
     station_sequence_order: '',
-    is_panel_task: false, // Added new field, default to false (Module Task)
     task_dependencies: [], // Assuming this might be added later
 };
 
@@ -94,28 +93,29 @@ function TaskDefinitionManager() {
     }, [fetchData]);
 
     // Fetch potential dependencies when station_sequence_order or is_panel_task changes in form
+    // Fetch potential dependencies when station_sequence_order or is_panel_task changes in form
     useEffect(() => {
         const fetchDependencies = async () => {
-            // Only fetch if a station sequence is selected OR if is_panel_task is defined (true/false)
-            // This allows fetching general tasks (no station) if is_panel_task is specified.
-            if (formData.station_sequence_order || typeof formData.is_panel_task === 'boolean') {
-                try {
-                    const deps = await adminService.getPotentialTaskDependencies(
-                        formData.station_sequence_order || null, // Pass null if empty
-                        formData.is_panel_task // Pass the boolean value
-                    );
-                    // Filter out the task being edited from its own potential dependencies
-                    setPotentialDependencies(deps.filter(dep => dep.task_definition_id !== editMode) || []);
-                } catch (err) {
-                    console.error("Failed to fetch potential dependencies:", err);
-                    setPotentialDependencies([]);
-                }
-            } else {
+            const currentStationOrder = formData.station_sequence_order;
+            // Determine is_panel_task based on station_sequence_order
+            // Panel stations are sequence_order 1-5.
+            // If no station is selected, it's considered a general (module) task.
+            const derivedIsPanelTask = currentStationOrder ? parseInt(currentStationOrder, 10) <= 5 : false;
+
+            try {
+                const deps = await adminService.getPotentialTaskDependencies(
+                    currentStationOrder || null,
+                    derivedIsPanelTask
+                );
+                // Filter out the task being edited from its own potential dependencies
+                setPotentialDependencies(deps.filter(dep => dep.task_definition_id !== editMode) || []);
+            } catch (err) {
+                console.error("Failed to fetch potential dependencies:", err);
                 setPotentialDependencies([]);
             }
         };
         fetchDependencies();
-    }, [formData.station_sequence_order, formData.is_panel_task, editMode]);
+    }, [formData.station_sequence_order, editMode]);
 
 
     const handleInputChange = (e) => {
@@ -140,7 +140,6 @@ function TaskDefinitionManager() {
             house_type_id: taskDef.house_type_id?.toString() || '',
             specialty_id: taskDef.specialty_id?.toString() || '',
             station_sequence_order: taskDef.station_sequence_order?.toString() || '',
-            is_panel_task: taskDef.is_panel_task || false, // Set from taskDef
             task_dependencies: Array.isArray(taskDef.task_dependencies) ? taskDef.task_dependencies.map(String) : (taskDef.task_dependencies ? String(taskDef.task_dependencies).split(',').map(String) : [])
         });
         window.scrollTo(0, 0);
@@ -157,12 +156,15 @@ function TaskDefinitionManager() {
         setError('');
         setIsLoading(true);
 
+        const currentStationOrder = formData.station_sequence_order;
+        const derivedIsPanelTaskForSubmit = currentStationOrder ? parseInt(currentStationOrder, 10) <= 5 : false;
+
         const payload = {
             ...formData,
             house_type_id: formData.house_type_id || null,
             specialty_id: formData.specialty_id || null,
-            station_sequence_order: formData.station_sequence_order ? parseInt(formData.station_sequence_order, 10) : null,
-            is_panel_task: Boolean(formData.is_panel_task), // Ensure boolean
+            station_sequence_order: currentStationOrder ? parseInt(currentStationOrder, 10) : null,
+            is_panel_task: derivedIsPanelTaskForSubmit,
             task_dependencies: formData.task_dependencies.join(','), // Convert to comma-separated string for backend
         };
 
@@ -210,13 +212,6 @@ function TaskDefinitionManager() {
                  <div style={styles.formRow}>
                      <label style={styles.label} htmlFor="taskDesc">Descripción:</label>
                      <textarea id="taskDesc" name="description" placeholder="Descripción detallada (Opcional)" value={formData.description} onChange={handleInputChange} style={styles.textarea}/>
-                 </div>
-                 <div style={styles.formRow}>
-                    <label style={styles.label} htmlFor="is_panel_task">Tarea de Panel?:</label>
-                    <div style={styles.checkboxContainer}>
-                        <input type="checkbox" id="is_panel_task" name="is_panel_task" checked={formData.is_panel_task} onChange={handleInputChange} style={{ margin: '0px'}}/>
-                        <label htmlFor="is_panel_task" style={styles.checkboxLabel}>(Marcar si esta tarea aplica a paneles individuales)</label>
-                    </div>
                  </div>
                  <div style={styles.formRow}>
                      <label style={styles.label} htmlFor="houseType">Tipo Vivienda:</label>
