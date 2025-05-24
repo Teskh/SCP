@@ -159,16 +159,22 @@ const generateDeterministicColor = (projectName) => {
 function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick, onDeleteItem }) {
     const { attributes, listeners: dndListeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
     const { onPointerDown: dndOnPointerDown, ...listeners } = dndListeners;
+    const [isDeleteHovered, setIsDeleteHovered] = useState(false);
 
-    const deleteButtonStyle = {
-        marginLeft: '8px',
-        padding: '3px 6px',
-        fontSize: '0.8em',
-        color: 'white',
-        backgroundColor: '#dc3545',
+    const deleteIconStyle = {
+        marginLeft: '10px',
+        padding: '5px',
+        fontSize: '1.2em', // Adjust size as needed
+        color: isDeleteHovered ? '#e53935' : '#9e9e9e', // Red on hover, grey otherwise
+        backgroundColor: 'transparent',
         border: 'none',
-        borderRadius: '3px',
+        borderRadius: '50%', // Make it circular if desired, or remove for square
         cursor: 'pointer',
+        transition: 'color 0.2s ease-in-out, transform 0.1s ease-in-out',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: isDeleteHovered ? 'scale(1.1)' : 'scale(1)',
     };
 
     const draggableElementStyle = {
@@ -207,14 +213,16 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                 <LineIndicator line="C" isActive={item.planned_assembly_line === 'C'} isClickable={true} onClick={() => onChangeLine(id, 'C')} />
             </div>
             <button
-                style={deleteButtonStyle}
+                style={deleteIconStyle}
                 onClick={(e) => {
                     e.stopPropagation(); // Prevent drag/selection logic from firing
                     onDeleteItem(id);
                 }}
+                onMouseEnter={() => setIsDeleteHovered(true)}
+                onMouseLeave={() => setIsDeleteHovered(false)}
                 title={`Eliminar item #${item.planned_sequence} (Plan ID: ${id})`}
             >
-                Eliminar
+                🗑️
             </button>
         </div>
     );
@@ -579,28 +587,54 @@ function ActiveProductionDashboard() {
         }
     };
 
-    const handleDeleteItem = async (planIdToDelete) => {
-        if (window.confirm(`¿Está seguro de que desea eliminar el elemento del plan de producción (ID: ${planIdToDelete})? Esta acción no se puede deshacer.`)) {
+    const handleDeleteItem = async (clickedPlanId) => {
+        const itemsToDelete = new Set();
+        let confirmationMessage = '';
+
+        if (selectedItemIds.has(clickedPlanId) && selectedItemIds.size > 1) {
+            selectedItemIds.forEach(id => itemsToDelete.add(id));
+            confirmationMessage = `¿Está seguro de que desea eliminar los ${itemsToDelete.size} elementos seleccionados del plan de producción? Esta acción no se puede deshacer.`;
+        } else {
+            itemsToDelete.add(clickedPlanId);
+            confirmationMessage = `¿Está seguro de que desea eliminar el elemento del plan de producción (ID: ${clickedPlanId})? Esta acción no se puede deshacer.`;
+        }
+
+        if (itemsToDelete.size > 0 && window.confirm(confirmationMessage)) {
             setIsLoading(true);
             setError('');
-            try {
-                await adminService.deleteModuleProductionPlanItem(planIdToDelete);
-                setUpcomingItems(prevItems => prevItems.filter(item => item.plan_id !== planIdToDelete));
+            let allSucceeded = true;
+            const successfullyDeletedIds = [];
+
+            for (const idToDelete of itemsToDelete) {
+                try {
+                    await adminService.deleteModuleProductionPlanItem(idToDelete);
+                    successfullyDeletedIds.push(idToDelete);
+                } catch (err) {
+                    allSucceeded = false;
+                    setError(prevError => `${prevError}Error eliminando item ${idToDelete}: ${err.message}. `);
+                    // Continue trying to delete others
+                }
+            }
+
+            if (successfullyDeletedIds.length > 0) {
+                setUpcomingItems(prevItems => prevItems.filter(item => !successfullyDeletedIds.includes(item.plan_id)));
                 setSelectedItemIds(prevSelected => {
                     const newSelected = new Set(prevSelected);
-                    newSelected.delete(planIdToDelete);
+                    successfullyDeletedIds.forEach(id => newSelected.delete(id));
                     return newSelected;
                 });
-                if (lastClickedItemId === planIdToDelete) {
+                if (successfullyDeletedIds.includes(lastClickedItemId)) {
                     setLastClickedItemId(null);
                 }
                 setLastUpdated(new Date());
-                // Optionally, add a success notification here
-            } catch (err) {
-                setError(`Error eliminando item ${planIdToDelete}: ${err.message}`);
-            } finally {
-                setIsLoading(false);
             }
+
+            if (!allSucceeded) {
+                // Error message is already set
+            } else if (successfullyDeletedIds.length > 0) {
+                // Optionally, add a success notification here for the deleted items
+            }
+            setIsLoading(false);
         }
     };
 
