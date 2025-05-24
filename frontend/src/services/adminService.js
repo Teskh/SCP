@@ -29,6 +29,192 @@ export const addSpecialty = async (specialtyData) => {
     return handleResponse(response);
 };
 
+// === Station Context & Task Management (for StationContextSelector.js) ===
+
+// Mock data store for getAvailablePanelsForStation
+// This is a simple in-memory store to simulate backend changes.
+// In a real app, this state would live on the backend.
+let mockModulesDataStore = {
+    'W1': [
+        {
+            module_id: "mod123_w1", // Unique ID for W1's context
+            module_name: "Modulo Alpha (Casa X - M1)",
+            project_name: "Proyecto Sol",
+            house_identifier: "Casa X",
+            module_number: "M1",
+            status: "pending", 
+            sequence_number: 1,
+            panels: [
+                { panel_id: "panelA_w1", panel_code: "P01-A", status: "not_started", sequence: 1 },
+                { panel_id: "panelB_w1", panel_code: "P01-B", status: "not_started", sequence: 2 }
+            ]
+        },
+        {
+            module_id: "mod456_w1",
+            module_name: "Modulo Beta (Casa Y - M2)",
+            project_name: "Proyecto Luna",
+            house_identifier: "Casa Y",
+            module_number: "M2",
+            status: "pending",
+            sequence_number: 2,
+            panels: [
+                { panel_id: "panelC_w1", panel_code: "P02-C", status: "not_started", sequence: 1 },
+            ]
+        },
+        {
+            module_id: "mod789_w1",
+            module_name: "Modulo Gamma (Casa Z - M3)",
+            project_name: "Proyecto Estrella",
+            house_identifier: "Casa Z",
+            module_number: "M3",
+            status: "completed", 
+            sequence_number: 3,
+            panels: [
+                { panel_id: "panelD_w1", panel_code: "P03-D", status: "completed", sequence: 1 },
+            ]
+        }
+    ],
+    'W2': [
+        {
+            module_id: "mod123_w2", // Potentially different module ID if context is different
+            module_name: "Modulo Alpha (Casa X - M1) @ W2", // Name might reflect station context
+            project_name: "Proyecto Sol",
+            house_identifier: "Casa X",
+            module_number: "M1",
+            status: "in_production", 
+            sequence_number: 1,
+            panels: [
+                { panel_id: "panelA_w2", panel_code: "P01-A", status: "in_progress", sequence: 1 }, 
+                { panel_id: "panelB_w2", panel_code: "P01-B", status: "not_started", sequence: 2 }
+            ]
+        }
+    ],
+    // Add more stations as needed
+};
+
+
+export const getAvailablePanelsForStation = async (stationId) => {
+    console.log(`adminService.getAvailablePanelsForStation called for stationId: ${stationId}`);
+    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+
+    // Return a deep copy to prevent direct modification of the mock store from outside
+    const stationData = mockModulesDataStore[stationId] || [];
+    return JSON.parse(JSON.stringify(stationData));
+};
+
+const updatePanelStatusInDataStore = (stationId, moduleId, panelId, newStatus) => {
+    if (mockModulesDataStore[stationId]) {
+        const module = mockModulesDataStore[stationId].find(m => m.module_id === moduleId);
+        if (module) {
+            const panel = module.panels.find(p => p.panel_id === panelId);
+            if (panel) {
+                panel.status = newStatus;
+                // If a panel starts, update module status to 'in_production' if it's 'pending'
+                if (newStatus === 'in_progress' && module.status === 'pending') {
+                    module.status = 'in_production';
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+};
+
+const updateModuleStatusInDataStore = (stationId, moduleId, newStatus) => {
+    // Note: This simple mock assumes module IDs are unique across stations in the store,
+    // or that we only care about the first station that has it.
+    // A more robust mock might need to iterate through all station data if moduleId isn't station-specific.
+    let stationsToSearch = stationId ? [stationId] : Object.keys(mockModulesDataStore);
+
+    for (const sId of stationsToSearch) {
+        if (mockModulesDataStore[sId]) {
+            const module = mockModulesDataStore[sId].find(m => m.module_id === moduleId);
+            if (module) {
+                module.status = newStatus;
+                // If module is completed, ensure all its panels are also marked completed (consistency)
+                if (newStatus === 'completed') {
+                    module.panels.forEach(p => p.status = 'completed');
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+};
+
+
+export const startPanel = async (stationId, moduleId, panelId) => {
+    console.log(`adminService.startPanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    if (Math.random() < 0.05) { // Simulate a 5% chance of error
+        console.error("Simulated API Error in startPanel");
+        throw new Error("Simulated API Error: Could not start panel.");
+    }
+
+    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'in_progress');
+    if (updated) {
+        return { success: true, message: `Panel ${panelId} started`, panel_id: panelId, new_status: "in_progress" };
+    }
+    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for starting.`);
+};
+
+export const pausePanel = async (stationId, moduleId, panelId) => {
+    console.log(`adminService.pausePanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'paused');
+     if (updated) {
+        return { success: true, message: `Panel ${panelId} paused`, panel_id: panelId, new_status: "paused" };
+    }
+    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for pausing.`);
+};
+
+export const resumePanel = async (stationId, moduleId, panelId) => {
+    console.log(`adminService.resumePanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'in_progress');
+    if (updated) {
+        return { success: true, message: `Panel ${panelId} resumed`, panel_id: panelId, new_status: "in_progress" };
+    }
+    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for resuming.`);
+};
+
+export const finishPanel = async (stationId, moduleId, panelId) => {
+    console.log(`adminService.finishPanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'completed');
+
+    if (updated) {
+         // Check if all panels in this module are now completed
+        const module = mockModulesDataStore[stationId]?.find(m => m.module_id === moduleId);
+        if (module && module.panels.every(p => p.status === 'completed')) {
+            console.log(`All panels for module ${moduleId} completed. Updating module status in mock store.`);
+            updateModuleStatusInDataStore(stationId, moduleId, 'completed'); // Mark module as completed
+        }
+        return { success: true, message: `Panel ${panelId} finished`, panel_id: panelId, new_status: "completed" };
+    }
+    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for finishing.`);
+};
+
+export const updateModuleStatus = async (moduleId, status) => {
+    // This mock assumes moduleId is globally unique or we update it wherever we find it.
+    // StationContextSelector currently calls this without stationId, so we search all stations.
+    console.log(`adminService.updateModuleStatus: moduleId=${moduleId}, newStatus=${status}`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    const updated = updateModuleStatusInDataStore(null, moduleId, status); // Pass null for stationId to search all
+    
+    if (updated) {
+        return { success: true, message: `Module ${moduleId} status updated to ${status}`, module_id: moduleId, new_status: status };
+    }
+    // If you want to be strict and only allow updates if the module exists:
+    console.warn(`Module ${moduleId} not found in any station data store for status update, but reporting success as per mock.`);
+    // To simulate a case where the module MUST exist for an update to be "successful":
+    // throw new Error(`Module ${moduleId} not found for status update.`); 
+    // For now, let's assume the backend would create/update, so we report success.
+    return { success: true, message: `Module ${moduleId} status update to ${status} (simulated, module might not exist in current mock view for a specific station but assumed globally updated).`, module_id: moduleId, new_status: status };
+};
+
 export const updateSpecialty = async (id, specialtyData) => {
     const response = await fetch(`${API_BASE_URL}/specialties/${id}`, {
         method: 'PUT',

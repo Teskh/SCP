@@ -259,10 +259,14 @@ function ActiveProductionDashboard() {
     const [allHouseTypes, setAllHouseTypes] = useState([]);
     const [isLoadingHouseTypes, setIsLoadingHouseTypes] = useState(false);
 
+    // State for hover tooltip
+    const [hoveredStationDetails, setHoveredStationDetails] = useState(null);
+    const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+
 
     const fetchData = useCallback(async () => {
-        setSelectedItemIds(new Set());
-        setLastClickedItemId(null);
+        // setSelectedItemIds(new Set()); // Keep selection on auto-refresh
+        // setLastClickedItemId(null); // Keep last clicked on auto-refresh
         setIsLoading(true);
         setError('');
         try {
@@ -281,7 +285,7 @@ function ActiveProductionDashboard() {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, []); // Removed item selection reset from fetchData dependencies to persist selection
 
     const fetchHouseTypesForModal = useCallback(async () => {
         setIsLoadingHouseTypes(true);
@@ -640,23 +644,81 @@ function ActiveProductionDashboard() {
 
 
     const renderStation = (stationId) => {
-        const station = stationStatusMap[stationId]; // Use map for direct access
+        const station = stationStatusMap[stationId];
         if (!station) return <div key={`error-${stationId}`} style={stationBoxStyle}>Error: Estación {stationId} no encontrada</div>;
-    
-        const moduleData = station.current_module; // current_module should be part of station data from API
-    
+
+        const moduleData = station.current_module;
+        const isPanelLineStation = stationId.startsWith('W'); // W1-W5
+        const isMagazineStation = stationId === 'M1';
+
+        let activePanelDisplay = null;
+        if (isPanelLineStation && moduleData && moduleData.panels && moduleData.panels.length > 0) {
+            const inProgressPanel = moduleData.panels.find(p => p.status === 'in_progress');
+            // Ensure panels are sorted by sequence if available, otherwise by code or ID
+            const sortedPanels = [...moduleData.panels].sort((a, b) => (a.sequence || a.panel_id) - (b.sequence || b.panel_id));
+            const firstNotStartedPanel = sortedPanels.find(p => p.status === 'not_started');
+            
+            const activePanel = inProgressPanel || firstNotStartedPanel;
+            if (activePanel) {
+                activePanelDisplay = (
+                    <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb', background: '#e9f5ff', padding: '5px', borderRadius: '3px' }}>
+                        <strong>Panel Activo:</strong> {activePanel.panel_code} 
+                        <span style={{ fontWeight: 'normal', color: activePanel.status === 'in_progress' ? 'green' : '#c28b00'}}> ({activePanel.status})</span>
+                    </div>
+                );
+            } else {
+                 activePanelDisplay = (
+                    <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb', fontStyle: 'italic', color: '#666' }}>
+                        No hay paneles activos o pendientes.
+                    </div>
+                );
+            }
+        }
+        
+        const handleMouseEnter = (event) => {
+            if (moduleData && (isPanelLineStation || isMagazineStation)) { // Activate tooltip for W stations and M1
+                const panelCounts = (moduleData.panels || []).reduce((acc, panel) => {
+                    acc[panel.status] = (acc[panel.status] || 0) + 1;
+                    return acc;
+                }, { not_started: 0, in_progress: 0, completed: 0, paused: 0 }); // Initialize all expected statuses
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                setTooltipPosition({ x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 5 });
+                setHoveredStationDetails({
+                    stationId: stationId,
+                    moduleName: moduleData.module_name || `Módulo ${moduleData.module_number || moduleData.module_sequence_in_house || 'N/A'}`,
+                    panelCounts: panelCounts,
+                    moduleStatus: moduleData.status || 'N/A'
+                });
+            }
+        };
+
+        const handleMouseLeave = () => {
+            setHoveredStationDetails(null);
+        };
+
         return (
-            <div key={stationId} style={stationBoxStyle}>
+            <div 
+                key={stationId} 
+                style={stationBoxStyle}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            >
                 <div style={stationTitleStyle}>{station.station_name} ({stationId})</div>
                 {moduleData ? (
                     <div key={`${stationId}-content`} style={moduleInfoStyle}>
                         <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
                         <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                        <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number || moduleData.module_sequence_in_house}</span></div>
+                        <div>
+                            <strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number || moduleData.module_sequence_in_house}</span>
+                            {(isPanelLineStation || isMagazineStation) && <span style={{fontSize: '0.9em', color: '#333'}}> (Estado: {moduleData.status})</span>}
+                        </div>
                         <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
                         
-                        {/* Display Module Tasks */}
-                        {moduleData.module_tasks && moduleData.module_tasks.length > 0 && (
+                        {activePanelDisplay} {/* Shows active panel for W stations */}
+
+                        {/* For non-W stations, show detailed tasks/panels as before. For W stations, this is in tooltip. */}
+                        {(!isPanelLineStation && !isMagazineStation && moduleData.module_tasks && moduleData.module_tasks.length > 0) && (
                             <div style={{marginTop: '5px'}}>
                                 <strong>Tareas de Módulo:</strong>
                                 <ul style={taskListStyle}>
@@ -669,13 +731,12 @@ function ActiveProductionDashboard() {
                             </div>
                         )}
     
-                        {/* Display Panels and their Tasks */}
-                        {moduleData.panels && moduleData.panels.length > 0 && (
+                        {(!isPanelLineStation && !isMagazineStation && moduleData.panels && moduleData.panels.length > 0) && (
                             <div style={{marginTop: '5px'}}>
                                 <strong>Paneles:</strong>
                                 {moduleData.panels.map(panel => (
-                                    <div key={panel.panel_definition_id} style={panelContainerStyle}>
-                                        <div><em>{panel.panel_code} ({panel.panel_group})</em></div>
+                                    <div key={panel.panel_definition_id || panel.panel_id} style={panelContainerStyle}>
+                                        <div><em>{panel.panel_code} ({panel.panel_group || panel.status})</em></div>
                                         {panel.panel_tasks && panel.panel_tasks.length > 0 ? (
                                             <ul style={{...taskListStyle, paddingLeft: '10px'}}>
                                                 {panel.panel_tasks.map(ptask => (
@@ -689,6 +750,12 @@ function ActiveProductionDashboard() {
                                 ))}
                             </div>
                         )}
+                         {/* For M1, show a summary of panels if not showing full details */}
+                        {(isMagazineStation && moduleData.panels && moduleData.panels.length > 0) && (
+                             <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#555' }}>
+                                Total Paneles: {moduleData.panels.length}. Detalles al pasar el cursor.
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div key={`${stationId}-empty`} style={{...moduleInfoStyle, ...emptyStationStyle}}>(Vacío)</div>
@@ -696,6 +763,36 @@ function ActiveProductionDashboard() {
             </div>
         );
     };
+    
+    const renderTooltip = () => {
+        if (!hoveredStationDetails) return null;
+        const { moduleName, panelCounts, moduleStatus } = hoveredStationDetails;
+        return (
+            <div style={{
+                position: 'absolute',
+                left: `${tooltipPosition.x}px`,
+                top: `${tooltipPosition.y}px`,
+                backgroundColor: 'rgba(20,20,20,0.9)', // Darker, more opaque
+                color: 'white',
+                padding: '12px', // Increased padding
+                borderRadius: '6px', // Slightly more rounded
+                zIndex: 10000, // Higher z-index
+                fontSize: '0.95em', // Slightly larger font
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)', // More pronounced shadow
+                maxWidth: '320px',
+                pointerEvents: 'none', 
+                border: '1px solid rgba(255,255,255,0.2)', // Subtle border
+            }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '1.05em', borderBottom: '1px solid rgba(255,255,255,0.3)', paddingBottom: '5px' }}>{moduleName}</h4>
+                <p style={{ margin: '0 0 5px 0' }}>Estado del Módulo: <strong style={{color: moduleStatus === 'in_production' ? '#66bb6a' : (moduleStatus === 'completed' ? '#bdbdbd' : '#ffa726')}}>{moduleStatus}</strong></p> {/* Color coding status */}
+                <p style={{ margin: '0 0 5px 0' }}>Paneles No Iniciados: <strong style={{color: '#ffcc80'}}>{panelCounts.not_started || 0}</strong></p>
+                <p style={{ margin: '0 0 5px 0' }}>Paneles En Progreso: <strong style={{color: '#81d4fa'}}>{panelCounts.in_progress || 0}</strong></p>
+                <p style={{ margin: '0 0 5px 0' }}>Paneles Pausados: <strong style={{color: '#fff176'}}>{panelCounts.paused || 0}</strong></p>
+                <p style={{ margin: '0' }}>Paneles Completados: <strong style={{color: '#c5e1a5'}}>{panelCounts.completed || 0}</strong></p>
+            </div>
+        );
+    };
+
 
     const renderLine = (lineKey) => (
         <div key={`line-${lineKey}`} style={lineStyles}>
