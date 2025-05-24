@@ -222,7 +222,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                 onMouseLeave={() => setIsDeleteHovered(false)}
                 title={`Eliminar item #${item.planned_sequence} (Plan ID: ${id})`}
             >
-                🗑️
+                &#128465;
             </button>
         </div>
     );
