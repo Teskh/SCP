@@ -117,18 +117,19 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
     const handleTaskAction = async (actionType, planId, panelDefinitionId) => {
         // planId is selectedModule.plan_id
         // panelDefinitionId is selectedPanelId (or the panel_id from the map function)
-        // moduleId is selectedModule.module_id
+        // planId is selectedModule.plan_id
+        // panelDefinitionId is selectedPanelId (or the panel_id from the map function)
         // workerId needs to be sourced (e.g. from auth context, hardcoded for now)
         // taskDefinitionId also needs to be sourced. This is a major missing piece for generic task actions.
         
         const workerId = 1; // Placeholder
         const taskDefinitionIdForPanel = 1; // Placeholder: This needs to be dynamic based on panel & station
 
-        if (!selectedModule || !selectedModule.module_id) {
-            setTaskActionError("No module selected to perform task on.");
+        if (!selectedModule || !selectedModule.plan_id) { // Check for plan_id, as module_id might be null for prospective W1 modules
+            setTaskActionError("No production plan item selected to perform task on.");
             return;
         }
-        const moduleId = selectedModule.module_id;
+        // const moduleId = selectedModule.module_id; // moduleId is not directly sent by this function
 
         setIsSubmittingTaskAction(true);
         setTaskActionError('');
@@ -189,8 +190,10 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
             }
 
         } catch (err) {
-            console.error(`Error performing ${actionType} task for panel ${panelDefinitionId} in module ${moduleId}:`, err);
-            setTaskActionError(`Error al ${actionType} tarea: ${err.message || 'Error desconocido'}`);
+            // Use plan_id in error message if module_id is not available
+            const idForErrorMessage = selectedModule.module_id || `(Plan ID: ${selectedModule.plan_id})`;
+            console.error(`Error performing ${actionType} task for panel ${panelDefinitionId} in module ${idForErrorMessage}:`, err);
+            setTaskActionError(`Error al ${actionType} tarea para panel ${panelDefinitionId} (Módulo/Plan: ${idForErrorMessage}): ${err.message || 'Error desconocido'}`);
         } finally {
             setIsSubmittingTaskAction(false);
         }

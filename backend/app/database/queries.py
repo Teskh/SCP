@@ -1317,6 +1317,38 @@ def _get_panels_with_status_for_module(db, module_id, house_type_id, module_sequ
     return panels_with_status
 
 
+# Helper for planned modules (no module_id yet)
+def _get_panel_definitions_for_planned_module(db, plan_house_type_id, plan_module_number, plan_sub_type_id):
+    """
+    Fetches panel definitions for a planned module.
+    All panels are assumed 'not_started'.
+    plan_module_number is the module's sequence in the house.
+    """
+    panel_defs_query = """
+        SELECT pd.panel_definition_id, pd.panel_group, pd.panel_code
+        FROM PanelDefinitions pd
+        WHERE pd.house_type_id = ? AND pd.module_sequence_number = ?
+          AND (pd.sub_type_id = ? OR pd.sub_type_id IS NULL) -- Match specific sub_type or common panels
+        ORDER BY pd.panel_code
+    """
+    # Ensure sub_type_id is correctly passed (it can be None)
+    params = [plan_house_type_id, plan_module_number, plan_sub_type_id]
+    
+    panel_defs_cursor = db.execute(panel_defs_query, params)
+    panel_defs_rows = panel_defs_cursor.fetchall()
+
+    defined_panels = []
+    for pd_row in panel_defs_rows:
+        defined_panels.append({
+            'panel_id': pd_row['panel_definition_id'], # Keep 'panel_id' for frontend compatibility
+            'panel_definition_id': pd_row['panel_definition_id'],
+            'panel_code': pd_row['panel_code'],
+            'panel_group': pd_row['panel_group'],
+            'status': 'not_started' # For a planned module, panels are not started
+        })
+    return defined_panels
+
+
 def get_module_and_panels_for_station(station_id):
     """
     Determines the active or next module for a given station and its panels.
@@ -1367,11 +1399,15 @@ def get_module_and_panels_for_station(station_id):
 
     # Step 2: No Active Module - Special handling for W1 (first panel station)
     # Assuming W1 is the designated first panel station. This could be configurable.
-    if station_id == 'W1': # TODO: Make this configurable if W1 is not always the first panel station
+    if station_id == 'W1':
         logging.info(f"No active module at W1. Looking for next 'Planned' module.")
         next_planned_cursor = db.execute("""
-            SELECT mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.project_name, mpp.house_identifier, mpp.sub_type_id,
-                   ht.name as house_type_name, ht.number_of_modules, hst.name as sub_type_name
+            SELECT 
+                mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.project_name, 
+                mpp.house_identifier, mpp.sub_type_id, mpp.planned_sequence,
+                mpp.planned_start_datetime, mpp.planned_assembly_line, mpp.status,
+                ht.name as house_type_name, ht.number_of_modules,
+                hst.name as sub_type_name
             FROM ModuleProductionPlan mpp
             JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
             LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
@@ -1381,22 +1417,35 @@ def get_module_and_panels_for_station(station_id):
         next_planned_row = next_planned_cursor.fetchone()
 
         if next_planned_row:
-            plan_id = next_planned_row['plan_id']
-            logging.info(f"Found next planned module (plan_id: {plan_id}) for W1. Creating/assigning module entry.")
-            # Create module in Modules table, set its status to 'Panels', and update MPP status to 'Panels'
-            module_id = create_module_from_plan(plan_id, station_id, 
-                                                initial_module_status='Panels', 
-                                                mpp_status_update='Panels')
-            if module_id:
-                # Refetch the module data now that it's in the Modules table
-                # This is to ensure we have module_id and consistent data structure
-                return get_module_and_panels_for_station(station_id) # Recursive call to get the newly created module
-            else:
-                logging.error(f"Failed to create/assign module for plan_id {plan_id} at W1.")
+            # Construct module_data from the plan item. This module doesn't exist in Modules table yet.
+            module_data_from_plan = {
+                'module_id': None, # Indicates it's not an existing module instance from Modules table
+                'plan_id': next_planned_row['plan_id'],
+                'house_type_id': next_planned_row['house_type_id'],
+                'module_sequence_in_house': next_planned_row['module_number'], # MPP.module_number is sequence in house
+                'module_status': next_planned_row['status'], # This is the ModuleProductionPlan status
+                'project_name': next_planned_row['project_name'],
+                'house_identifier': next_planned_row['house_identifier'],
+                'module_number': next_planned_row['module_number'], # from MPP
+                'sub_type_id': next_planned_row['sub_type_id'],
+                'planned_sequence': next_planned_row['planned_sequence'], # from MPP
+                'planned_start_datetime': next_planned_row['planned_start_datetime'],
+                'planned_assembly_line': next_planned_row['planned_assembly_line'],
+                'house_type_name': next_planned_row['house_type_name'],
+                'number_of_modules': next_planned_row['number_of_modules'],
+                'sub_type_name': next_planned_row['sub_type_name'],
+                'current_station_id': station_id # Contextually, it's for this station
+            }
+            panels = _get_panel_definitions_for_planned_module(db, 
+                                                              next_planned_row['house_type_id'], 
+                                                              next_planned_row['module_number'], # This is module_sequence_in_house
+                                                              next_planned_row['sub_type_id'])
+            logging.info(f"Found next planned module (plan_id: {next_planned_row['plan_id']}) for W1. Returning its definition and panels.")
+            return {'module': module_data_from_plan, 'panels': panels}
         else:
             logging.info("No 'Planned' modules available for W1.")
             
-    # Step 3: No Active Module - Assembly Stations (A,B,C)
+    # Step 3: No Active Module - Assembly Stations (A,B,C) - Logic for these stations remains the same
     elif station_line_type in ['A', 'B', 'C']:
         logging.info(f"No active module at assembly station {station_id}. Looking for next 'Magazine' module for line {station_line_type}.")
         next_magazine_cursor = db.execute(f"""
