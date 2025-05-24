@@ -1204,6 +1204,76 @@ def _get_panel_definitions_for_planned_module(db, plan_house_type_id, plan_modul
     return defined_panels
 
 
+def _get_tasks_with_status_for_active_plan(db, station_id, plan_id, house_type_id, specialty_id):
+    """
+    Fetches task definitions for an ACTIVE plan_id at a station, including their logged status.
+    """
+    defined_tasks_query = """
+        SELECT
+            td.task_definition_id, td.name AS task_name, td.description AS task_description,
+            td.is_panel_task, td.station_sequence_order
+        FROM TaskDefinitions td
+        JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
+        WHERE
+            (td.house_type_id = ? OR td.house_type_id IS NULL)
+            AND (td.specialty_id = ? OR td.specialty_id IS NULL)
+        ORDER BY td.name;
+    """
+    defined_tasks_cursor = db.execute(defined_tasks_query, (station_id, house_type_id, specialty_id))
+    
+    tasks_with_status = []
+
+    for td_row in defined_tasks_cursor.fetchall():
+        task_def = dict(td_row)
+        task_status = 'Not Started'
+        log_id = None
+        started_at = None
+        completed_at = None
+        logged_panel_definition_id_for_task = None 
+
+        if task_def['is_panel_task'] == 0: # Module Task
+            log_cursor = db.execute(
+                "SELECT task_log_id, status, started_at, completed_at FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ?",
+                (plan_id, task_def['task_definition_id'])
+            )
+            log_row = log_cursor.fetchone()
+            if log_row:
+                task_status = log_row['status']
+                log_id = log_row['task_log_id']
+                started_at = log_row['started_at']
+                completed_at = log_row['completed_at']
+        else: # Panel Task
+            log_cursor = db.execute(
+                """SELECT panel_task_log_id, status, started_at, completed_at, panel_definition_id 
+                   FROM PanelTaskLogs 
+                   WHERE plan_id = ? AND task_definition_id = ?
+                   ORDER BY started_at DESC LIMIT 1""",
+                (plan_id, task_def['task_definition_id'])
+            )
+            log_row = log_cursor.fetchone()
+            if log_row:
+                task_status = log_row['status']
+                log_id = log_row['panel_task_log_id']
+                started_at = log_row['started_at']
+                completed_at = log_row['completed_at']
+                logged_panel_definition_id_for_task = log_row['panel_definition_id']
+
+        tasks_with_status.append({
+            'task_definition_id': task_def['task_definition_id'],
+            'task_name': task_def['task_name'],
+            'task_description': task_def['task_description'],
+            'is_panel_task': task_def['is_panel_task'],
+            'task_status': task_status,
+            'log_id': log_id,
+            'started_at': started_at,
+            'completed_at': completed_at,
+            'plan_id': plan_id,
+            'house_type_panel_id': logged_panel_definition_id_for_task if task_def['is_panel_task'] else None
+        })
+        
+    return tasks_with_status
+
+
 def get_module_and_panels_for_station(station_id, specialty_id=None): # Added specialty_id
     """
     Determines the active or next module for a given station, its panels, and relevant tasks.
@@ -1285,15 +1355,10 @@ def get_module_and_panels_for_station(station_id, specialty_id=None): # Added sp
                                                       module_data['module_number'], module_data['sub_type_id'])
             
             # Fetch tasks for the active module
-            # For active modules, we might want to fetch logged tasks eventually,
-            # but for now, let's use get_tasks_for_plan_at_station to show defined tasks.
-            # This part might need refinement if actual logged status is required for active modules.
-            # The user's immediate issue is for 'Planned' modules.
-            module_tasks_active = get_tasks_for_plan_at_station(station_id, module_data['plan_id'], module_data['house_type_id'], specialty_id, is_panel_task=0)
-            panel_tasks_active = get_tasks_for_plan_at_station(station_id, module_data['plan_id'], module_data['house_type_id'], specialty_id, is_panel_task=1)
-            tasks = module_tasks_active + panel_tasks_active
+            # Fetch tasks for the active module, including their logged status
+            tasks = _get_tasks_with_status_for_active_plan(db, station_id, module_data['plan_id'], module_data['house_type_id'], specialty_id)
             
-            logging.info(f"Found active plan {module_data['plan_id']} relevant for station {station_id}. Returning module, panels, and tasks.")
+            logging.info(f"Found active plan {module_data['plan_id']} relevant for station {station_id}. Returning module, panels, and tasks with logged statuses.")
             return {'module': module_data, 'panels': panels, 'tasks': tasks}
 
     # Step 2: No Active Module - Special handling for W1 (first panel station)
