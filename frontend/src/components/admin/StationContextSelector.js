@@ -178,7 +178,7 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                 if (updatedModule && updatedModule.panels && updatedModule.panels.every(p => p.status === 'completed')) {
                     console.log(`All panels in module ${updatedModule.module_id} are completed. Updating module status to 'Magazine'.`);
                     // The target station for 'Magazine' status is typically 'M1'
-                    await adminService.updateModuleStatus(updatedModule.module_id, 'Magazine', 'M1');
+                    await adminService.updatePlanStatus(updatedModule.plan_id, 'Magazine');
                     // After module status update, fetch context again to get the next module or empty state
                     await fetchStationContext(currentStationId);
                 } else if (updatedModule && currentStationId === 'W1') { // TODO: Make 'W1' check more robust
