@@ -114,86 +114,93 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
     }, [currentStationId]);
 
     // Task Action Handlers
-    const handleTaskAction = async (actionType, planId, panelDefinitionId) => {
-        // planId is selectedModule.plan_id
-        // panelDefinitionId is selectedPanelId (or the panel_id from the map function)
-        // planId is selectedModule.plan_id
-        // panelDefinitionId is selectedPanelId (or the panel_id from the map function)
-        // workerId needs to be sourced (e.g. from auth context, hardcoded for now)
-        // taskDefinitionId also needs to be sourced. This is a major missing piece for generic task actions.
-        
-        const workerId = 1; // Placeholder
-        const taskDefinitionIdForPanel = 1; // Placeholder: This needs to be dynamic based on panel & station
+    // Note: The 'panel' object passed to this function must include 'log_id' if the task status is 'in_progress' or 'paused'.
+    // This 'log_id' is crucial for calling updatePanelTaskStatus.
+    // The 'taskDefinitionIdForPanel' is a placeholder and needs to be correctly determined for 'startTask'.
+    const handleTaskAction = async (actionType, panel) => {
+        const workerId = 1; // Placeholder for actual worker ID
+        const taskDefinitionIdForPanel = 1; // Placeholder: This needs to be dynamic based on panel & station for 'start' action.
 
-        if (!selectedModule || !selectedModule.plan_id) { // Check for plan_id, as module_id might be null for prospective W1 modules
+        if (!selectedModule || !selectedModule.plan_id) {
             setTaskActionError("No production plan item selected to perform task on.");
             return;
         }
-        // const moduleId = selectedModule.module_id; // moduleId is not directly sent by this function
+        if (!panel || !panel.panel_definition_id) {
+            setTaskActionError("Panel information is missing.");
+            return;
+        }
 
         setIsSubmittingTaskAction(true);
         setTaskActionError('');
         
         try {
             let response;
-            // The adminService functions for panel actions are currently mocks.
-            // They need to be updated to call the real /tasks/start or /tasks/update_status endpoints.
-            // For now, we simulate the action and then refresh the context.
+            const planId = selectedModule.plan_id;
+            const panelDefinitionId = panel.panel_definition_id;
+
             switch (actionType) {
-                case 'start': // Also handles resume
-                    response = await adminService.startOrResumePanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
-                    // Using mock for now (inside adminService):
-                    // response = await adminService.startPanel(currentStationId, moduleId, panelDefinitionId);
+                case 'start': // For 'not_started' panels
+                    response = await adminService.startTask(
+                        planId,
+                        taskDefinitionIdForPanel, // This is a placeholder.
+                        workerId,
+                        currentStationId,
+                        panelDefinitionId
+                    );
                     break;
-                case 'pause':
-                    response = await adminService.pausePanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
-                    // response = await adminService.pausePanel(currentStationId, moduleId, panelDefinitionId);
+                case 'pause': // For 'in_progress' panels
+                    if (!panel.log_id) { // panel.log_id must be available from backend for existing tasks
+                        throw new Error("Task log ID is missing for pausing. Backend might need to provide log_id for panels.");
+                    }
+                    response = await adminService.updatePanelTaskStatus(
+                        panel.log_id,
+                        'Paused'
+                    );
                     break;
-                case 'finish':
-                    response = await adminService.finishPanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
-                    // response = await adminService.finishPanel(currentStationId, moduleId, panelDefinitionId);
+                case 'resume': // For 'paused' panels
+                     if (!panel.log_id) {
+                        throw new Error("Task log ID is missing for resuming. Backend might need to provide log_id for panels.");
+                    }
+                    response = await adminService.updatePanelTaskStatus(
+                        panel.log_id,
+                        'In Progress'
+                    );
+                    break;
+                case 'finish': // For 'in_progress' or 'paused' panels
+                    if (!panel.log_id) {
+                        throw new Error("Task log ID is missing for finishing. Backend might need to provide log_id for panels.");
+                    }
+                    response = await adminService.updatePanelTaskStatus(
+                        panel.log_id,
+                        'Completed',
+                        currentStationId // stationFinish
+                    );
                     break;
                 default:
                     throw new Error(`Invalid action type: ${actionType}`);
             }
             console.log(`Panel action ${actionType} API Response:`, response);
 
-            // Refresh context to get the latest statuses from the backend
-            await fetchStationContext(currentStationId); // This will update selectedModule state
-
-            // Post-action logic (access the updated selectedModule from state after fetchStationContext)
-            // Need to use a functional update or useEffect to react to selectedModule change for this logic
-            // For simplicity here, we'll assume selectedModule is updated for the check.
-            // This is slightly risky if fetchStationContext hasn't updated state yet.
-            // A better way is to use the module from the fetchStationContext's *return* if it returned data,
-            // or trigger this logic in a useEffect that depends on selectedModule.
+            await fetchStationContext(currentStationId); 
 
             if (actionType === 'finish') {
-                // Re-access selectedModule from state, assuming fetchStationContext updated it.
-                // This is a common pattern, but can be tricky with async state updates.
-                // For robustness, this logic should ideally be in a useEffect hook reacting to selectedModule changes
-                // or use the direct result of fetchStationContext if it returned the updated module.
-                const updatedModule = selectedModule; // Assuming state is fresh.
-
+                const updatedModule = selectedModule; // Re-access after fetch, assuming it's updated.
                 if (updatedModule && updatedModule.panels && updatedModule.panels.every(p => p.status === 'completed')) {
                     console.log(`All panels in module (plan_id: ${updatedModule.plan_id}) are completed. Updating module status to 'Magazine'.`);
-                    // The target station for 'Magazine' status is typically 'M1'
                     await adminService.updatePlanStatus(updatedModule.plan_id, 'Magazine');
-                    // After module status update, fetch context again to get the next module or empty state
                     await fetchStationContext(currentStationId);
-                } else if (updatedModule && currentStationId === 'W1') { // TODO: Make 'W1' check more robust
+                } else if (updatedModule && currentStationId === 'W1') { 
                     selectNextNotStartedPanelInModule(updatedModule);
                 }
             } else if (actionType === 'start' && currentStationId === 'W1' && selectedModule) {
-                 // If a task was started on W1, ensure the next panel is selected
                 selectNextNotStartedPanelInModule(selectedModule);
             }
 
         } catch (err) {
-            // Use plan_id in error message
             const idForErrorMessage = selectedModule.plan_id;
-            console.error(`Error performing ${actionType} task for panel ${panelDefinitionId} in module (plan_id: ${idForErrorMessage}):`, err);
-            setTaskActionError(`Error al ${actionType} tarea para panel ${panelDefinitionId} (Plan ID: ${idForErrorMessage}): ${err.message || 'Error desconocido'}`);
+            const panelIdForError = panel.panel_definition_id;
+            console.error(`Error performing ${actionType} task for panel ${panelIdForError} in module (plan_id: ${idForErrorMessage}):`, err);
+            setTaskActionError(`Error al ${actionType} tarea para panel ${panelIdForError} (Plan ID: ${idForErrorMessage}): ${err.message || 'Error desconocido'}`);
         } finally {
             setIsSubmittingTaskAction(false);
         }
@@ -292,11 +299,12 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                                     </div>
                                     
                                     {/* Task Management Buttons */}
+                                    {/* Ensure 'panel' object contains 'log_id' if status is 'in_progress' or 'paused' */}
                                     {selectedPanelId === panel.panel_id && ( // Show buttons only for selected panel
                                         <div style={{ marginTop: '10px'}}>
                                             {panel.status === 'not_started' && (
                                                 <button 
-                                                    onClick={() => handleTaskAction('start', selectedModule.plan_id, panel.panel_definition_id)} 
+                                                    onClick={() => handleTaskAction('start', panel)} 
                                                     disabled={isSubmittingTaskAction}
                                                     style={startButtonStyle}
                                                 >
@@ -306,14 +314,14 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                                             {panel.status === 'in_progress' && (
                                                 <>
                                                     <button 
-                                                        onClick={() => handleTaskAction('pause', selectedModule.plan_id, panel.panel_definition_id)} 
+                                                        onClick={() => handleTaskAction('pause', panel)} 
                                                         disabled={isSubmittingTaskAction}
                                                         style={pauseButtonStyle}
                                                     >
                                                         {isSubmittingTaskAction ? 'Pausando...' : 'Pausar Tarea'}
                                                     </button>
                                                     <button 
-                                                        onClick={() => handleTaskAction('finish', selectedModule.plan_id, panel.panel_definition_id)} 
+                                                        onClick={() => handleTaskAction('finish', panel)} 
                                                         disabled={isSubmittingTaskAction}
                                                         style={finishButtonStyle}
                                                     >
@@ -322,13 +330,22 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                                                 </>
                                             )}
                                             {panel.status === 'paused' && (
-                                                 <button 
-                                                    onClick={() => handleTaskAction('start', selectedModule.plan_id, panel.panel_definition_id)} // 'start' action can resume
-                                                    disabled={isSubmittingTaskAction}
-                                                    style={resumeButtonStyle}
-                                                >
-                                                    {isSubmittingTaskAction ? 'Reanudando...' : 'Reanudar Tarea'}
-                                                </button>
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleTaskAction('resume', panel)} 
+                                                        disabled={isSubmittingTaskAction}
+                                                        style={resumeButtonStyle}
+                                                    >
+                                                        {isSubmittingTaskAction ? 'Reanudando...' : 'Reanudar Tarea'}
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleTaskAction('finish', panel)} 
+                                                        disabled={isSubmittingTaskAction}
+                                                        style={{...finishButtonStyle, marginLeft: '5px'}}
+                                                    >
+                                                        {isSubmittingTaskAction ? 'Finalizando...' : 'Finalizar Tarea'}
+                                                    </button>
+                                                </>
                                             )}
                                             {panel.status === 'completed' && (
                                                 <p style={{color: 'green', fontWeight: 'bold', margin: 0}}>Panel Completado ✔</p>
