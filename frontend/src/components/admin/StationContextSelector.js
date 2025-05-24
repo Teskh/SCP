@@ -43,7 +43,7 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
     const currentStationName = useMemo(() => {
         if (!currentStationId) return '';
         if (isLoadingAllStations || !allStations || allStations.length === 0) return 'Cargando nombre de estación...';
-        const station = allStations.find(s => s.id.toString() === currentStationId);
+        const station = allStations.find(s => s.station_id.toString() === currentStationId);
         return station ? station.name : 'ID de estación desconocido';
     }, [currentStationId, allStations, isLoadingAllStations]);
 
