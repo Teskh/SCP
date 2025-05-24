@@ -123,31 +123,34 @@ export const finishPanelTask = async (planId, taskDefinitionId, workerId, statio
 };
 
 
-// This function will call the backend to update the module's status.
-// The backend should handle updating both Modules and ModuleProductionPlan tables,
-// and potentially moving the module to a new station (e.g., M1 for 'Magazine').
-export const updateModuleStatus = async (moduleId, newStatus, targetStationId = null) => {
-    console.log(`adminService.updateModuleStatus: moduleId=${moduleId}, newStatus=${newStatus}, targetStationId=${targetStationId}`);
-    // Example: PUT /api/admin/modules/<moduleId>/status
-    // Body: { status: newStatus, target_station_id: targetStationId (optional) }
-    // The backend route for this needs to be created or an existing one adapted.
-    // For now, let's assume a generic update endpoint.
-    // The queries.py has update_module_status_and_station. This needs an API endpoint.
-    // Let's assume /api/admin/modules/{module_id}/status-station
-    const payload = {
-        module_status: newStatus, // Corresponds to Modules.status
-        mpp_status: newStatus,    // Corresponds to ModuleProductionPlan.status (e.g. 'Magazine', 'Assembly', 'Completed')
-    };
-    if (targetStationId) {
-        payload.station_id = targetStationId;
+// This function will call the backend to update the ModuleProductionPlan item's status and optionally its assembly line.
+export const updatePlanStatus = async (planId, newStatus, newLine = null) => {
+    console.log(`adminService.updatePlanStatus: planId=${planId}, newStatus=${newStatus}, newLine=${newLine}`);
+    
+    const updateData = { status: newStatus };
+    if (newLine !== null) {
+        updateData.planned_assembly_line = newLine;
     }
-    // This endpoint doesn't exist yet.
-    // For now, mocking success.
-    // TODO: Create PUT /api/admin/modules/<module_id>/status-station endpoint
-    // that calls queries.update_module_status_and_station.
-    console.warn("updateModuleStatus is using mock behavior as backend endpoint is not yet defined/used.");
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return { success: true, message: `Module ${moduleId} status updated to ${newStatus} (mocked).`, module_id: moduleId, new_status: newStatus };
+
+    // This uses the existing generic update endpoint for ModuleProductionPlan items.
+    // PUT /api/admin/module-production-plan/<plan_id>
+    try {
+        const updatedItem = await updateModuleProductionPlanItem(planId, updateData);
+        return { 
+            success: true, 
+            message: `Plan ${planId} status updated to ${newStatus}` + (newLine ? ` and line to ${newLine}.` : '.'),
+            plan_id: planId, // Changed from module_id
+            new_status: updatedItem.status, // Reflect actual status from response
+            // Potentially include other details from updatedItem if needed by UI
+        };
+    } catch (error) {
+        console.error(`Error updating plan ${planId} status:`, error);
+        // Re-throw or handle as per application's error handling strategy
+        // For consistency with mock, we can return a similar structure on failure,
+        // but throwing is often better for React Query/SWR.
+        throw error; 
+        // return { success: false, message: error.message || `Failed to update plan ${planId} status.` };
+    }
 };
 
 export const updateSpecialty = async (id, specialtyData) => {

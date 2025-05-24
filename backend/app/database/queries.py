@@ -916,15 +916,13 @@ def get_current_module_for_station(station_id):
     return dict(module_data) if module_data else None
 
 
-def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker_specialty_id):
+def get_logged_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_specialty_id):
     """
-    Fetches tasks for a given module at a specific station, considering worker's specialty.
-    Distinguishes between module tasks (is_panel_task = 0) and panel tasks (is_panel_task = 1).
-    For module tasks, checks TaskLogs.
-    For panel tasks, checks PanelTaskLogs (this function focuses on module tasks, see get_panel_tasks_for_module_at_station for panel tasks).
+    Fetches LOGGED module tasks (is_panel_task = 0) for a given plan_id at a specific station,
+    considering worker's specialty. Checks TaskLogs.
     """
     db = get_db()
-    # This function will now primarily fetch MODULE tasks (is_panel_task = 0)
+    # This function fetches MODULE tasks (is_panel_task = 0) from TaskLogs
     query = """
         SELECT
             td.task_definition_id,
@@ -935,9 +933,8 @@ def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker
             tl.task_log_id,
             tl.started_at,
             tl.completed_at
-            -- No panel_id in TaskLogs anymore
         FROM TaskDefinitions td
-        LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.module_id = ?
+        LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.plan_id = ?
         JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
         WHERE
             (td.house_type_id = ? OR td.house_type_id IS NULL)
@@ -945,12 +942,13 @@ def get_tasks_for_module_at_station(station_id, module_id, house_type_id, worker
             AND td.is_panel_task = 0 -- Explicitly for module-level tasks
         ORDER BY td.name;
     """
-    tasks_cursor = db.execute(query, (module_id, station_id, house_type_id, worker_specialty_id))
+    tasks_cursor = db.execute(query, (plan_id, station_id, house_type_id, worker_specialty_id))
     return [dict(row) for row in tasks_cursor.fetchall()]
 
-def get_panel_tasks_for_module_at_station(station_id, module_id, house_type_id, worker_specialty_id, panel_definition_id):
+def get_logged_panel_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_specialty_id, panel_definition_id):
     """
-    Fetches PANEL tasks (is_panel_task = 1) for a specific panel of a module at a station.
+    Fetches LOGGED PANEL tasks (is_panel_task = 1) for a specific panel of a plan_id at a station.
+    Checks PanelTaskLogs.
     """
     db = get_db()
     query = """
@@ -965,7 +963,7 @@ def get_panel_tasks_for_module_at_station(station_id, module_id, house_type_id, 
             ptl.completed_at
         FROM TaskDefinitions td
         LEFT JOIN PanelTaskLogs ptl ON td.task_definition_id = ptl.task_definition_id
-                                    AND ptl.module_id = ?
+                                    AND ptl.plan_id = ?
                                     AND ptl.panel_definition_id = ?
         JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
         WHERE
@@ -974,7 +972,7 @@ def get_panel_tasks_for_module_at_station(station_id, module_id, house_type_id, 
             AND td.is_panel_task = 1 -- Explicitly for panel-level tasks
         ORDER BY td.name;
     """
-    tasks_cursor = db.execute(query, (module_id, panel_definition_id, station_id, house_type_id, worker_specialty_id))
+    tasks_cursor = db.execute(query, (plan_id, panel_definition_id, station_id, house_type_id, worker_specialty_id))
     return [dict(row) for row in tasks_cursor.fetchall()]
 
 
@@ -1012,9 +1010,9 @@ def get_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_spe
 
 # === TaskLog Operations ===
 
-def start_task_log(module_id, task_definition_id, worker_id, station_start):
+def start_task_log(plan_id, task_definition_id, worker_id, station_start):
     """
-    Starts a MODULE task (is_panel_task=0) by inserting a new record into TaskLogs.
+    Starts a MODULE task (is_panel_task=0) by inserting a new record into TaskLogs using plan_id.
     Sets status to 'In Progress' and records the start time and station.
     """
     db = get_db()
@@ -1029,9 +1027,9 @@ def start_task_log(module_id, task_definition_id, worker_id, station_start):
     try:
         cursor = db.execute(
             """INSERT INTO TaskLogs
-               (module_id, task_definition_id, worker_id, station_start, started_at, status, notes)
-               VALUES (?, ?, ?, ?, ?, ?, NULL)""", # Removed panel_id, notes is nullable
-            (module_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
+               (plan_id, task_definition_id, worker_id, station_start, started_at, status, notes)
+               VALUES (?, ?, ?, ?, ?, ?, NULL)""",
+            (plan_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
         )
         db.commit()
         return cursor.lastrowid
@@ -1073,9 +1071,9 @@ def get_task_log_by_id(task_log_id):
 
 # === PanelTaskLog Operations ===
 
-def start_panel_task_log(module_id, panel_definition_id, task_definition_id, worker_id, station_start):
+def start_panel_task_log(plan_id, panel_definition_id, task_definition_id, worker_id, station_start):
     """
-    Starts a PANEL task (is_panel_task=1) by inserting a new record into PanelTaskLogs.
+    Starts a PANEL task (is_panel_task=1) by inserting a new record into PanelTaskLogs using plan_id.
     Sets status to 'In Progress' and records the start time and station.
     """
     db = get_db()
@@ -1090,9 +1088,9 @@ def start_panel_task_log(module_id, panel_definition_id, task_definition_id, wor
     try:
         cursor = db.execute(
             """INSERT INTO PanelTaskLogs
-               (module_id, panel_definition_id, task_definition_id, worker_id, station_start, started_at, status, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, NULL)""", # notes is nullable
-            (module_id, panel_definition_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
+               (plan_id, panel_definition_id, task_definition_id, worker_id, station_start, started_at, status, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, NULL)""",
+            (plan_id, panel_definition_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
         )
         db.commit()
         return cursor.lastrowid
@@ -1131,12 +1129,12 @@ def get_panel_task_log_by_id(panel_task_log_id):
     row = cursor.fetchone()
     return dict(row) if row else None
 
-def get_panel_task_logs_for_module_panel(module_id, panel_definition_id):
-    """Fetches all PanelTaskLogs for a specific panel within a module."""
+def get_panel_task_logs_for_plan_panel(plan_id, panel_definition_id):
+    """Fetches all PanelTaskLogs for a specific panel within a plan."""
     db = get_db()
     cursor = db.execute(
-        "SELECT * FROM PanelTaskLogs WHERE module_id = ? AND panel_definition_id = ? ORDER BY started_at",
-        (module_id, panel_definition_id)
+        "SELECT * FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? ORDER BY started_at",
+        (plan_id, panel_definition_id)
     )
     return [dict(row) for row in cursor.fetchall()]
 
@@ -1269,9 +1267,9 @@ def update_module_status_and_station(module_id, new_module_status, new_mpp_statu
         return False
 
 
-def _get_panels_with_status_for_module(db, module_id, house_type_id, module_sequence_in_house, module_plan_sub_type_id):
+def _get_panels_with_status_for_plan(db, plan_id, house_type_id, module_sequence_in_house, module_plan_sub_type_id):
     """
-    Helper to fetch panel definitions for a module and determine their current task status.
+    Helper to fetch panel definitions for a plan and determine their current task status from PanelTaskLogs.
     A panel's status is simplified to the status of its most 'active' task log.
     """
     panel_defs_query = """
@@ -1292,7 +1290,7 @@ def _get_panels_with_status_for_module(db, module_id, house_type_id, module_sequ
         # This is a simplification; a panel might have multiple tasks.
         status_cursor = db.execute("""
             SELECT status FROM PanelTaskLogs
-            WHERE module_id = ? AND panel_definition_id = ?
+            WHERE plan_id = ? AND panel_definition_id = ?
             ORDER BY
                 CASE status
                     WHEN 'In Progress' THEN 1
@@ -1303,7 +1301,7 @@ def _get_panels_with_status_for_module(db, module_id, house_type_id, module_sequ
                 END,
                 completed_at DESC, started_at DESC
             LIMIT 1
-        """, (module_id, pd['panel_definition_id']))
+        """, (plan_id, pd['panel_definition_id']))
         status_row = status_cursor.fetchone()
         current_panel_status = status_row['status'] if status_row else 'not_started'
 
@@ -1392,9 +1390,12 @@ def get_module_and_panels_for_station(station_id):
 
     if module_row:
         module_data = dict(module_row)
-        panels = _get_panels_with_status_for_module(db, module_data['module_id'], module_data['house_type_id'],
+        # Assuming module_id is still the relevant ID for an *active* module instance.
+        # If _get_panels_with_status_for_plan needs plan_id, this needs adjustment.
+        # The function _get_panels_with_status_for_plan now takes plan_id.
+        panels = _get_panels_with_status_for_plan(db, module_data['plan_id'], module_data['house_type_id'],
                                                   module_data['module_sequence_in_house'], module_data['sub_type_id'])
-        logging.info(f"Found active module {module_data['module_id']} at station {station_id}.")
+        logging.info(f"Found active module {module_data['module_id']} (plan {module_data['plan_id']}) at station {station_id}.")
         return {'module': module_data, 'panels': panels}
 
     # Step 2: No Active Module - Special handling for W1 (first panel station)
@@ -1478,27 +1479,29 @@ def get_module_and_panels_for_station(station_id):
     return None
 
 
-def get_next_pending_panel_for_module(module_id):
+def get_next_pending_panel_for_plan(plan_id): # Renamed from get_next_pending_panel_for_module
     """
-    Finds the next panel (PanelDefinition) for a given module_id that is 'not_started'.
-    This relies on _get_panels_with_status_for_module to determine panel statuses.
+    Finds the next panel (PanelDefinition) for a given plan_id that is 'not_started'.
+    This relies on _get_panels_with_status_for_plan to determine panel statuses.
+    Requires house_type_id, module_sequence_in_house (module_number from MPP), and sub_type_id from the plan.
     """
     db = get_db()
-    module_details_cursor = db.execute("""
-        SELECT m.house_type_id, m.module_sequence_in_house, mpp.sub_type_id
-        FROM Modules m
-        JOIN ModuleProductionPlan mpp ON m.plan_id = mpp.plan_id
-        WHERE m.module_id = ?
-    """, (module_id,))
-    module_details = module_details_cursor.fetchone()
+    plan_details_cursor = db.execute("""
+        SELECT mpp.house_type_id, mpp.module_number, mpp.sub_type_id
+        FROM ModuleProductionPlan mpp
+        WHERE mpp.plan_id = ?
+    """, (plan_id,))
+    plan_details = plan_details_cursor.fetchone()
 
-    if not module_details:
-        logging.warning(f"Module {module_id} not found for get_next_pending_panel_for_module.")
+    if not plan_details:
+        logging.warning(f"Plan {plan_id} not found for get_next_pending_panel_for_plan.")
         return None
 
-    panels_with_status = _get_panels_with_status_for_module(
-        db, module_id, module_details['house_type_id'],
-        module_details['module_sequence_in_house'], module_details['sub_type_id']
+    # module_number from ModuleProductionPlan is the module_sequence_in_house
+    panels_with_status = _get_panels_with_status_for_plan(
+        db, plan_id, plan_details['house_type_id'],
+        plan_details['module_number'], # This is module_sequence_in_house
+        plan_details['sub_type_id']
     )
 
     for panel in panels_with_status:

@@ -83,21 +83,6 @@ CREATE INDEX idx_ModuleProductionPlan_status ON ModuleProductionPlan (status);
 CREATE INDEX idx_ModuleProductionPlan_sub_type ON ModuleProductionPlan (sub_type_id); -- Index for sub_type FK
 CREATE INDEX idx_ModuleProductionPlan_identifier_module ON ModuleProductionPlan (project_name, house_identifier, module_number); -- Index for unique constraint
 
--- ========= Modules (Physical Instances) =========
-CREATE TABLE Modules (
-    module_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    house_type_id INTEGER NOT NULL, -- Which type of house this module belongs to
-    module_sequence_in_house INTEGER, -- e.g., 1 of 2, 2 of 2 for a 2-module house (relative to HouseType.number_of_modules)
-    planned_assembly_line TEXT, -- 'A', 'B', or 'C'. Relevant for modules leaving M1. Nullable initially.
-    current_station_id TEXT, -- Foreign Key to Stations table. Tracks the module's physical location. Nullable if not yet on the line.
-    status TEXT DEFAULT 'Planned' CHECK(status IN ('Planned', 'Panels', 'In Progress', 'Magazine', 'Completed', 'On Hold')), -- e.g., 'Planned', 'Panels', 'In Progress', 'Magazine', 'Completed', 'On Hold'
-    last_moved_at TEXT, -- Timestamp of the last move, useful for tracking flow
-    plan_id INTEGER UNIQUE, -- Link back to the specific production plan item this module belongs to. UNIQUE ensures one module instance per plan item.
-    FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE RESTRICT,
-    FOREIGN KEY (current_station_id) REFERENCES Stations(station_id) ON UPDATE CASCADE ON DELETE SET NULL,
-    FOREIGN KEY (plan_id) REFERENCES ModuleProductionPlan(plan_id) ON DELETE SET NULL -- If plan item is deleted, unlink module (or consider CASCADE)
-);
-
 -- ========= Task Definitions =========
 
 CREATE TABLE TaskDefinitions (
@@ -118,7 +103,7 @@ CREATE TABLE TaskDefinitions (
 
 CREATE TABLE TaskLogs ( -- For tasks related to a Module as a whole
     task_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    module_id INTEGER NOT NULL, -- Which specific module instance
+    plan_id INTEGER NOT NULL, -- Link to the specific production plan item
     task_definition_id INTEGER NOT NULL, -- Which task definition was performed (should have is_panel_task = 0)
     worker_id INTEGER NOT NULL, -- Who performed it
     status TEXT NOT NULL CHECK(status IN ('Not Started', 'In Progress', 'Completed', 'Paused')),
@@ -127,7 +112,7 @@ CREATE TABLE TaskLogs ( -- For tasks related to a Module as a whole
     station_start TEXT, -- Record the station where the task was started
     station_finish TEXT, -- Record the actual station where it was marked complete (Nullable)
     notes TEXT, -- Optional field for worker comments
-    FOREIGN KEY (module_id) REFERENCES Modules(module_id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES ModuleProductionPlan(plan_id) ON DELETE CASCADE,
     FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id) ON DELETE RESTRICT,
     FOREIGN KEY (worker_id) REFERENCES Workers(worker_id) ON DELETE RESTRICT,
     FOREIGN KEY (station_start) REFERENCES Stations(station_id) ON DELETE SET NULL,
@@ -136,7 +121,7 @@ CREATE TABLE TaskLogs ( -- For tasks related to a Module as a whole
 
 CREATE TABLE PanelTaskLogs ( -- For tasks related to specific Panels within a Module
     panel_task_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    module_id INTEGER NOT NULL, -- Which specific module instance the panel belongs to
+    plan_id INTEGER NOT NULL, -- Link to the specific production plan item
     panel_definition_id INTEGER NOT NULL, -- Which specific panel definition instance
     task_definition_id INTEGER NOT NULL, -- Which task definition was performed (should have is_panel_task = 1)
     worker_id INTEGER NOT NULL, -- Who performed it
@@ -146,7 +131,7 @@ CREATE TABLE PanelTaskLogs ( -- For tasks related to specific Panels within a Mo
     station_start TEXT, -- Record the station where the task was started
     station_finish TEXT, -- Record the actual station where it was marked complete (Nullable)
     notes TEXT, -- Optional field for worker comments
-    FOREIGN KEY (module_id) REFERENCES Modules(module_id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES ModuleProductionPlan(plan_id) ON DELETE CASCADE,
     FOREIGN KEY (panel_definition_id) REFERENCES PanelDefinitions(panel_definition_id) ON DELETE CASCADE,
     FOREIGN KEY (task_definition_id) REFERENCES TaskDefinitions(task_definition_id) ON DELETE RESTRICT,
     FOREIGN KEY (worker_id) REFERENCES Workers(worker_id) ON DELETE RESTRICT,
@@ -169,25 +154,20 @@ CREATE TABLE TaskPauses (
 );
 
 -- ========= Indexes for Performance =========
--- Modules
-CREATE INDEX idx_modules_current_station ON Modules (current_station_id);
-CREATE INDEX idx_modules_status ON Modules (status);
-CREATE INDEX idx_modules_house_type ON Modules (house_type_id);
-CREATE INDEX idx_modules_plan_id ON Modules (plan_id);
 -- TaskDefinitions
 CREATE INDEX idx_taskdefinitions_house_type ON TaskDefinitions (house_type_id);
 CREATE INDEX idx_taskdefinitions_specialty ON TaskDefinitions (specialty_id);
 CREATE INDEX idx_taskdefinitions_station_sequence ON TaskDefinitions (station_sequence_order);
 CREATE INDEX idx_taskdefinitions_is_panel_task ON TaskDefinitions (is_panel_task);
 -- TaskLogs
-CREATE INDEX idx_tasklogs_module ON TaskLogs (module_id);
+CREATE INDEX idx_tasklogs_plan ON TaskLogs (plan_id);
 CREATE INDEX idx_tasklogs_task_definition ON TaskLogs (task_definition_id);
 CREATE INDEX idx_tasklogs_status ON TaskLogs (status);
 CREATE INDEX idx_tasklogs_worker ON TaskLogs (worker_id);
 CREATE INDEX idx_tasklogs_station_start ON TaskLogs (station_start);
 CREATE INDEX idx_tasklogs_station_finish ON TaskLogs (station_finish);
 -- PanelTaskLogs
-CREATE INDEX idx_paneltasklogs_module ON PanelTaskLogs (module_id);
+CREATE INDEX idx_paneltasklogs_plan ON PanelTaskLogs (plan_id);
 CREATE INDEX idx_paneltasklogs_panel_definition ON PanelTaskLogs (panel_definition_id);
 CREATE INDEX idx_paneltasklogs_task_definition ON PanelTaskLogs (task_definition_id);
 CREATE INDEX idx_paneltasklogs_status ON PanelTaskLogs (status);

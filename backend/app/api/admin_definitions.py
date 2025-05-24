@@ -981,56 +981,56 @@ def start_task_route(): # Renamed
     it creates the module record from ModuleProductionPlan.plan_id.
     """
     data = request.get_json()
-    # plan_id is now always required, as module_id is derived from it or created.
+    # plan_id is now required.
     required_fields = ['plan_id', 'task_definition_id', 'worker_id', 'station_start']
     if not data or not all(field in data for field in required_fields):
         missing = [field for field in required_fields if field not in data]
         return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
 
-    plan_id = data['plan_id']
-    task_definition_id = data['task_definition_id']
-    worker_id = data['worker_id']
-    station_start = data['station_start']
-    
-    # panel_definition_id is optional, only for panel tasks
-    panel_definition_id = data.get('panel_definition_id') # Changed from house_type_panel_id
+    plan_id_req = data['plan_id']
+    task_definition_id_req = data['task_definition_id']
+    worker_id_req = data['worker_id']
+    station_start_req = data['station_start']
+    panel_definition_id_req = data.get('panel_definition_id')
 
     try:
-        plan_id = int(plan_id)
-        task_definition_id = int(task_definition_id)
-        worker_id = int(worker_id)
-        if panel_definition_id is not None:
-            panel_definition_id = int(panel_definition_id)
+        plan_id = int(plan_id_req)
+        task_definition_id = int(task_definition_id_req)
+        worker_id = int(worker_id_req)
+        if panel_definition_id_req is not None:
+            panel_definition_id = int(panel_definition_id_req)
+        else:
+            panel_definition_id = None # Ensure it's None if not provided
     except (ValueError, TypeError):
         return jsonify(error="Invalid ID format. IDs must be integers (except station_id)."), 400
 
-    db = connection.get_db() # For direct checks before calling queries
+    db = connection.get_db()
     try:
         with db: # Transaction
-            # 1. Get Task Definition to check is_panel_task
+            # 1. Get Task Definition
             task_def = queries.get_task_definition_by_id(task_definition_id)
             if not task_def:
                 return jsonify(error=f"Task Definition ID {task_definition_id} not found."), 404
             is_panel_task = task_def['is_panel_task']
 
-            # 2. Find or Create/Update Module
-            # Determine initial statuses based on task type and station (simplified for now)
-            # TODO: Make station type (panel start, assembly start) determination more robust
-            initial_module_status = 'Panels' if is_panel_task and station_start.startswith('W') else 'In Progress'
-            mpp_status_update = 'Panels' if is_panel_task and station_start.startswith('W') else 'Assembly'
-            
-            # Ensure module exists for the plan_id and is set to the correct station and status
-            # create_module_from_plan now handles finding existing module or creating new
-            module_id = queries.create_module_from_plan(
-                plan_id, 
-                station_start, 
-                initial_module_status=initial_module_status, 
-                mpp_status_update=mpp_status_update
-            )
-            if not module_id:
-                raise Exception(f"Failed to create or assign module for plan {plan_id} at station {station_start}")
+            # 2. Get ModuleProductionPlan item
+            plan_item = queries.get_module_production_plan_item_by_id(plan_id)
+            if not plan_item:
+                return jsonify(error=f"Production Plan ID {plan_id} not found."), 404
 
-            # 3. Start the appropriate task log
+            # 3. Status transition logic for ModuleProductionPlan
+            # Example: If starting a panel task at a 'W' station and plan is 'Planned', update to 'Panels'
+            # The 'Magazine' to 'Assembly' transition is handled in get_module_and_panels_for_station
+            if station_start_req.startswith('W') and plan_item['status'] == 'Planned':
+                updated_plan = queries.update_module_production_plan_item(plan_id, {'status': 'Panels'})
+                if not updated_plan:
+                    logger.warning(f"Failed to update plan {plan_id} status to 'Panels'.")
+                    # Decide if this is a critical failure or can proceed
+            
+            # Add other transitions as needed, e.g. 'Panels' to 'Magazine' upon completion of all panel tasks for the plan.
+            # This would likely be in a different endpoint or task update logic.
+
+            # 4. Start the appropriate task log
             new_log_id = None
             log_type = ""
 
@@ -1038,41 +1038,44 @@ def start_task_route(): # Renamed
                 if panel_definition_id is None:
                     return jsonify(error="panel_definition_id is required for panel tasks."), 400
                 
-                # Optional: Check if panel_definition_id is valid for the module's house_type/module_sequence/sub_type
-                # This would require fetching module details (house_type_id, module_sequence_in_house)
-                # and then checking if panel_definition_id aligns. For brevity, skipping this deep validation here.
+                # Check for existing active/completed PanelTaskLog using plan_id
+                existing_panel_log_cursor = db.execute(
+                    "SELECT status FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ?",
+                    (plan_id, panel_definition_id, task_definition_id))
+                existing_panel_log = existing_panel_log_cursor.fetchone()
 
-                # Check for existing active/completed PanelTaskLog
-                existing_panel_log = db.execute(
-                    "SELECT status FROM PanelTaskLogs WHERE module_id = ? AND panel_definition_id = ? AND task_definition_id = ?",
-                    (module_id, panel_definition_id, task_definition_id)).fetchone()
                 if existing_panel_log and existing_panel_log['status'] in ['In Progress', 'Completed']:
-                     return jsonify(error=f"Panel task is already {existing_panel_log['status']}."), 409
+                     return jsonify(error=f"Panel task is already {existing_panel_log['status']} for this plan."), 409
 
                 new_log_id = queries.start_panel_task_log(
-                    module_id=module_id, panel_definition_id=panel_definition_id,
-                    task_definition_id=task_definition_id, worker_id=worker_id, station_start=station_start
+                    plan_id=plan_id, panel_definition_id=panel_definition_id,
+                    task_definition_id=task_definition_id, worker_id=worker_id, station_start=station_start_req
                 )
                 log_type = "PanelTaskLog"
             else: # Module Task
-                # Check for existing active/completed TaskLog
-                existing_module_log = db.execute(
-                    "SELECT status FROM TaskLogs WHERE module_id = ? AND task_definition_id = ?",
-                    (module_id, task_definition_id)).fetchone()
+                # Check for existing active/completed TaskLog using plan_id
+                existing_module_log_cursor = db.execute(
+                    "SELECT status FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ?",
+                    (plan_id, task_definition_id))
+                existing_module_log = existing_module_log_cursor.fetchone()
+
                 if existing_module_log and existing_module_log['status'] in ['In Progress', 'Completed']:
-                     return jsonify(error=f"Module task is already {existing_module_log['status']}."), 409
+                     return jsonify(error=f"Module task is already {existing_module_log['status']} for this plan."), 409
 
                 new_log_id = queries.start_task_log(
-                    module_id=module_id, task_definition_id=task_definition_id,
-                    worker_id=worker_id, station_start=station_start
+                    plan_id=plan_id, task_definition_id=task_definition_id,
+                    worker_id=worker_id, station_start=station_start_req
                 )
                 log_type = "TaskLog"
 
             if new_log_id:
-                return jsonify(message=f"{log_type} started successfully", log_id=new_log_id, module_id=module_id, log_type=log_type.lower()), 201
+                return jsonify(message=f"{log_type} started successfully", log_id=new_log_id, plan_id=plan_id, log_type=log_type.lower()), 201
             else:
-                # This should ideally not be reached if query functions raise errors
-                raise Exception(f"Failed to start {log_type}") # Trigger rollback
+                raise Exception(f"Failed to start {log_type}")
+
+    except ValueError as ve:
+        logger.warning(f"ValueError starting task for plan {plan_id}: {ve}")
+        return jsonify(error=str(ve)), 400
 
     except ValueError as ve:
         logger.warning(f"ValueError starting task for plan {plan_id}: {ve}")
