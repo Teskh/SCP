@@ -746,10 +746,10 @@ function HouseTypesManager() {
                                         ))}
                                     </td>
                                     <td style={styles.td}>
-                                        <button onClick={() => handleEdit(ht)} style={{...styles.button, ...styles.buttonEdit}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Editar Info/Sub-Tipos</button>
-                                        <button onClick={() => handleOpenParameterEditor(ht)} style={{...styles.button, ...styles.buttonPrimary}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Parámetros</button>
-                                        <button onClick={() => handleOpenPanelsModal(ht)} style={{ ...styles.button, backgroundColor: '#17a2b8', color: 'white' }} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Paneles</button>
-                                        <button onClick={() => handleDelete(ht.house_type_id)} style={{ ...styles.button, ...styles.buttonDelete }} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || editMode === ht.house_type_id}>Eliminar</button>
+                                        <button onClick={() => handleEdit(ht)} style={{...styles.button, ...styles.buttonEdit}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || !!editMode}>Editar Info/Sub-Tipos</button>
+                                        <button onClick={() => handleOpenParameterEditor(ht)} style={{...styles.button, ...styles.buttonPrimary}} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || !!editMode}>Parámetros</button>
+                                        <button onClick={() => handleOpenPanelsModal(ht)} style={{ ...styles.button, backgroundColor: '#17a2b8', color: 'white' }} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || !!editMode}>Paneles</button>
+                                        <button onClick={() => handleDelete(ht.house_type_id)} style={{ ...styles.button, ...styles.buttonDelete }} disabled={isLoading || !!editingParamsFor || !!editingPanelsFor || !!editMode}>Eliminar</button>
                                     </td>
                                 </tr>
                             );
