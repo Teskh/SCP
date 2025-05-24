@@ -103,7 +103,7 @@ This is the structure of this codebase, keep it up to date when new changes modi
 │   │   │       ├── HouseParametersManager.js                          # Component for managing global House Parameter definitions (CRUD)
 │   │   │       ├── HouseTypePanelsModal.js                            # Modal for managing Panels/Multiwalls within specific House Type and Module   
 │   │   │       ├── HouseTypesManager.js                               # Component for managing House Types, Tipologias, and linking Parameters (CRUD)
-│   │   │       ├── ProjectsManager.js                                 # Component for managing Projects and associated House Types (CRUD)
+│   │   │       ├── AddProductionBatchModal.js                       # Modal for adding new production batches to the plan
 │   │   │       ├── SpecialtiesManager.js                              # Component for managing Worker Specialties (CRUD)
 │   │   │       ├── TaskDefinitionManager.js                           # Component for managing Task Definitions (CRUD)
 │   │   │       └── WorkersManager.js                                  # Component for managing Workers (CRUD)
