@@ -489,6 +489,7 @@ function HouseTypesManager() {
         setEditMode(null); 
         setFormData(initialHouseTypeFormState);
         setEditingPanelsFor(null); 
+        window.scrollTo(0, 0); // Scroll to top to make editor visible
         
         try {
             const [values, subTypesData] = await Promise.all([ // Renamed tipologiasData to subTypesData
