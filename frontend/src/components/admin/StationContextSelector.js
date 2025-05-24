@@ -140,17 +140,17 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
             // For now, we simulate the action and then refresh the context.
             switch (actionType) {
                 case 'start': // Also handles resume
-                    // response = await adminService.startOrResumePanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
-                    // Using mock for now:
-                    response = await adminService.startPanel(currentStationId, moduleId, panelDefinitionId);
+                    response = await adminService.startOrResumePanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
+                    // Using mock for now (inside adminService):
+                    // response = await adminService.startPanel(currentStationId, moduleId, panelDefinitionId);
                     break;
                 case 'pause':
-                    // response = await adminService.pausePanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
-                    response = await adminService.pausePanel(currentStationId, moduleId, panelDefinitionId);
+                    response = await adminService.pausePanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
+                    // response = await adminService.pausePanel(currentStationId, moduleId, panelDefinitionId);
                     break;
                 case 'finish':
-                    // response = await adminService.finishPanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
-                    response = await adminService.finishPanel(currentStationId, moduleId, panelDefinitionId);
+                    response = await adminService.finishPanelTask(planId, taskDefinitionIdForPanel, workerId, currentStationId, panelDefinitionId);
+                    // response = await adminService.finishPanel(currentStationId, moduleId, panelDefinitionId);
                     break;
                 default:
                     throw new Error(`Invalid action type: ${actionType}`);
