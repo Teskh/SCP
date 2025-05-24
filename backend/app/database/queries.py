@@ -1139,77 +1139,11 @@ def get_panel_task_logs_for_plan_panel(plan_id, panel_definition_id):
     return [dict(row) for row in cursor.fetchall()]
 
 
-# === Modules Table Operations ===
+# === Modules Table Operations (Removed as Modules table is gone) ===
 
-def get_module_by_plan_id(plan_id):
-    """Fetches an existing module record by its plan_id."""
-    db = get_db()
-    cursor = db.execute("SELECT module_id, plan_id, house_type_id, module_sequence_in_house, current_station_id, status FROM Modules WHERE plan_id = ?", (plan_id,))
-    row = cursor.fetchone()
-    return dict(row) if row else None
-
-
-def create_module_from_plan(plan_id, start_station_id, initial_module_status='In Progress', mpp_status_update='Assembly'):
-    """
-    Creates a new Module record based on a ModuleProductionPlan item or updates an existing one (if found by plan_id),
-    sets its station and status, and updates the ModuleProductionPlan status.
-    Returns the module_id.
-    """
-    db = get_db()
-    try:
-        with db: # Use transaction
-            plan_cursor = db.execute(
-                "SELECT house_type_id, module_number FROM ModuleProductionPlan WHERE plan_id = ?",
-                (plan_id,)
-            )
-            plan_data = plan_cursor.fetchone()
-            if not plan_data:
-                raise ValueError(f"ModuleProductionPlan item with plan_id {plan_id} not found.")
-
-            # Check if a module already exists for this plan_id
-            existing_module_cursor = db.execute("SELECT module_id FROM Modules WHERE plan_id = ?", (plan_id,))
-            existing_module = existing_module_cursor.fetchone()
-            
-            module_id = None
-            if existing_module:
-                module_id = existing_module['module_id']
-                # Update existing module's station and status
-                db.execute(
-                    """UPDATE Modules SET current_station_id = ?, status = ?, last_moved_at = CURRENT_TIMESTAMP
-                       WHERE module_id = ?""",
-                    (start_station_id, initial_module_status, module_id)
-                )
-                logging.info(f"Updated existing module {module_id} (for plan {plan_id}) to station {start_station_id}, status {initial_module_status}.")
-            else:
-                # Insert new module
-                module_cursor = db.execute(
-                    """INSERT INTO Modules (plan_id, house_type_id, module_sequence_in_house, current_station_id, status, last_moved_at)
-                       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-                    (plan_id, plan_data['house_type_id'], plan_data['module_number'], start_station_id, initial_module_status)
-                )
-                module_id = module_cursor.lastrowid
-                logging.info(f"Created new module {module_id} for plan {plan_id} at station {start_station_id}, status {initial_module_status}.")
-
-            # Update ModuleProductionPlan status
-            db.execute(
-                "UPDATE ModuleProductionPlan SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE plan_id = ?",
-                (mpp_status_update, plan_id)
-            )
-            logging.info(f"Updated ModuleProductionPlan {plan_id} to status {mpp_status_update}.")
-            
-        return module_id
-    except sqlite3.IntegrityError as e:
-        logging.error(f"Integrity error creating/updating module for plan {plan_id}: {e}", exc_info=True)
-        raise e
-    except Exception as e:
-        logging.error(f"Error creating/updating module for plan {plan_id}: {e}", exc_info=True)
-        return new_module_id
-    except sqlite3.IntegrityError as e:
-        logging.error(f"Integrity error creating module for plan {plan_id}: {e}", exc_info=True)
-        raise e
-    except Exception as e: # Catch other exceptions like ValueError
-        logging.error(f"Error creating module for plan {plan_id}: {e}", exc_info=True)
-        raise e
+# Functions like get_module_by_plan_id, create_module_from_plan, 
+# update_module_status_and_station were removed as they relied on the Modules table.
+# Logic for module status changes is now typically handled by updating ModuleProductionPlan directly.
 
 
 def get_all_stations():
@@ -1219,67 +1153,20 @@ def get_all_stations():
     return [dict(row) for row in cursor.fetchall()]
 
 
-def update_module_status_and_station(module_id, new_module_status, new_mpp_status, new_station_id=None, new_planned_assembly_line=None):
-    """
-    Updates the status of a Module and its corresponding ModuleProductionPlan item.
-    Optionally updates the module's current_station_id and the plan's planned_assembly_line.
-    """
-    db = get_db()
-    try:
-        with db: # Use transaction
-            # Update Modules table
-            module_update_fields = ["status = ?", "last_moved_at = CURRENT_TIMESTAMP"]
-            module_params = [new_module_status]
-            if new_station_id:
-                module_update_fields.append("current_station_id = ?")
-                module_params.append(new_station_id)
-            
-            module_params.append(module_id)
-            db.execute(
-                f"UPDATE Modules SET {', '.join(module_update_fields)} WHERE module_id = ?",
-                tuple(module_params)
-            )
-
-            # Get plan_id from module_id to update ModuleProductionPlan
-            plan_id_cursor = db.execute("SELECT plan_id FROM Modules WHERE module_id = ?", (module_id,))
-            plan_id_row = plan_id_cursor.fetchone()
-            if not plan_id_row:
-                raise ValueError(f"Module with module_id {module_id} not found or has no plan_id.")
-            plan_id = plan_id_row['plan_id']
-
-            # Update ModuleProductionPlan table
-            mpp_update_fields = ["status = ?", "updated_at = CURRENT_TIMESTAMP"]
-            mpp_params = [new_mpp_status]
-            if new_planned_assembly_line:
-                mpp_update_fields.append("planned_assembly_line = ?")
-                mpp_params.append(new_planned_assembly_line)
-            
-            mpp_params.append(plan_id)
-            db.execute(
-                f"UPDATE ModuleProductionPlan SET {', '.join(mpp_update_fields)} WHERE plan_id = ?",
-                tuple(mpp_params)
-            )
-            logging.info(f"Updated module {module_id} to status '{new_module_status}' (station: {new_station_id or 'unchanged'}) and plan {plan_id} to status '{new_mpp_status}'.")
-        return True
-    except Exception as e:
-        logging.error(f"Error updating module/plan status for module {module_id}: {e}", exc_info=True)
-        # Transaction will rollback
-        return False
-
-
-def _get_panels_with_status_for_plan(db, plan_id, house_type_id, module_sequence_in_house, module_plan_sub_type_id):
+def _get_panels_with_status_for_plan(db, plan_id, house_type_id, module_number, module_plan_sub_type_id): # Renamed module_sequence_in_house to module_number
     """
     Helper to fetch panel definitions for a plan and determine their current task status from PanelTaskLogs.
     A panel's status is simplified to the status of its most 'active' task log.
+    module_number is the module's sequence in the house (from ModuleProductionPlan.module_number).
     """
     panel_defs_query = """
         SELECT pd.panel_definition_id, pd.panel_group, pd.panel_code
         FROM PanelDefinitions pd
-        WHERE pd.house_type_id = ? AND pd.module_sequence_number = ?
+        WHERE pd.house_type_id = ? AND pd.module_sequence_number = ? -- module_sequence_number in PanelDefinitions table
           AND (pd.sub_type_id = ? OR pd.sub_type_id IS NULL)
         ORDER BY pd.panel_code 
     """
-    params = [house_type_id, module_sequence_in_house, module_plan_sub_type_id]
+    params = [house_type_id, module_number, module_plan_sub_type_id] # Use module_number here
     panel_defs_cursor = db.execute(panel_defs_query, params)
     panel_defs = [dict(row) for row in panel_defs_cursor.fetchall()]
 
@@ -1369,37 +1256,66 @@ def get_module_and_panels_for_station(station_id):
     module_data = None
     panels = []
 
-    # Step 1: Find Active Module at the station
-    active_module_status_filter = "'In Progress'" if station_line_type in ['A', 'B', 'C'] else "'Panels', 'In Progress'" # Panels can also be 'In Progress'
+    # Step 1: Find Active Module at the station (using ModuleProductionPlan)
+    # An "active" module is one whose status corresponds to the station type.
     
-    query_active_module = f"""
-        SELECT
-            m.module_id, m.plan_id, m.house_type_id, m.module_sequence_in_house, m.status AS module_status,
-            mpp.project_name, mpp.house_identifier, mpp.module_number, mpp.sub_type_id, mpp.planned_sequence,
-            ht.name as house_type_name, ht.number_of_modules,
-            hst.name as sub_type_name
-        FROM Modules m
-        JOIN ModuleProductionPlan mpp ON m.plan_id = mpp.plan_id
-        JOIN HouseTypes ht ON m.house_type_id = ht.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE m.current_station_id = ? AND m.status IN ({active_module_status_filter})
-        ORDER BY mpp.planned_sequence ASC LIMIT 1
-    """
-    active_module_cursor = db.execute(query_active_module, (station_id,))
-    module_row = active_module_cursor.fetchone()
+    active_module_query = ""
+    active_module_params = []
 
-    if module_row:
-        module_data = dict(module_row)
-        # Assuming module_id is still the relevant ID for an *active* module instance.
-        # If _get_panels_with_status_for_plan needs plan_id, this needs adjustment.
-        # The function _get_panels_with_status_for_plan now takes plan_id.
-        panels = _get_panels_with_status_for_plan(db, module_data['plan_id'], module_data['house_type_id'],
-                                                  module_data['module_sequence_in_house'], module_data['sub_type_id'])
-        logging.info(f"Found active module {module_data['module_id']} (plan {module_data['plan_id']}) at station {station_id}.")
-        return {'module': module_data, 'panels': panels}
+    if station_line_type == 'W': # Panel Line Stations (W1-W5)
+        active_module_query = """
+            SELECT mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.status,
+                   mpp.project_name, mpp.house_identifier, mpp.sub_type_id, mpp.planned_sequence,
+                   ht.name as house_type_name, ht.number_of_modules,
+                   hst.name as sub_type_name
+            FROM ModuleProductionPlan mpp
+            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+            WHERE mpp.status = 'Panels' -- Module is in panel production phase
+            ORDER BY mpp.planned_sequence ASC LIMIT 1
+        """
+        # For W stations, we don't filter by specific station_id here,
+        # as 'Panels' status applies to the whole line. The station_id context is implicit.
+    elif station_line_type in ['A', 'B', 'C']: # Assembly Line Stations
+        active_module_query = """
+            SELECT mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.status,
+                   mpp.project_name, mpp.house_identifier, mpp.sub_type_id, mpp.planned_sequence,
+                   ht.name as house_type_name, ht.number_of_modules,
+                   hst.name as sub_type_name
+            FROM ModuleProductionPlan mpp
+            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+            WHERE mpp.status = 'Assembly' AND mpp.planned_assembly_line = ?
+            ORDER BY mpp.planned_sequence ASC LIMIT 1
+        """
+        active_module_params.append(station_line_type) # Filter by A, B, or C
+
+    if active_module_query:
+        active_module_cursor = db.execute(active_module_query, tuple(active_module_params))
+        module_row = active_module_cursor.fetchone()
+        if module_row:
+            module_data = {
+                'module_id': None, # No Modules table, so no module_id in this direct sense
+                'plan_id': module_row['plan_id'],
+                'house_type_id': module_row['house_type_id'],
+                'module_sequence_in_house': module_row['module_number'], # Use module_number as sequence
+                'module_status': module_row['status'], # This is ModuleProductionPlan.status
+                'project_name': module_row['project_name'],
+                'house_identifier': module_row['house_identifier'],
+                'module_number': module_row['module_number'],
+                'sub_type_id': module_row['sub_type_id'],
+                'planned_sequence': module_row['planned_sequence'],
+                'house_type_name': module_row['house_type_name'],
+                'number_of_modules': module_row['number_of_modules'],
+                'sub_type_name': module_row['sub_type_name'],
+                'current_station_id': station_id # Contextually for this station
+            }
+            panels = _get_panels_with_status_for_plan(db, module_data['plan_id'], module_data['house_type_id'],
+                                                      module_data['module_number'], module_data['sub_type_id'])
+            logging.info(f"Found active plan {module_data['plan_id']} relevant for station {station_id}.")
+            return {'module': module_data, 'panels': panels}
 
     # Step 2: No Active Module - Special handling for W1 (first panel station)
-    # Assuming W1 is the designated first panel station. This could be configurable.
     if station_id == 'W1':
         logging.info(f"No active module at W1. Looking for next 'Planned' module.")
         next_planned_cursor = db.execute("""
@@ -1463,14 +1379,14 @@ def get_module_and_panels_for_station(station_id):
         if next_magazine_row:
             plan_id = next_magazine_row['plan_id']
             logging.info(f"Found next magazine module (plan_id: {plan_id}) for station {station_id}. Creating/assigning module entry.")
-            # Assign module to station, set status to 'In Progress', update MPP to 'Assembly'
-            module_id = create_module_from_plan(plan_id, station_id,
-                                                initial_module_status='In Progress',
-                                                mpp_status_update='Assembly')
-            if module_id:
+            # Update ModuleProductionPlan status to 'Assembly'
+            success_update = update_module_production_plan_item(plan_id, {'status': 'Assembly'})
+            if success_update:
+                # After updating, this module is now the active one. Re-fetch context.
+                logging.info(f"Plan {plan_id} status updated to Assembly. Re-fetching context for station {station_id}.")
                 return get_module_and_panels_for_station(station_id) # Recursive call
             else:
-                logging.error(f"Failed to create/assign module for plan_id {plan_id} at station {station_id}.")
+                logging.error(f"Failed to update plan_id {plan_id} status to 'Assembly' at station {station_id}.")
         else:
             logging.info(f"No 'Magazine' modules available for station {station_id} on line {station_line_type}.")
 

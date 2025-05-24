@@ -176,7 +176,7 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                 const updatedModule = selectedModule; // Assuming state is fresh.
 
                 if (updatedModule && updatedModule.panels && updatedModule.panels.every(p => p.status === 'completed')) {
-                    console.log(`All panels in module ${updatedModule.module_id} are completed. Updating module status to 'Magazine'.`);
+                    console.log(`All panels in module (plan_id: ${updatedModule.plan_id}) are completed. Updating module status to 'Magazine'.`);
                     // The target station for 'Magazine' status is typically 'M1'
                     await adminService.updatePlanStatus(updatedModule.plan_id, 'Magazine');
                     // After module status update, fetch context again to get the next module or empty state
@@ -190,10 +190,10 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
             }
 
         } catch (err) {
-            // Use plan_id in error message if module_id is not available
-            const idForErrorMessage = selectedModule.module_id || `(Plan ID: ${selectedModule.plan_id})`;
-            console.error(`Error performing ${actionType} task for panel ${panelDefinitionId} in module ${idForErrorMessage}:`, err);
-            setTaskActionError(`Error al ${actionType} tarea para panel ${panelDefinitionId} (Módulo/Plan: ${idForErrorMessage}): ${err.message || 'Error desconocido'}`);
+            // Use plan_id in error message
+            const idForErrorMessage = selectedModule.plan_id;
+            console.error(`Error performing ${actionType} task for panel ${panelDefinitionId} in module (plan_id: ${idForErrorMessage}):`, err);
+            setTaskActionError(`Error al ${actionType} tarea para panel ${panelDefinitionId} (Plan ID: ${idForErrorMessage}): ${err.message || 'Error desconocido'}`);
         } finally {
             setIsSubmittingTaskAction(false);
         }
@@ -261,7 +261,6 @@ function StationContextSelector({ allStations, isLoadingAllStations }) {
                 <div style={{border: '1px solid #eee', padding: '15px', borderRadius: '5px', backgroundColor: '#f9f9f9'}}>
                     <h4>Módulo Actual:</h4>
                     {/* Display module details from selectedModule state */}
-                    <p><strong>ID del Módulo:</strong> {selectedModule.module_id}</p>
                     <p><strong>Plan ID:</strong> {selectedModule.plan_id}</p>
                     <p><strong>Secuencia Planificada:</strong> {selectedModule.planned_sequence !== undefined ? selectedModule.planned_sequence : 'N/A'}</p>
                     <p><strong>Nombre del Proyecto:</strong> {selectedModule.project_name}</p>

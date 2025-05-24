@@ -1,8 +1,8 @@
 -- Drop existing tables (order matters for foreign keys, drop dependent tables first)
 DROP TABLE IF EXISTS TaskPauses;
-DROP TABLE IF EXISTS PanelTaskLogs; -- Depends on Modules, TaskDefinitions, Workers, PanelDefinitions, Stations
-DROP TABLE IF EXISTS TaskLogs; -- Depends on Modules, TaskDefinitions, Workers, Stations
-DROP TABLE IF EXISTS Modules; -- Depends on ModuleProductionPlan, HouseTypes, Stations
+DROP TABLE IF EXISTS PanelTaskLogs; -- Depends on TaskDefinitions, Workers, PanelDefinitions, Stations, ModuleProductionPlan
+DROP TABLE IF EXISTS TaskLogs; -- Depends on TaskDefinitions, Workers, Stations, ModuleProductionPlan
+-- Modules table is removed
 DROP TABLE IF EXISTS ModuleProductionPlan; -- Depends on HouseTypes, HouseSubType
 DROP TABLE IF EXISTS PanelDefinitions; -- Was HouseTypePanels. Depends on HouseTypes, HouseSubType, Multiwalls
 DROP TABLE IF EXISTS Multiwalls; -- Depends on HouseTypes
