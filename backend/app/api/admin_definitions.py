@@ -948,93 +948,25 @@ def get_stations_route(): # Renamed
         return jsonify(error="Failed to fetch stations"), 500
 
 
-# === Station Overview Data ===
-# This endpoint seems more related to operational views rather than pure definitions.
-# It might be better suited for a different blueprint (e.g., 'operations_api' or 'station_view_api').
-# However, refactoring as per instructions if it stays here.
-# It also calls queries that might have been moved or changed, e.g. get_current_module_for_station.
-
-@admin_definitions_bp.route('/station_overview/<string:station_id>', methods=['GET'])
-def get_station_overview_data_route(station_id): # Renamed
+# === Station Context (Replaces Station Overview) ===
+@admin_definitions_bp.route('/station-context/<string:station_id>', methods=['GET'])
+def get_station_context_route(station_id):
     """
-    Provides data for the station page: current module, upcoming module (if applicable),
-    and relevant tasks (module and panel tasks).
-    Requires worker_specialty_id (optional) and panel_definition_id (optional for panel tasks)
-    as query parameters.
+    Provides data for the station context: the current or next module to be worked on,
+    and its associated panels with their statuses.
     """
-    worker_specialty_id_str = request.args.get('specialty_id')
-    panel_definition_id_str = request.args.get('panel_definition_id') # For fetching specific panel tasks
-
-    worker_specialty_id = None
-    if worker_specialty_id_str and worker_specialty_id_str.lower() != 'null' and worker_specialty_id_str != '':
-        try:
-            worker_specialty_id = int(worker_specialty_id_str)
-        except ValueError:
-            return jsonify(error="Invalid specialty_id format. Must be an integer or null."), 400
-
-    panel_definition_id = None
-    if panel_definition_id_str:
-        try:
-            panel_definition_id = int(panel_definition_id_str)
-        except ValueError:
-             return jsonify(error="Invalid panel_definition_id format. Must be an integer."), 400
-
     try:
-        # Get current module at the station
-        module_info = queries.get_current_module_for_station(station_id)
-        
-        module_tasks = []
-        panel_tasks = [] # For a specific panel, if panel_definition_id is provided
-        all_station_panels = [] # All panels defined for the current module at this station type/sequence
-        upcoming_module_info = None
-
-        # Get station details to determine its sequence order
-        station_details_cursor = connection.get_db().execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (station_id,))
-        station_details_row = station_details_cursor.fetchone()
-        station_sequence_order = station_details_row['sequence_order'] if station_details_row else None
-
-        if module_info:
-            current_module_id = module_info.get('module_id')
-            current_house_type_id = module_info.get('house_type_id')
-            current_module_seq_in_house = module_info.get('module_sequence_in_house') # From Modules table
-            # current_sub_type_id = module_info.get('sub_type_id') # From ModuleProductionPlan via Modules.plan_id
-
-            if current_module_id and current_house_type_id:
-                # Fetch module-level tasks (is_panel_task = 0)
-                module_tasks = queries.get_tasks_for_module_at_station(
-                    station_id=station_id, module_id=current_module_id,
-                    house_type_id=current_house_type_id, worker_specialty_id=worker_specialty_id
-                )
-                # Fetch all defined panels for this module type/sequence (regardless of sub-type for general overview)
-                # This might need adjustment if panels are strictly per sub-type at this station.
-                if current_module_seq_in_house:
-                    all_station_panels = queries.get_panel_definitions_for_house_type_module(
-                        current_house_type_id, current_module_seq_in_house, sub_type_id=None # Or module_info.get('sub_type_id') if strictly needed
-                    )
-                # If a specific panel_definition_id is provided, fetch its tasks
-                if panel_definition_id:
-                    panel_tasks = queries.get_panel_tasks_for_module_at_station(
-                        station_id=station_id, module_id=current_module_id,
-                        house_type_id=current_house_type_id, worker_specialty_id=worker_specialty_id,
-                        panel_definition_id=panel_definition_id
-                    )
-            else:
-                 logger.warning(f"Module info for station {station_id} missing module_id or house_type_id.")
-
-        elif station_sequence_order == 1: # Or any other logic for "first" station in a line segment
-            # Removed logic for fetching upcoming_module_info
-            logger.info(f"Station {station_id} (seq 1) is empty, no upcoming module found (logic removed).")
-        
-        return jsonify(
-            current_module=module_info,
-            upcoming_module=None, # Explicitly set to None as logic is removed
-            module_tasks=module_tasks,
-            panel_tasks=panel_tasks, # Tasks for a specific panel_definition_id if provided
-            station_panels=all_station_panels # All panels defined for the current/upcoming module at this station
-        )
+        context_data = queries.get_module_and_panels_for_station(station_id)
+        if context_data:
+            # Ensure module and panels are keyed as expected by frontend
+            # get_module_and_panels_for_station should return {'module': module_data, 'panels': panels_list}
+            return jsonify(context_data)
+        else:
+            # Return an empty structure if no module is available for the station
+            return jsonify({'module': None, 'panels': []})
     except Exception as e:
-        logger.error(f"Error fetching station overview data for station {station_id}: {e}", exc_info=True)
-        return jsonify(error=f"Failed to fetch station overview data: {str(e)}"), 500
+        logger.error(f"Error fetching station context data for station {station_id}: {e}", exc_info=True)
+        return jsonify(error=f"Failed to fetch station context data: {str(e)}"), 500
 
 
 # === Task Operations ===
@@ -1081,19 +1013,23 @@ def start_task_route(): # Renamed
                 return jsonify(error=f"Task Definition ID {task_definition_id} not found."), 404
             is_panel_task = task_def['is_panel_task']
 
-            # 2. Find or Create Module
-            module = queries.get_module_by_plan_id(plan_id)
-            module_id = None
-            if module:
-                module_id = module['module_id']
-            else:
-                # Module doesn't exist, create it. This also updates ModuleProductionPlan status.
-                logger.info(f"Module for plan_id {plan_id} not found. Creating module at station {station_start}...")
-                module_id = queries.create_module_from_plan(plan_id, station_start)
-                if not module_id:
-                     raise Exception(f"Failed to create module for plan {plan_id}") # Trigger rollback
-                logger.info(f"Module {module_id} created for plan {plan_id}.")
+            # 2. Find or Create/Update Module
+            # Determine initial statuses based on task type and station (simplified for now)
+            # TODO: Make station type (panel start, assembly start) determination more robust
+            initial_module_status = 'Panels' if is_panel_task and station_start.startswith('W') else 'In Progress'
+            mpp_status_update = 'Panels' if is_panel_task and station_start.startswith('W') else 'Assembly'
             
+            # Ensure module exists for the plan_id and is set to the correct station and status
+            # create_module_from_plan now handles finding existing module or creating new
+            module_id = queries.create_module_from_plan(
+                plan_id, 
+                station_start, 
+                initial_module_status=initial_module_status, 
+                mpp_status_update=mpp_status_update
+            )
+            if not module_id:
+                raise Exception(f"Failed to create or assign module for plan {plan_id} at station {station_start}")
+
             # 3. Start the appropriate task log
             new_log_id = None
             log_type = ""

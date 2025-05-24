@@ -31,188 +31,106 @@ export const addSpecialty = async (specialtyData) => {
 
 // === Station Context & Task Management (for StationContextSelector.js) ===
 
-// Mock data store for getAvailablePanelsForStation
-// This is a simple in-memory store to simulate backend changes.
-// In a real app, this state would live on the backend.
-let mockModulesDataStore = {
-    'W1': [
-        {
-            module_id: "mod123_w1", // Unique ID for W1's context
-            module_name: "Modulo Alpha (Casa X - M1)",
-            project_name: "Proyecto Sol",
-            house_identifier: "Casa X",
-            module_number: "M1",
-            status: "pending", 
-            sequence_number: 1,
-            panels: [
-                { panel_id: "panelA_w1", panel_code: "P01-A", status: "not_started", sequence: 1 },
-                { panel_id: "panelB_w1", panel_code: "P01-B", status: "not_started", sequence: 2 }
-            ]
-        },
-        {
-            module_id: "mod456_w1",
-            module_name: "Modulo Beta (Casa Y - M2)",
-            project_name: "Proyecto Luna",
-            house_identifier: "Casa Y",
-            module_number: "M2",
-            status: "pending",
-            sequence_number: 2,
-            panels: [
-                { panel_id: "panelC_w1", panel_code: "P02-C", status: "not_started", sequence: 1 },
-            ]
-        },
-        {
-            module_id: "mod789_w1",
-            module_name: "Modulo Gamma (Casa Z - M3)",
-            project_name: "Proyecto Estrella",
-            house_identifier: "Casa Z",
-            module_number: "M3",
-            status: "completed", 
-            sequence_number: 3,
-            panels: [
-                { panel_id: "panelD_w1", panel_code: "P03-D", status: "completed", sequence: 1 },
-            ]
-        }
-    ],
-    'W2': [
-        {
-            module_id: "mod123_w2", // Potentially different module ID if context is different
-            module_name: "Modulo Alpha (Casa X - M1) @ W2", // Name might reflect station context
-            project_name: "Proyecto Sol",
-            house_identifier: "Casa X",
-            module_number: "M1",
-            status: "in_production", 
-            sequence_number: 1,
-            panels: [
-                { panel_id: "panelA_w2", panel_code: "P01-A", status: "in_progress", sequence: 1 }, 
-                { panel_id: "panelB_w2", panel_code: "P01-B", status: "not_started", sequence: 2 }
-            ]
-        }
-    ],
-    // Add more stations as needed
+// Removed mockModulesDataStore and related update functions as we'll use backend calls.
+
+export const getStationContext = async (stationId) => {
+    console.log(`adminService.getStationContext called for stationId: ${stationId}`);
+    // This will call the new backend endpoint: GET /api/admin/station-context/<station_id>
+    // The backend will determine the module and its panels.
+    const response = await fetch(`${API_BASE_URL}/station-context/${stationId}`);
+    return handleResponse(response); // Expects { module: {...} or null, panels: [...] }
 };
 
 
-export const getAvailablePanelsForStation = async (stationId) => {
-    console.log(`adminService.getAvailablePanelsForStation called for stationId: ${stationId}`);
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+// These functions (startPanel, pausePanel, etc.) will now interact with the generic task start/update endpoints.
+// The backend's task start/update logic will handle module creation/status changes.
+// The panelId parameter should correspond to panel_definition_id.
+// The moduleId parameter should correspond to the module_id of the currently active module.
+// The stationId is the current station context.
 
-    // Return a deep copy to prevent direct modification of the mock store from outside
-    const stationData = mockModulesDataStore[stationId] || [];
-    return JSON.parse(JSON.stringify(stationData));
-};
-
-const updatePanelStatusInDataStore = (stationId, moduleId, panelId, newStatus) => {
-    if (mockModulesDataStore[stationId]) {
-        const module = mockModulesDataStore[stationId].find(m => m.module_id === moduleId);
-        if (module) {
-            const panel = module.panels.find(p => p.panel_id === panelId);
-            if (panel) {
-                panel.status = newStatus;
-                // If a panel starts, update module status to 'in_production' if it's 'pending'
-                if (newStatus === 'in_progress' && module.status === 'pending') {
-                    module.status = 'in_production';
-                }
-                return true;
-            }
-        }
-    }
-    return false;
-};
-
-const updateModuleStatusInDataStore = (stationId, moduleId, newStatus) => {
-    // Note: This simple mock assumes module IDs are unique across stations in the store,
-    // or that we only care about the first station that has it.
-    // A more robust mock might need to iterate through all station data if moduleId isn't station-specific.
-    let stationsToSearch = stationId ? [stationId] : Object.keys(mockModulesDataStore);
-
-    for (const sId of stationsToSearch) {
-        if (mockModulesDataStore[sId]) {
-            const module = mockModulesDataStore[sId].find(m => m.module_id === moduleId);
-            if (module) {
-                module.status = newStatus;
-                // If module is completed, ensure all its panels are also marked completed (consistency)
-                if (newStatus === 'completed') {
-                    module.panels.forEach(p => p.status = 'completed');
-                }
-                return true;
-            }
-        }
-    }
-    return false;
-};
-
-
-export const startPanel = async (stationId, moduleId, panelId) => {
-    console.log(`adminService.startPanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
-    await new Promise(resolve => setTimeout(resolve, 300));
+// For starting/resuming a panel task.
+// Assumes a task_definition_id is known or can be determined for the panel at this station.
+// This is a simplification. A real system might need to specify which task_definition_id.
+// For now, we assume the backend's /tasks/start can infer or has a default task for a panel at a station.
+export const startOrResumePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
+    console.log(`adminService.startOrResumePanelTask: planId=${planId}, taskDefinitionId=${taskDefinitionId}, panelDefinitionId=${panelDefinitionId}`);
+    // This will call the existing POST /api/admin/tasks/start endpoint
+    // The backend will handle creating TaskLog/PanelTaskLog and updating statuses.
+    const payload = {
+        plan_id: planId, // plan_id is used to find/create the module instance
+        task_definition_id: taskDefinitionId, // This needs to be determined by the frontend or a fixed value for "panel work"
+        worker_id: workerId, // Assuming worker context is available
+        station_start: stationId,
+        panel_definition_id: panelDefinitionId 
+    };
+    // This is a placeholder for the actual task_definition_id that should be started for this panel.
+    // The current StationContextSelector doesn't manage task_definition_ids for panels directly.
+    // This will require further changes if each panel has multiple distinct tasks selectable by user.
+    // For now, let's assume a generic "work on panel" task.
+    // The existing /tasks/start endpoint needs to be robust.
     
-    if (Math.random() < 0.05) { // Simulate a 5% chance of error
-        console.error("Simulated API Error in startPanel");
-        throw new Error("Simulated API Error: Could not start panel.");
-    }
+    // The current /tasks/start endpoint in admin_definitions.py is what we'll use.
+    // It requires plan_id, task_definition_id, worker_id, station_start, and optional panel_definition_id.
+    // The frontend will need to supply a relevant task_definition_id.
+    // This is a GAP: StationContextSelector doesn't know which task_definition_id to start for a panel.
+    // For now, this function cannot be fully implemented without that info.
+    // Let's assume the old mock behavior for panel actions for now, and focus on module fetching.
+    // TODO: Revisit panel task starting with specific task_definition_ids.
 
-    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'in_progress');
-    if (updated) {
-        return { success: true, message: `Panel ${panelId} started`, panel_id: panelId, new_status: "in_progress" };
-    }
-    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for starting.`);
+    // Mocking the old behavior for now, as task_definition_id is missing.
+    console.warn("startOrResumePanelTask is using mock behavior due to missing task_definition_id logic in StationContextSelector.");
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return { success: true, message: `Panel ${panelDefinitionId} task started/resumed (mocked)`, panel_id: panelDefinitionId, new_status: "in_progress" };
+
 };
 
-export const pausePanel = async (stationId, moduleId, panelId) => {
-    console.log(`adminService.pausePanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
+export const pausePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
+    console.log(`adminService.pausePanelTask: panelDefinitionId=${panelDefinitionId}`);
+    // This would call a backend endpoint to update PanelTaskLog status to 'Paused'.
+    // e.g., PUT /api/admin/tasks/panel-log/<log_id>/status { status: "Paused" }
+    // This requires knowing the panel_task_log_id.
+    // TODO: Revisit panel task pausing.
+    console.warn("pausePanelTask is using mock behavior.");
     await new Promise(resolve => setTimeout(resolve, 300));
-    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'paused');
-     if (updated) {
-        return { success: true, message: `Panel ${panelId} paused`, panel_id: panelId, new_status: "paused" };
-    }
-    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for pausing.`);
+    return { success: true, message: `Panel ${panelDefinitionId} task paused (mocked)`, panel_id: panelDefinitionId, new_status: "paused" };
 };
 
-export const resumePanel = async (stationId, moduleId, panelId) => {
-    console.log(`adminService.resumePanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
+export const finishPanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
+    console.log(`adminService.finishPanelTask: panelDefinitionId=${panelDefinitionId}`);
+    // This would call a backend endpoint to update PanelTaskLog status to 'Completed'.
+    // e.g., PUT /api/admin/tasks/panel-log/<log_id>/status { status: "Completed" }
+    // TODO: Revisit panel task finishing.
+    console.warn("finishPanelTask is using mock behavior.");
     await new Promise(resolve => setTimeout(resolve, 300));
-    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'in_progress');
-    if (updated) {
-        return { success: true, message: `Panel ${panelId} resumed`, panel_id: panelId, new_status: "in_progress" };
-    }
-    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for resuming.`);
+     return { success: true, message: `Panel ${panelDefinitionId} task finished (mocked)`, panel_id: panelDefinitionId, new_status: "completed" };
 };
 
-export const finishPanel = async (stationId, moduleId, panelId) => {
-    console.log(`adminService.finishPanel: stationId=${stationId}, moduleId=${moduleId}, panelId=${panelId}`);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const updated = updatePanelStatusInDataStore(stationId, moduleId, panelId, 'completed');
 
-    if (updated) {
-         // Check if all panels in this module are now completed
-        const module = mockModulesDataStore[stationId]?.find(m => m.module_id === moduleId);
-        if (module && module.panels.every(p => p.status === 'completed')) {
-            console.log(`All panels for module ${moduleId} completed. Updating module status in mock store.`);
-            updateModuleStatusInDataStore(stationId, moduleId, 'completed'); // Mark module as completed
-        }
-        return { success: true, message: `Panel ${panelId} finished`, panel_id: panelId, new_status: "completed" };
+// This function will call the backend to update the module's status.
+// The backend should handle updating both Modules and ModuleProductionPlan tables,
+// and potentially moving the module to a new station (e.g., M1 for 'Magazine').
+export const updateModuleStatus = async (moduleId, newStatus, targetStationId = null) => {
+    console.log(`adminService.updateModuleStatus: moduleId=${moduleId}, newStatus=${newStatus}, targetStationId=${targetStationId}`);
+    // Example: PUT /api/admin/modules/<moduleId>/status
+    // Body: { status: newStatus, target_station_id: targetStationId (optional) }
+    // The backend route for this needs to be created or an existing one adapted.
+    // For now, let's assume a generic update endpoint.
+    // The queries.py has update_module_status_and_station. This needs an API endpoint.
+    // Let's assume /api/admin/modules/{module_id}/status-station
+    const payload = {
+        module_status: newStatus, // Corresponds to Modules.status
+        mpp_status: newStatus,    // Corresponds to ModuleProductionPlan.status (e.g. 'Magazine', 'Assembly', 'Completed')
+    };
+    if (targetStationId) {
+        payload.station_id = targetStationId;
     }
-    throw new Error(`Panel ${panelId} or Module ${moduleId} not found in station ${stationId} for finishing.`);
-};
-
-export const updateModuleStatus = async (moduleId, status) => {
-    // This mock assumes moduleId is globally unique or we update it wherever we find it.
-    // StationContextSelector currently calls this without stationId, so we search all stations.
-    console.log(`adminService.updateModuleStatus: moduleId=${moduleId}, newStatus=${status}`);
+    // This endpoint doesn't exist yet.
+    // For now, mocking success.
+    // TODO: Create PUT /api/admin/modules/<module_id>/status-station endpoint
+    // that calls queries.update_module_status_and_station.
+    console.warn("updateModuleStatus is using mock behavior as backend endpoint is not yet defined/used.");
     await new Promise(resolve => setTimeout(resolve, 300));
-    
-    const updated = updateModuleStatusInDataStore(null, moduleId, status); // Pass null for stationId to search all
-    
-    if (updated) {
-        return { success: true, message: `Module ${moduleId} status updated to ${status}`, module_id: moduleId, new_status: status };
-    }
-    // If you want to be strict and only allow updates if the module exists:
-    console.warn(`Module ${moduleId} not found in any station data store for status update, but reporting success as per mock.`);
-    // To simulate a case where the module MUST exist for an update to be "successful":
-    // throw new Error(`Module ${moduleId} not found for status update.`); 
-    // For now, let's assume the backend would create/update, so we report success.
-    return { success: true, message: `Module ${moduleId} status update to ${status} (simulated, module might not exist in current mock view for a specific station but assumed globally updated).`, module_id: moduleId, new_status: status };
+    return { success: true, message: `Module ${moduleId} status updated to ${newStatus} (mocked).`, module_id: moduleId, new_status: newStatus };
 };
 
 export const updateSpecialty = async (id, specialtyData) => {

@@ -90,7 +90,7 @@ CREATE TABLE Modules (
     module_sequence_in_house INTEGER, -- e.g., 1 of 2, 2 of 2 for a 2-module house (relative to HouseType.number_of_modules)
     planned_assembly_line TEXT, -- 'A', 'B', or 'C'. Relevant for modules leaving M1. Nullable initially.
     current_station_id TEXT, -- Foreign Key to Stations table. Tracks the module's physical location. Nullable if not yet on the line.
-    status TEXT DEFAULT 'Planned', -- e.g., 'Planned', 'In Progress', 'Completed', 'On Hold'
+    status TEXT DEFAULT 'Planned' CHECK(status IN ('Planned', 'Panels', 'In Progress', 'Magazine', 'Completed', 'On Hold')), -- e.g., 'Planned', 'Panels', 'In Progress', 'Magazine', 'Completed', 'On Hold'
     last_moved_at TEXT, -- Timestamp of the last move, useful for tracking flow
     plan_id INTEGER UNIQUE, -- Link back to the specific production plan item this module belongs to. UNIQUE ensures one module instance per plan item.
     FOREIGN KEY (house_type_id) REFERENCES HouseTypes(house_type_id) ON DELETE RESTRICT,
