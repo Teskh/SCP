@@ -2,6 +2,7 @@
 DROP TABLE IF EXISTS TaskPauses;
 DROP TABLE IF EXISTS PanelTaskLogs; -- Depends on TaskDefinitions, Workers, PanelDefinitions, Stations, ModuleProductionPlan
 DROP TABLE IF EXISTS TaskLogs; -- Depends on TaskDefinitions, Workers, Stations, ModuleProductionPlan
+DROP TABLE IF EXISTS PanelsProductionPlan; -- Depends on ModuleProductionPlan, PanelDefinitions
 -- Modules table is removed
 DROP TABLE IF EXISTS ModuleProductionPlan; -- Depends on HouseTypes, HouseSubType
 DROP TABLE IF EXISTS PanelDefinitions; -- Was HouseTypePanels. Depends on HouseTypes, HouseSubType, Multiwalls
@@ -82,6 +83,28 @@ CREATE INDEX idx_ModuleProductionPlan_start_datetime ON ModuleProductionPlan (pl
 CREATE INDEX idx_ModuleProductionPlan_status ON ModuleProductionPlan (status);
 CREATE INDEX idx_ModuleProductionPlan_sub_type ON ModuleProductionPlan (sub_type_id); -- Index for sub_type FK
 CREATE INDEX idx_ModuleProductionPlan_identifier_module ON ModuleProductionPlan (project_name, house_identifier, module_number); -- Index for unique constraint
+
+-- ========= Panels Production Plan =========
+
+CREATE TABLE PanelsProductionPlan (
+    panel_plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL, -- FK to ModuleProductionPlan
+    panel_definition_id INTEGER NOT NULL, -- FK to PanelDefinitions
+    status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'in_progress', 'magazine', 'consumed')), -- Panel production status
+    current_station TEXT, -- Current station (W1-W5, M1), nullable for planned status
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (plan_id) REFERENCES ModuleProductionPlan(plan_id) ON DELETE CASCADE,
+    FOREIGN KEY (panel_definition_id) REFERENCES PanelDefinitions(panel_definition_id) ON DELETE CASCADE,
+    FOREIGN KEY (current_station) REFERENCES Stations(station_id) ON DELETE SET NULL,
+    UNIQUE (plan_id, panel_definition_id) -- Each panel definition can only have one production plan item per module plan
+);
+
+-- Indexes for PanelsProductionPlan
+CREATE INDEX idx_PanelsProductionPlan_plan ON PanelsProductionPlan (plan_id);
+CREATE INDEX idx_PanelsProductionPlan_panel_definition ON PanelsProductionPlan (panel_definition_id);
+CREATE INDEX idx_PanelsProductionPlan_status ON PanelsProductionPlan (status);
+CREATE INDEX idx_PanelsProductionPlan_station ON PanelsProductionPlan (current_station);
 
 -- ========= Task Definitions =========
 

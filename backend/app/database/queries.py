@@ -55,6 +55,7 @@ def _get_next_house_number_for_project(project_name):
 def generate_module_production_plan(project_name, house_type_id, number_of_houses):
     """
     Generates ModuleProductionPlan items in batch for a given project and house type.
+    Also creates corresponding PanelsProductionPlan items for each panel definition.
     Infers modules_per_house from HouseTypes.
     House identifiers are auto-incremented based on existing houses for the project.
     planned_start_datetime auto-increments by 1 hour per module.
@@ -109,8 +110,32 @@ def generate_module_production_plan(project_name, house_type_id, number_of_house
 
     if items_to_add:
         try:
-            add_bulk_module_production_plan_items(items_to_add)
-            logging.info(f"Successfully generated {len(items_to_add)} plan items for project '{project_name}'.")
+            with db: # Use transaction to ensure both module and panel plans are created together
+                # Add module production plan items
+                plan_ids = add_bulk_module_production_plan_items_with_ids(items_to_add)
+                
+                # Create panel production plan items for each module
+                panel_items_to_add = []
+                for i, (project_name, house_type_id, house_identifier, module_num, sequence, start_dt, line, sub_type_id, status) in enumerate(items_to_add):
+                    plan_id = plan_ids[i]
+                    
+                    # Get panel definitions for this module (considering sub_type_id if set)
+                    panel_definitions = get_panel_definitions_for_house_type_module(house_type_id, module_num, sub_type_id)
+                    
+                    for panel_def in panel_definitions:
+                        panel_items_to_add.append((
+                            plan_id,
+                            panel_def['panel_definition_id'],
+                            'planned', # Default status
+                            None # current_station - NULL for planned status
+                        ))
+                
+                # Add panel production plan items
+                if panel_items_to_add:
+                    add_bulk_panels_production_plan_items(panel_items_to_add)
+                    logging.info(f"Successfully generated {len(panel_items_to_add)} panel plan items for project '{project_name}'.")
+                
+            logging.info(f"Successfully generated {len(items_to_add)} module plan items for project '{project_name}'.")
             return True
         except Exception as e:
             logging.error(f"Error generating bulk plan items for project '{project_name}': {e}", exc_info=True)
@@ -173,6 +198,48 @@ def add_bulk_module_production_plan_items(items_data):
     except sqlite3.Error as e:
         logging.error(f"Error adding bulk module production plan items: {e}", exc_info=True)
         return False
+
+def add_bulk_module_production_plan_items_with_ids(items_data):
+    """
+    Adds multiple items to the ModuleProductionPlan using executemany and returns the generated plan_ids.
+    Returns a list of plan_ids in the same order as the input items_data.
+    """
+    db = get_db()
+    sql = """INSERT INTO ModuleProductionPlan
+             (project_name, house_type_id, house_identifier, module_number, planned_sequence, planned_start_datetime, planned_assembly_line, sub_type_id, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+    try:
+        plan_ids = []
+        cursor = db.cursor()
+        for item_data in items_data:
+            cursor.execute(sql, item_data)
+            plan_ids.append(cursor.lastrowid)
+        return plan_ids
+    except sqlite3.IntegrityError as e:
+        logging.error(f"Error adding bulk module production plan items with IDs (IntegrityError): {e}", exc_info=True)
+        raise e
+    except sqlite3.Error as e:
+        logging.error(f"Error adding bulk module production plan items with IDs: {e}", exc_info=True)
+        raise e
+
+def add_bulk_panels_production_plan_items(panel_items_data):
+    """
+    Adds multiple items to the PanelsProductionPlan using executemany.
+    panel_items_data should be a list of tuples: [(plan_id, panel_definition_id, status, current_station), ...]
+    """
+    db = get_db()
+    sql = """INSERT INTO PanelsProductionPlan
+             (plan_id, panel_definition_id, status, current_station)
+             VALUES (?, ?, ?, ?)"""
+    try:
+        db.executemany(sql, panel_items_data)
+        return True
+    except sqlite3.IntegrityError as e:
+        logging.error(f"Error adding bulk panels production plan items (IntegrityError): {e}", exc_info=True)
+        raise e
+    except sqlite3.Error as e:
+        logging.error(f"Error adding bulk panels production plan items: {e}", exc_info=True)
+        raise e
 
 def get_module_production_plan(filters=None, sort_by='planned_sequence', sort_order='ASC', limit=None, offset=None):
     """
@@ -1143,6 +1210,81 @@ def get_station_status_and_upcoming_modules():
         'upcoming_items': upcoming_items
     }
 
+
+# === Panels Production Plan ===
+
+def get_panels_production_plan_for_module(plan_id):
+    """Get all panel production plan items for a specific module plan."""
+    db = get_db()
+    query = """
+        SELECT
+            ppp.panel_plan_id, ppp.plan_id, ppp.panel_definition_id,
+            ppp.status, ppp.current_station, ppp.created_at, ppp.updated_at,
+            pd.panel_group, pd.panel_code,
+            mw.multiwall_code
+        FROM PanelsProductionPlan ppp
+        JOIN PanelDefinitions pd ON ppp.panel_definition_id = pd.panel_definition_id
+        LEFT JOIN Multiwalls mw ON pd.multiwall_id = mw.multiwall_id
+        WHERE ppp.plan_id = ?
+        ORDER BY pd.panel_group, mw.multiwall_code, pd.panel_code
+    """
+    cursor = db.execute(query, (plan_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+def update_panel_production_status(panel_plan_id, status, current_station=None):
+    """Update the status and current station of a panel production plan item."""
+    db = get_db()
+    allowed_statuses = ['planned', 'in_progress', 'magazine', 'consumed']
+    if status not in allowed_statuses:
+        raise ValueError(f"Invalid status: {status}. Must be one of {allowed_statuses}")
+    
+    try:
+        cursor = db.execute(
+            """UPDATE PanelsProductionPlan 
+               SET status = ?, current_station = ?, updated_at = CURRENT_TIMESTAMP 
+               WHERE panel_plan_id = ?""",
+            (status, current_station, panel_plan_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logging.error(f"Error updating panel production status: {e}", exc_info=True)
+        return False
+
+def get_panels_by_status_and_station(status=None, current_station=None):
+    """Get panels filtered by status and/or current station."""
+    db = get_db()
+    base_query = """
+        SELECT
+            ppp.panel_plan_id, ppp.plan_id, ppp.panel_definition_id,
+            ppp.status, ppp.current_station,
+            pd.panel_group, pd.panel_code,
+            mpp.project_name, mpp.house_identifier, mpp.module_number,
+            ht.name as house_type_name
+        FROM PanelsProductionPlan ppp
+        JOIN PanelDefinitions pd ON ppp.panel_definition_id = pd.panel_definition_id
+        JOIN ModuleProductionPlan mpp ON ppp.plan_id = mpp.plan_id
+        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+    """
+    
+    conditions = []
+    params = []
+    
+    if status:
+        conditions.append("ppp.status = ?")
+        params.append(status)
+    
+    if current_station:
+        conditions.append("ppp.current_station = ?")
+        params.append(current_station)
+    
+    if conditions:
+        base_query += " WHERE " + " AND ".join(conditions)
+    
+    base_query += " ORDER BY mpp.planned_sequence, pd.panel_group, pd.panel_code"
+    
+    cursor = db.execute(base_query, params)
+    return [dict(row) for row in cursor.fetchall()]
 
 # === House Types ===
 # get_all_house_types_with_details is defined above in the helpers section
