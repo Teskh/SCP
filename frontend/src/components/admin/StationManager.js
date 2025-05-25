@@ -39,14 +39,27 @@ function StationManager() {
         const options = [];
         const sequenceMap = new Map();
 
-        // Add Panel Line option
+        // 1. Add Panel Line General option
         options.push({
             value: PANEL_LINE_GENERAL_VALUE,
             label: PANEL_LINE_GENERAL_LABEL,
             description: 'Estaciones W1-W5'
         });
 
-        // Group assembly stations by sequence order (7-12 for assembly stations 1-6)
+        // 2. Add individual Panel Line stations (W1-W5)
+        const panelLineStations = allStations
+            .filter(station => station.line_type === 'W' && station.sequence_order >= 1 && station.sequence_order <= 5)
+            .sort((a, b) => a.sequence_order - b.sequence_order); // Ensure W1, W2, etc. order
+
+        panelLineStations.forEach(station => {
+            options.push({
+                value: station.station_id, // Use station_id for individual W stations
+                label: station.name, // e.g., "Estación de Estructura (W1)"
+                description: `Estación individual de la Línea de Paneles`
+            });
+        });
+
+        // 3. Group assembly stations by sequence order (7-12 for assembly stations 1-6)
         allStations.forEach(station => {
             if (station.sequence_order >= 7 && station.sequence_order <= 12) {
                 const assemblyNumber = station.sequence_order - 6; // 7->1, 8->2, etc.
@@ -60,7 +73,7 @@ function StationManager() {
             }
         });
 
-        // Add assembly stations in order
+        // 4. Add assembly stations in order
         for (let seq = 7; seq <= 12; seq++) {
             if (sequenceMap.has(seq)) {
                 options.push(sequenceMap.get(seq));

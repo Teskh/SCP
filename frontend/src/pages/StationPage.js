@@ -202,20 +202,20 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         if (allStationsError) return `Error de estación: ${allStationsError}`;
         if (!activeStationSequenceOrder && !currentSpecificStationId) return "Estación No Configurada";
 
-        if (currentSpecificStationId && allStations && allStations.length > 0) {
-            const specificStation = allStations.find(s => s.station_id === currentSpecificStationId);
-            if (specificStation) {
-                // Check if this specific station is still valid for the current ambiguousSequenceOrder
-                // This is important if ambiguousSequenceOrder changed but specificIdFromStorage was stale
-                const isValidForCurrentContext = checkSpecificIdValidity(currentSpecificStationId, activeStationSequenceOrder, allStations);
-                if (isValidForCurrentContext) {
-                    return `${specificStation.name} (${specificStation.station_id})`;
-                }
-                // If not valid, the modal should be showing, or will show soon.
-                // Fall through to general name or "awaiting selection"
+        // Determine the effective station ID to display.
+        // If currentSpecificStationId is set (meaning an ambiguous context was chosen and then a specific sub-station), use it.
+        // Otherwise, use activeStationSequenceOrder (which could be a specific station ID like W1, or an ambiguous one like PANEL_LINE_GENERAL_VALUE or a sequence number).
+        const effectiveStationIdOrSequence = currentSpecificStationId || activeStationSequenceOrder;
+
+        if (effectiveStationIdOrSequence && allStations && allStations.length > 0) {
+            // Try to find a direct station match first (for W1-W5, A1A, etc.)
+            const directStationMatch = allStations.find(s => s.station_id === effectiveStationIdOrSequence);
+            if (directStationMatch) {
+                return `${directStationMatch.name} (${directStationMatch.station_id})`;
             }
         }
         
+        // If no direct station match, handle ambiguous contexts or general labels
         if (showSpecificStationModal) {
             return "Esperando selección de estación específica...";
         }
@@ -224,29 +224,20 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
             return PANEL_LINE_GENERAL_LABEL;
         }
 
+        // Handle assembly sequence numbers (7-12)
         if (allStations && allStations.length > 0) {
-            const sequenceMap = new Map();
-            allStations.forEach(station => {
-                if (!sequenceMap.has(station.sequence_order)) {
-                    let displayName = station.name;
-                    if (station.sequence_order >= 7) {
-                        const assemblyMatch = station.name.match(/Línea de Ensamblaje [A-C]: (Estación \d+)/);
-                        if (assemblyMatch && assemblyMatch[1]) {
-                            displayName = assemblyMatch[1];
-                        } else {
-                            displayName = `Estación de Secuencia ${station.sequence_order}`;
-                        }
-                    }
-                    sequenceMap.set(station.sequence_order, {
-                        value: station.sequence_order,
-                        label: `${displayName} (Secuencia ${station.sequence_order})`,
-                    });
+            const numericSequence = parseInt(activeStationSequenceOrder, 10);
+            if (!isNaN(numericSequence) && numericSequence >= 7 && numericSequence <= 12) {
+                // Find any station with this sequence order to get the general assembly name
+                const sampleStation = allStations.find(s => s.sequence_order === numericSequence);
+                if (sampleStation) {
+                    const assemblyNumber = numericSequence - 6;
+                    return `Estación de Ensamblaje ${assemblyNumber} (Secuencia ${numericSequence})`;
                 }
-            });
-            const foundOption = sequenceMap.get(parseInt(activeStationSequenceOrder, 10));
-            if (foundOption) return foundOption.label;
+            }
         }
         
+        // Fallback if nothing matches
         return activeStationSequenceOrder ? `Contexto: ${activeStationSequenceOrder}` : "Estación No Configurada";
 
     }, [activeStationSequenceOrder, currentSpecificStationId, allStations, isLoadingAllStations, allStationsError, showSpecificStationModal]);
