@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
-import { getStationOverviewData, startTask } from '../services/adminService'; // Import services
+import { getStationOverviewData, startTask, pauseTask, resumeTask, completeTask } from '../services/adminService'; // Import services
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
@@ -203,6 +203,91 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
     };
 
+    const handlePauseTaskClick = async (taskDefinitionId, panelId = null) => {
+        const targetModule = moduleData || upcomingModuleData;
+
+        if (!targetModule || !targetModule.plan_id || !user || !user.id) {
+            console.error("Missing data needed to pause task:", { targetModule, user });
+            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para pausar la tarea." });
+            return;
+        }
+
+        setTaskActionLoading(taskDefinitionId);
+        setTaskActionError(null);
+
+        try {
+            await pauseTask(
+                targetModule.plan_id,
+                taskDefinitionId,
+                user.id,
+                panelId,
+                'Worker initiated pause'
+            );
+            fetchStationData(); // Refresh data to show updated task status
+        } catch (error) {
+            console.error("Error pausing task:", error);
+            setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al pausar la tarea.' });
+        } finally {
+            setTaskActionLoading(null);
+        }
+    };
+
+    const handleResumeTaskClick = async (taskDefinitionId, panelId = null) => {
+        const targetModule = moduleData || upcomingModuleData;
+
+        if (!targetModule || !targetModule.plan_id) {
+            console.error("Missing data needed to resume task:", { targetModule });
+            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para reanudar la tarea." });
+            return;
+        }
+
+        setTaskActionLoading(taskDefinitionId);
+        setTaskActionError(null);
+
+        try {
+            await resumeTask(
+                targetModule.plan_id,
+                taskDefinitionId,
+                panelId
+            );
+            fetchStationData(); // Refresh data to show updated task status
+        } catch (error) {
+            console.error("Error resuming task:", error);
+            setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al reanudar la tarea.' });
+        } finally {
+            setTaskActionLoading(null);
+        }
+    };
+
+    const handleCompleteTaskClick = async (taskDefinitionId, panelId = null) => {
+        const targetModule = moduleData || upcomingModuleData;
+
+        if (!targetModule || !targetModule.plan_id || !resolvedSpecificStationId) {
+            console.error("Missing data needed to complete task:", { targetModule, resolvedSpecificStationId });
+            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para completar la tarea." });
+            return;
+        }
+
+        setTaskActionLoading(taskDefinitionId);
+        setTaskActionError(null);
+
+        try {
+            await completeTask(
+                targetModule.plan_id,
+                taskDefinitionId,
+                resolvedSpecificStationId, // station_finish
+                panelId,
+                '' // notes - could be enhanced to ask user for notes
+            );
+            fetchStationData(); // Refresh data to show updated task status
+        } catch (error) {
+            console.error("Error completing task:", error);
+            setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al completar la tarea.' });
+        } finally {
+            setTaskActionLoading(null);
+        }
+    };
+
     // --- End Task Action Handlers ---
 
     const displayStationName = useMemo(() => {
@@ -387,7 +472,33 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                         </button>
                                                     </div>
                                                 )}
-                                                {/* Add buttons for Pause/Complete task later based on status */}
+                                                {task.task_status === 'In Progress' && !isSelectingPanel && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handlePauseTaskClick(task.task_definition_id, task.house_type_panel_id)}
+                                                            disabled={isLoading}
+                                                            style={{...buttonStyle, backgroundColor: '#ffc107', marginBottom: '5px'}}
+                                                        >
+                                                            {isLoading ? 'Pausando...' : 'Pausar'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleCompleteTaskClick(task.task_definition_id, task.house_type_panel_id)}
+                                                            disabled={isLoading}
+                                                            style={{...buttonStyle, backgroundColor: '#28a745'}}
+                                                        >
+                                                            {isLoading ? 'Completando...' : 'Completar'}
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {task.task_status === 'Paused' && !isSelectingPanel && (
+                                                    <button
+                                                        onClick={() => handleResumeTaskClick(task.task_definition_id, task.house_type_panel_id)}
+                                                        disabled={isLoading}
+                                                        style={{...buttonStyle, backgroundColor: '#17a2b8'}}
+                                                    >
+                                                        {isLoading ? 'Reanudando...' : 'Reanudar'}
+                                                    </button>
+                                                )}
                                                 {error && <p style={errorStyle}>{error}</p>}
                                             </div>
                                         </li>

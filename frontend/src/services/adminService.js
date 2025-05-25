@@ -650,7 +650,62 @@ export const startTask = async (planId, taskDefinitionId, workerId, stationStart
         panel_definition_id: panelDefinitionId,
     };
 
-    const response = await fetch(`${API_BASE_URL}/tasks/start`, { // URL might need /admin prefix if not already in API_BASE_URL for this specific route
+    const response = await fetch(`${API_BASE_URL}/tasks/start`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const pauseTask = async (planId, taskDefinitionId, workerId, panelDefinitionId = null, reason = '') => {
+    const payload = {
+        plan_id: planId,
+        task_definition_id: taskDefinitionId,
+        worker_id: workerId,
+        panel_definition_id: panelDefinitionId,
+        reason: reason,
+    };
+
+    const response = await fetch(`${API_BASE_URL}/tasks/pause`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const resumeTask = async (planId, taskDefinitionId, panelDefinitionId = null) => {
+    const payload = {
+        plan_id: planId,
+        task_definition_id: taskDefinitionId,
+        panel_definition_id: panelDefinitionId,
+    };
+
+    const response = await fetch(`${API_BASE_URL}/tasks/resume`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const completeTask = async (planId, taskDefinitionId, stationFinish, panelDefinitionId = null, notes = '') => {
+    const payload = {
+        plan_id: planId,
+        task_definition_id: taskDefinitionId,
+        station_finish: stationFinish,
+        panel_definition_id: panelDefinitionId,
+        notes: notes,
+    };
+
+    const response = await fetch(`${API_BASE_URL}/tasks/complete`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

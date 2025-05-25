@@ -1432,3 +1432,272 @@ def delete_worker(worker_id):
     except sqlite3.Error as e:
         logging.error(f"Error deleting worker: {e}", exc_info=True)
         return False
+
+
+def check_and_update_module_station_completion(plan_id, station_sequence_order):
+    """
+    Checks if all tasks for a module at a specific station are completed and updates status accordingly.
+    Implements automatic station transitions and status updates according to production rules.
+    """
+    db = get_db()
+    try:
+        # Get the plan item to determine current status and assembly line
+        plan_item = get_module_production_plan_item_by_id(plan_id)
+        if not plan_item:
+            logging.error(f"Plan ID {plan_id} not found for station completion check")
+            return False
+
+        # Check if all tasks for this station sequence are completed for this plan
+        panel_tasks_incomplete_cursor = db.execute("""
+            SELECT COUNT(*) as count FROM PanelTaskLogs ptl
+            JOIN TaskDefinitions td ON ptl.task_definition_id = td.task_definition_id
+            WHERE ptl.plan_id = ? AND td.station_sequence_order = ? AND ptl.status != 'Completed'
+        """, (plan_id, station_sequence_order))
+        panel_tasks_incomplete = panel_tasks_incomplete_cursor.fetchone()['count']
+
+        module_tasks_incomplete_cursor = db.execute("""
+            SELECT COUNT(*) as count FROM TaskLogs tl
+            JOIN TaskDefinitions td ON tl.task_definition_id = td.task_definition_id
+            WHERE tl.plan_id = ? AND td.station_sequence_order = ? AND tl.status != 'Completed'
+        """, (plan_id, station_sequence_order))
+        module_tasks_incomplete = module_tasks_incomplete_cursor.fetchone()['count']
+
+        # If there are still incomplete tasks, don't proceed with station transition
+        if panel_tasks_incomplete > 0 or module_tasks_incomplete > 0:
+            logging.info(f"Plan {plan_id} still has incomplete tasks at station sequence {station_sequence_order}")
+            return True
+
+        # All tasks are complete for this station - implement status transitions
+        current_status = plan_item['status']
+        new_status = current_status
+
+        # Implement the production flow rules
+        if station_sequence_order <= 5:  # Panel line stations (W1-W5)
+            if current_status == 'Panels':
+                new_status = 'Magazine'
+                logging.info(f"Moving plan {plan_id} from Panels to Magazine after completing W station tasks")
+
+        elif station_sequence_order == 6:  # Magazine (M1)
+            if current_status == 'Magazine':
+                new_status = 'Assembly'
+                logging.info(f"Moving plan {plan_id} from Magazine to Assembly after completing Magazine tasks")
+
+        elif station_sequence_order >= 7:  # Assembly line stations (A1-A6, B1-B6, C1-C6)
+            if current_status == 'Assembly':
+                # Check if this is the last assembly station (sequence 12)
+                if station_sequence_order == 12:
+                    new_status = 'Completed'
+                    logging.info(f"Completing plan {plan_id} after finishing final assembly station tasks")
+                    
+                    # Mark all panels as 'Consumed' when module is completed
+                    db.execute("""
+                        UPDATE PanelTaskLogs SET status = 'Consumed' 
+                        WHERE plan_id = ? AND status = 'Completed'
+                    """, (plan_id,))
+                    logging.info(f"Marked all panels as 'Consumed' for completed plan {plan_id}")
+
+        # Update the status if it changed
+        if new_status != current_status:
+            update_success = update_module_production_plan_item(plan_id, {'status': new_status})
+            if update_success:
+                logging.info(f"Successfully updated plan {plan_id} status from {current_status} to {new_status}")
+            else:
+                logging.error(f"Failed to update plan {plan_id} status from {current_status} to {new_status}")
+                return False
+
+        return True
+
+    except sqlite3.Error as e:
+        logging.error(f"Database error in check_and_update_module_station_completion: {e}", exc_info=True)
+        return False
+    except Exception as e:
+        logging.error(f"Error in check_and_update_module_station_completion: {e}", exc_info=True)
+        return False
+
+
+def get_module_and_panels_for_station(station_id, specialty_id=None):
+    """
+    Implements production workflow logic to get the appropriate module/panel context for a station.
+    
+    Production rules:
+    1. For Station W1: Look for the lowest planned_sequence plan_id that doesn't have status='Completed'
+    2. Check if any panels are 'Planned' - these can be started
+    3. If all panels are 'In Progress', look at the next plan_id in sequence
+    4. Return current module data, upcoming module data, available tasks, and available panels
+    """
+    db = get_db()
+    try:
+        # Get station information to determine sequence order
+        station_cursor = db.execute(
+            "SELECT sequence_order, line_type FROM Stations WHERE station_id = ?",
+            (station_id,))
+        station_info = station_cursor.fetchone()
+        
+        if not station_info:
+            logging.error(f"Station {station_id} not found")
+            return None
+            
+        station_sequence = station_info['sequence_order']
+        line_type = station_info['line_type']
+        
+        # Start looking for modules based on production workflow
+        current_module = None
+        upcoming_module = None
+        tasks = []
+        panels = []
+        
+        # For panel line stations (W1-W5), start with the lowest planned sequence
+        if line_type == 'W':
+            current_module, upcoming_module = _find_module_for_panel_station(db, station_sequence, specialty_id)
+        else:
+            # For other stations (Magazine, Assembly), find modules already in progress
+            current_module = _find_module_at_station(db, station_sequence, specialty_id)
+        
+        # Get tasks and panels for the identified module(s)
+        target_module = current_module or upcoming_module
+        if target_module:
+            tasks = _get_tasks_for_module_and_station(db, target_module['plan_id'], station_sequence, specialty_id)
+            
+            if line_type == 'W':  # Panel stations need panel information
+                panels = _get_panels_for_module(db, target_module['plan_id'])
+        
+        return {
+            'module': current_module,
+            'upcoming_module': upcoming_module,
+            'tasks': tasks,
+            'panels': panels
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in get_module_and_panels_for_station: {e}", exc_info=True)
+        return None
+
+
+def _find_module_for_panel_station(db, station_sequence, specialty_id):
+    """Find appropriate module for panel line stations (W1-W5)"""
+    
+    # Look for modules currently at this station (status='Panels')
+    current_module_cursor = db.execute("""
+        SELECT mpp.plan_id, mpp.project_name, mpp.house_identifier, mpp.module_number, 
+               mpp.status, mpp.planned_sequence, mpp.planned_assembly_line,
+               ht.name as house_type_name, ht.number_of_modules,
+               hst.name as sub_type_name
+        FROM ModuleProductionPlan mpp
+        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+        WHERE mpp.status = 'Panels'
+        ORDER BY mpp.planned_sequence ASC
+        LIMIT 1
+    """)
+    current_module = current_module_cursor.fetchone()
+    
+    if current_module:
+        return dict(current_module), None
+    
+    # No current module at panels stage, look for the next planned module
+    upcoming_module_cursor = db.execute("""
+        SELECT mpp.plan_id, mpp.project_name, mpp.house_identifier, mpp.module_number, 
+               mpp.status, mpp.planned_sequence, mpp.planned_assembly_line,
+               ht.name as house_type_name, ht.number_of_modules,
+               hst.name as sub_type_name
+        FROM ModuleProductionPlan mpp
+        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+        WHERE mpp.status = 'Planned'
+        ORDER BY mpp.planned_sequence ASC
+        LIMIT 1
+    """)
+    upcoming_module = upcoming_module_cursor.fetchone()
+    
+    if upcoming_module:
+        return None, dict(upcoming_module)
+    
+    return None, None
+
+
+def _find_module_at_station(db, station_sequence, specialty_id):
+    """Find module currently at a specific station (Magazine or Assembly)"""
+    
+    # Determine status based on station sequence
+    if station_sequence == 6:  # Magazine
+        target_status = 'Magazine'
+    elif station_sequence >= 7:  # Assembly lines
+        target_status = 'Assembly'
+    else:
+        return None
+    
+    module_cursor = db.execute("""
+        SELECT mpp.plan_id, mpp.project_name, mpp.house_identifier, mpp.module_number, 
+               mpp.status, mpp.planned_sequence, mpp.planned_assembly_line,
+               ht.name as house_type_name, ht.number_of_modules,
+               hst.name as sub_type_name
+        FROM ModuleProductionPlan mpp
+        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+        WHERE mpp.status = ?
+        ORDER BY mpp.planned_sequence ASC
+        LIMIT 1
+    """, (target_status,))
+    
+    module = module_cursor.fetchone()
+    return dict(module) if module else None
+
+
+def _get_tasks_for_module_and_station(db, plan_id, station_sequence, specialty_id):
+    """Get available tasks for a module at a specific station"""
+    
+    specialty_filter = ""
+    params = [plan_id, station_sequence]
+    
+    if specialty_id is not None:
+        specialty_filter = "AND (td.specialty_id IS NULL OR td.specialty_id = ?)"
+        params.append(specialty_id)
+    
+    # Get panel tasks
+    panel_tasks_cursor = db.execute(f"""
+        SELECT DISTINCT td.task_definition_id, td.name as task_name, td.description as task_description,
+               td.is_panel_task, ptl.status as task_status, ptl.panel_definition_id as house_type_panel_id
+        FROM TaskDefinitions td
+        LEFT JOIN PanelTaskLogs ptl ON td.task_definition_id = ptl.task_definition_id AND ptl.plan_id = ?
+        WHERE td.station_sequence_order = ? AND td.is_panel_task = 1
+        {specialty_filter}
+        ORDER BY td.name
+    """, params)
+    
+    # Get module tasks
+    module_tasks_cursor = db.execute(f"""
+        SELECT DISTINCT td.task_definition_id, td.name as task_name, td.description as task_description,
+               td.is_panel_task, tl.status as task_status, NULL as house_type_panel_id
+        FROM TaskDefinitions td
+        LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.plan_id = ?
+        WHERE td.station_sequence_order = ? AND td.is_panel_task = 0
+        {specialty_filter}
+        ORDER BY td.name
+    """, params)
+    
+    panel_tasks = [dict(row) for row in panel_tasks_cursor.fetchall()]
+    module_tasks = [dict(row) for row in module_tasks_cursor.fetchall()]
+    
+    # Set default status for tasks that haven't been started
+    for task in panel_tasks + module_tasks:
+        if task['task_status'] is None:
+            task['task_status'] = 'Not Started'
+    
+    return panel_tasks + module_tasks
+
+
+def _get_panels_for_module(db, plan_id):
+    """Get available panels for a module"""
+    
+    panels_cursor = db.execute("""
+        SELECT pd.panel_definition_id, pd.panel_code, pd.panel_group,
+               m.multiwall_code
+        FROM ModuleProductionPlan mpp
+        JOIN PanelDefinitions pd ON mpp.house_type_id = pd.house_type_id
+        LEFT JOIN Multiwalls m ON pd.multiwall_id = m.multiwall_id
+        WHERE mpp.plan_id = ?
+        AND (pd.sub_type_id IS NULL OR pd.sub_type_id = mpp.sub_type_id)
+        ORDER BY pd.panel_group, pd.panel_code
+    """, (plan_id,))
+    
+    return [dict(row) for row in panels_cursor.fetchall()]
