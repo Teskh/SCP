@@ -1,5 +1,5 @@
 // Production service for station context and task management
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5003/api/production';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5004/api/production';
 
 // Helper function to handle response status and parsing
 const handleResponse = async (response) => {
