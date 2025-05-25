@@ -108,6 +108,18 @@ function StationManager() {
 
     const groupedStationOptions = getStationOptions();
 
+    // Helper to find the label for the selected station context from the grouped options
+    const findLabelForStationContext = (contextValue) => {
+        if (!contextValue) return '';
+        const allOptions = [
+            ...groupedStationOptions.general,
+            ...groupedStationOptions.panelLineSpecific,
+            ...groupedStationOptions.assemblyLines
+        ];
+        const foundOption = allOptions.find(opt => opt.value === contextValue);
+        return foundOption ? foundOption.label : contextValue;
+    };
+
     const containerStyle = {
         padding: '20px',
         fontFamily: 'Arial, sans-serif',
@@ -198,7 +210,7 @@ function StationManager() {
                             <h4 style={{ margin: '0 0 10px 0' }}>Contexto Actual:</h4>
                             <p style={{ margin: '0' }}>
                                 <strong>
-                                    {stationOptions.find(opt => opt.value === selectedStationContext)?.label || selectedStationContext}
+                                    {findLabelForStationContext(selectedStationContext)}
                                 </strong>
                             </p>
                             <button onClick={clearSelection} style={clearButtonStyle}>
