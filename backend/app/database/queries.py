@@ -174,100 +174,6 @@ def add_bulk_module_production_plan_items(items_data):
         logging.error(f"Error adding bulk module production plan items: {e}", exc_info=True)
         return False
 
-def get_module_production_plan(filters=None, sort_by='planned_sequence', sort_order='ASC', limit=None, offset=None):
-    """
-    Fetches module production plan items, excluding 'Completed' status,
-    with optional filtering, sorting, and pagination.
-    Default sort is by planned_sequence ASC.
-    """
-    db = get_db()
-    base_query = """
-        SELECT
-            mpp.plan_id, mpp.project_name,
-            mpp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
-            mpp.house_identifier, mpp.module_number,
-            mpp.planned_sequence, mpp.planned_start_datetime,
-            mpp.planned_assembly_line, mpp.status, mpp.created_at, mpp.updated_at,
-            mpp.sub_type_id, hst.name as sub_type_name
-        FROM ModuleProductionPlan mpp
-        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-    """
-    where_clauses = ["mpp.status != 'Completed'"] # Default filter
-    params = []
-
-    if filters:
-        if filters.get('project_name'):
-            where_clauses.append("mpp.project_name LIKE ?")
-            params.append(f"%{filters['project_name']}%")
-        if filters.get('house_type_id'):
-            where_clauses.append("mpp.house_type_id = ?")
-            params.append(filters['house_type_id'])
-        # Status filter might still be useful for other non-completed statuses
-        if filters.get('status') and filters['status'].lower() != 'completed':
-            statuses = filters['status'].split(',')
-            # Ensure 'Completed' is not part of the filter if explicitly passed
-            statuses = [s for s in statuses if s.lower() != 'completed']
-            if statuses:
-                placeholders = ','.join('?' * len(statuses))
-                where_clauses.append(f"mpp.status IN ({placeholders})")
-                params.extend(statuses)
-        if filters.get('start_date_after'):
-            where_clauses.append("mpp.planned_start_datetime >= ?")
-            params.append(filters['start_date_after'])
-        if filters.get('sub_type_id'):
-            where_clauses.append("mpp.sub_type_id = ?")
-            params.append(filters['sub_type_id'])
-
-    if where_clauses:
-        base_query += " WHERE " + " AND ".join(where_clauses)
-
-    # Default sort is planned_sequence ASC, other sorts are secondary or override
-    allowed_sort_columns = ['plan_id', 'project_name', 'house_type_name', 'house_identifier', 'module_number', 'planned_sequence', 'planned_start_datetime', 'planned_assembly_line', 'status', 'created_at', 'updated_at', 'sub_type_name']
-    
-    final_sort_by = 'mpp.planned_sequence' # Primary sort
-    final_sort_order = 'ASC'
-
-    if sort_by in allowed_sort_columns and sort_by != 'planned_sequence':
-        # If a different primary sort is requested, apply it, then sequence as secondary
-        final_sort_by = f"{sort_by} {sort_order.upper() if sort_order.upper() in ['ASC', 'DESC'] else 'ASC'}, mpp.planned_sequence ASC"
-    elif sort_by == 'planned_sequence' and sort_order.upper() == 'DESC':
-        final_sort_order = 'DESC'
-        final_sort_by = f"mpp.planned_sequence {final_sort_order}"
-    # else it's default planned_sequence ASC
-
-    base_query += f" ORDER BY {final_sort_by}"
-
-    if limit is not None:
-        base_query += " LIMIT ?"
-        params.append(limit)
-        if offset is not None:
-            base_query += " OFFSET ?"
-            params.append(offset)
-
-    cursor = db.execute(base_query, params)
-    return [dict(row) for row in cursor.fetchall()]
-
-def get_module_production_plan_item_by_id(plan_id):
-    """Fetches a single module production plan item by its ID."""
-    db = get_db()
-    query = """
-        SELECT
-            mpp.plan_id, mpp.project_name,
-            mpp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
-            mpp.house_identifier, mpp.module_number,
-            mpp.planned_sequence, mpp.planned_start_datetime,
-            mpp.planned_assembly_line, mpp.status, mpp.created_at, mpp.updated_at,
-            mpp.sub_type_id, hst.name as sub_type_name
-        FROM ModuleProductionPlan mpp
-        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE mpp.plan_id = ?
-    """
-    cursor = db.execute(query, (plan_id,))
-    row = cursor.fetchone()
-    return dict(row) if row else None
-
 def update_module_production_plan_item(plan_id, updates):
     """Updates specific fields of a module production plan item."""
     db = get_db()
@@ -886,236 +792,6 @@ def get_all_house_types_with_details():
     return list(house_types_dict.values())
 
 
-def get_logged_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_specialty_id):
-    """
-    Fetches LOGGED module tasks (is_panel_task = 0) for a given plan_id at a specific station,
-    considering worker's specialty. Checks TaskLogs.
-    """
-    db = get_db()
-    # This function fetches MODULE tasks (is_panel_task = 0) from TaskLogs
-    query = """
-        SELECT
-            td.task_definition_id,
-            td.name AS task_name,
-            td.description AS task_description,
-            td.is_panel_task,
-            COALESCE(tl.status, 'Not Started') AS task_status,
-            tl.task_log_id,
-            tl.started_at,
-            tl.completed_at
-        FROM TaskDefinitions td
-        LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.plan_id = ?
-        JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
-        WHERE
-            (td.house_type_id = ? OR td.house_type_id IS NULL)
-            AND (td.specialty_id = ? OR td.specialty_id IS NULL)
-            AND td.is_panel_task = 0 -- Explicitly for module-level tasks
-        ORDER BY td.name;
-    """
-    tasks_cursor = db.execute(query, (plan_id, station_id, house_type_id, worker_specialty_id))
-    return [dict(row) for row in tasks_cursor.fetchall()]
-
-def get_logged_panel_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_specialty_id, panel_definition_id):
-    """
-    Fetches LOGGED PANEL tasks (is_panel_task = 1) for a specific panel of a plan_id at a station.
-    Checks PanelTaskLogs.
-    """
-    db = get_db()
-    query = """
-        SELECT
-            td.task_definition_id,
-            td.name AS task_name,
-            td.description AS task_description,
-            td.is_panel_task,
-            COALESCE(ptl.status, 'Not Started') AS task_status,
-            ptl.panel_task_log_id,
-            ptl.started_at,
-            ptl.completed_at
-        FROM TaskDefinitions td
-        LEFT JOIN PanelTaskLogs ptl ON td.task_definition_id = ptl.task_definition_id
-                                    AND ptl.plan_id = ?
-                                    AND ptl.panel_definition_id = ?
-        JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
-        WHERE
-            (td.house_type_id = ? OR td.house_type_id IS NULL)
-            AND (td.specialty_id = ? OR td.specialty_id IS NULL)
-            AND td.is_panel_task = 1 -- Explicitly for panel-level tasks
-        ORDER BY td.name;
-    """
-    tasks_cursor = db.execute(query, (plan_id, panel_definition_id, station_id, house_type_id, worker_specialty_id))
-    return [dict(row) for row in tasks_cursor.fetchall()]
-
-
-def get_tasks_for_plan_at_station(station_id, plan_id, house_type_id, worker_specialty_id, is_panel_task=0):
-    """
-    Fetches task definitions relevant for a planned module (before it exists in Modules table)
-    at a specific station, considering the worker's specialty and whether it's a panel or module task.
-    Does NOT check TaskLogs/PanelTaskLogs as the module/panel hasn't started yet.
-    """
-    db = get_db()
-    query = """
-        SELECT
-            td.task_definition_id,
-            td.name AS task_name,
-            td.description AS task_description,
-            td.is_panel_task,
-            'Not Started' AS task_status,
-            NULL AS task_log_id, -- No log exists yet (task_log_id or panel_task_log_id)
-            NULL AS started_at,
-            NULL AS completed_at
-            -- No panel_id / panel_definition_id here as it's pre-logging
-        FROM TaskDefinitions td
-        JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
-        WHERE
-            (td.house_type_id = ? OR td.house_type_id IS NULL)
-            AND (td.specialty_id = ? OR td.specialty_id IS NULL)
-            AND td.is_panel_task = ? -- Filter by is_panel_task
-        ORDER BY td.name;
-    """
-    tasks_cursor = db.execute(query, (station_id, house_type_id, worker_specialty_id, is_panel_task))
-    tasks = [dict(row) for row in tasks_cursor.fetchall()]
-    for task in tasks:
-        task['plan_id'] = plan_id # Add plan_id for context
-    return tasks
-
-# === TaskLog Operations ===
-
-def start_task_log(plan_id, task_definition_id, worker_id, station_start):
-    """
-    Starts a MODULE task (is_panel_task=0) by inserting a new record into TaskLogs using plan_id.
-    Sets status to 'In Progress' and records the start time and station.
-    """
-    db = get_db()
-    # Verify this task definition is NOT a panel task
-    td_cursor = db.execute("SELECT is_panel_task FROM TaskDefinitions WHERE task_definition_id = ?", (task_definition_id,))
-    td_data = td_cursor.fetchone()
-    if not td_data or td_data['is_panel_task'] == 1:
-        logging.error(f"Attempted to start task_definition_id {task_definition_id} in TaskLogs, but it's a panel task or does not exist.")
-        raise ValueError("This task should be logged in PanelTaskLogs or task definition is invalid.")
-
-    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    try:
-        cursor = db.execute(
-            """INSERT INTO TaskLogs
-               (plan_id, task_definition_id, worker_id, station_start, started_at, status, notes)
-               VALUES (?, ?, ?, ?, ?, ?, NULL)""",
-            (plan_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
-        )
-        db.commit()
-        return cursor.lastrowid
-    except sqlite3.IntegrityError as e:
-        logging.error(f"Error starting task log (IntegrityError): {e}", exc_info=True)
-        raise e
-    except sqlite3.Error as e:
-        logging.error(f"Error starting task log: {e}", exc_info=True)
-        return None
-
-def update_task_log_status(task_log_id, status, station_finish=None, notes=None):
-    """Updates the status of a TaskLog. Sets completed_at if status is 'Completed'."""
-    db = get_db()
-    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    try:
-        if status == 'Completed':
-            cursor = db.execute(
-                "UPDATE TaskLogs SET status = ?, completed_at = ?, station_finish = ?, notes = ? WHERE task_log_id = ?",
-                (status, current_timestamp, station_finish, notes, task_log_id)
-            )
-        else:
-            cursor = db.execute(
-                "UPDATE TaskLogs SET status = ?, notes = ? WHERE task_log_id = ?", # station_finish and completed_at not set if not 'Completed'
-                (status, notes, task_log_id)
-            )
-        db.commit()
-        return cursor.rowcount > 0
-    except sqlite3.Error as e:
-        logging.error(f"Error updating task log {task_log_id} status: {e}", exc_info=True)
-        return False
-
-def get_task_log_by_id(task_log_id):
-    """Fetches a specific TaskLog by its ID."""
-    db = get_db()
-    cursor = db.execute("SELECT * FROM TaskLogs WHERE task_log_id = ?", (task_log_id,))
-    row = cursor.fetchone()
-    return dict(row) if row else None
-
-
-# === PanelTaskLog Operations ===
-
-def start_panel_task_log(plan_id, panel_definition_id, task_definition_id, worker_id, station_start):
-    """
-    Starts a PANEL task (is_panel_task=1) by inserting a new record into PanelTaskLogs using plan_id.
-    Sets status to 'In Progress' and records the start time and station.
-    """
-    db = get_db()
-    # Verify this task definition IS a panel task
-    td_cursor = db.execute("SELECT is_panel_task FROM TaskDefinitions WHERE task_definition_id = ?", (task_definition_id,))
-    td_data = td_cursor.fetchone()
-    if not td_data or td_data['is_panel_task'] == 0:
-        logging.error(f"Attempted to start task_definition_id {task_definition_id} in PanelTaskLogs, but it's not a panel task or does not exist.")
-        raise ValueError("This task should be logged in TaskLogs or task definition is invalid.")
-
-    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    try:
-        cursor = db.execute(
-            """INSERT INTO PanelTaskLogs
-               (plan_id, panel_definition_id, task_definition_id, worker_id, station_start, started_at, status, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, NULL)""",
-            (plan_id, panel_definition_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
-        )
-        db.commit()
-        return cursor.lastrowid
-    except sqlite3.IntegrityError as e:
-        logging.error(f"Error starting panel task log (IntegrityError): {e}", exc_info=True)
-        raise e
-    except sqlite3.Error as e:
-        logging.error(f"Error starting panel task log: {e}", exc_info=True)
-        return None
-
-def update_panel_task_log_status(panel_task_log_id, status, station_finish=None, notes=None):
-    """Updates the status of a PanelTaskLog. Sets completed_at if status is 'Completed'."""
-    db = get_db()
-    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    try:
-        if status == 'Completed':
-            cursor = db.execute(
-                "UPDATE PanelTaskLogs SET status = ?, completed_at = ?, station_finish = ?, notes = ? WHERE panel_task_log_id = ?",
-                (status, current_timestamp, station_finish, notes, panel_task_log_id)
-            )
-        else:
-            cursor = db.execute(
-                "UPDATE PanelTaskLogs SET status = ?, notes = ? WHERE panel_task_log_id = ?",
-                (status, notes, panel_task_log_id)
-            )
-        db.commit()
-        return cursor.rowcount > 0
-    except sqlite3.Error as e:
-        logging.error(f"Error updating panel task log {panel_task_log_id} status: {e}", exc_info=True)
-        return False
-
-def get_panel_task_log_by_id(panel_task_log_id):
-    """Fetches a specific PanelTaskLog by its ID."""
-    db = get_db()
-    cursor = db.execute("SELECT * FROM PanelTaskLogs WHERE panel_task_log_id = ?", (panel_task_log_id,))
-    row = cursor.fetchone()
-    return dict(row) if row else None
-
-def get_panel_task_logs_for_plan_panel(plan_id, panel_definition_id):
-    """Fetches all PanelTaskLogs for a specific panel within a plan."""
-    db = get_db()
-    cursor = db.execute(
-        "SELECT * FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? ORDER BY started_at",
-        (plan_id, panel_definition_id)
-    )
-    return [dict(row) for row in cursor.fetchall()]
-
-
-# === Modules Table Operations (Removed as Modules table is gone) ===
-
-# Functions like get_module_by_plan_id, create_module_from_plan, 
-# update_module_status_and_station were removed as they relied on the Modules table.
-# Logic for module status changes is now typically handled by updating ModuleProductionPlan directly.
-
-
 def get_all_stations():
     """Fetches all stations for dropdowns."""
     db = get_db()
@@ -1204,403 +880,112 @@ def _get_panel_definitions_for_planned_module(db, plan_house_type_id, plan_modul
     return defined_panels
 
 
-def _get_tasks_with_status_for_active_plan(db, station_id, plan_id, house_type_id, specialty_id):
+# === TaskLog Operations ===
+
+def start_task_log(plan_id, task_definition_id, worker_id, station_start):
     """
-    Fetches task definitions for an ACTIVE plan_id at a station, including their logged status.
-    """
-    defined_tasks_query = """
-        SELECT
-            td.task_definition_id, td.name AS task_name, td.description AS task_description,
-            td.is_panel_task, td.station_sequence_order
-        FROM TaskDefinitions td
-        JOIN Stations s ON td.station_sequence_order = s.sequence_order AND s.station_id = ?
-        WHERE
-            (td.house_type_id = ? OR td.house_type_id IS NULL)
-            AND (td.specialty_id = ? OR td.specialty_id IS NULL)
-        ORDER BY td.name;
-    """
-    defined_tasks_cursor = db.execute(defined_tasks_query, (station_id, house_type_id, specialty_id))
-    
-    tasks_with_status = []
-
-    for td_row in defined_tasks_cursor.fetchall():
-        task_def = dict(td_row)
-        task_status = 'Not Started'
-        log_id = None
-        started_at = None
-        completed_at = None
-        logged_panel_definition_id_for_task = None 
-
-        if task_def['is_panel_task'] == 0: # Module Task
-            log_cursor = db.execute(
-                "SELECT task_log_id, status, started_at, completed_at FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ?",
-                (plan_id, task_def['task_definition_id'])
-            )
-            log_row = log_cursor.fetchone()
-            if log_row:
-                task_status = log_row['status']
-                log_id = log_row['task_log_id']
-                started_at = log_row['started_at']
-                completed_at = log_row['completed_at']
-        else: # Panel Task
-            log_cursor = db.execute(
-                """SELECT panel_task_log_id, status, started_at, completed_at, panel_definition_id 
-                   FROM PanelTaskLogs 
-                   WHERE plan_id = ? AND task_definition_id = ?
-                   ORDER BY started_at DESC LIMIT 1""",
-                (plan_id, task_def['task_definition_id'])
-            )
-            log_row = log_cursor.fetchone()
-            if log_row:
-                task_status = log_row['status']
-                log_id = log_row['panel_task_log_id']
-                started_at = log_row['started_at']
-                completed_at = log_row['completed_at']
-                logged_panel_definition_id_for_task = log_row['panel_definition_id']
-
-        tasks_with_status.append({
-            'task_definition_id': task_def['task_definition_id'],
-            'task_name': task_def['task_name'],
-            'task_description': task_def['task_description'],
-            'is_panel_task': task_def['is_panel_task'],
-            'task_status': task_status,
-            'log_id': log_id,
-            'started_at': started_at,
-            'completed_at': completed_at,
-            'plan_id': plan_id,
-            'house_type_panel_id': logged_panel_definition_id_for_task if task_def['is_panel_task'] else None
-        })
-        
-    return tasks_with_status
-
-
-def get_module_and_panels_for_station(station_id, specialty_id=None): # Added specialty_id
-    """
-    Determines the active or next module for a given station, its panels, and relevant tasks.
-    Logic:
-    1. Check for an existing module 'In Progress' (assembly) or 'Panels' (panel line) at the station.
-    2. If station is W1 (or first panel station) and no active module, find next 'Planned' module.
-    3. If station is an assembly station and no active module, find next 'Magazine' module for its line.
+    Starts a MODULE task (is_panel_task=0) by inserting a new record into TaskLogs using plan_id.
+    Sets status to 'In Progress' and records the start time and station.
     """
     db = get_db()
-    
-    # Get station type and sequence order
-    station_info_cursor = db.execute("SELECT line_type, sequence_order FROM Stations WHERE station_id = ?", (station_id,))
-    station_info = station_info_cursor.fetchone()
-    if not station_info:
-        logging.warning(f"Station ID {station_id} not found.")
-        return None
-    station_line_type = station_info['line_type']
-    # station_sequence_order = station_info['sequence_order'] # Not used yet, but good to have
+    # Verify this task definition is NOT a panel task
+    td_cursor = db.execute("SELECT is_panel_task FROM TaskDefinitions WHERE task_definition_id = ?", (task_definition_id,))
+    td_data = td_cursor.fetchone()
+    if not td_data or td_data['is_panel_task'] == 1:
+        logging.error(f"Attempted to start task_definition_id {task_definition_id} in TaskLogs, but it's a panel task or does not exist.")
+        raise ValueError("This task should be logged in PanelTaskLogs or task definition is invalid.")
 
-    module_data = None
-    panels = []
-    tasks = [] # Initialize tasks list
-
-    # Step 1: Find Active Module at the station (using ModuleProductionPlan)
-    # An "active" module is one whose status corresponds to the station type.
-    
-    active_module_query = ""
-    active_module_params = []
-
-    if station_line_type == 'W': # Panel Line Stations (W1-W5)
-        active_module_query = """
-            SELECT mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.status,
-                   mpp.project_name, mpp.house_identifier, mpp.sub_type_id, mpp.planned_sequence,
-                   ht.name as house_type_name, ht.number_of_modules,
-                   hst.name as sub_type_name
-            FROM ModuleProductionPlan mpp
-            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-            WHERE mpp.status = 'Panels' -- Module is in panel production phase
-            ORDER BY mpp.planned_sequence ASC LIMIT 1
-        """
-        # For W stations, we don't filter by specific station_id here,
-        # as 'Panels' status applies to the whole line. The station_id context is implicit.
-    elif station_line_type in ['A', 'B', 'C']: # Assembly Line Stations
-        active_module_query = """
-            SELECT mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.status,
-                   mpp.project_name, mpp.house_identifier, mpp.sub_type_id, mpp.planned_sequence,
-                   ht.name as house_type_name, ht.number_of_modules,
-                   hst.name as sub_type_name
-            FROM ModuleProductionPlan mpp
-            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-            WHERE mpp.status = 'Assembly' AND mpp.planned_assembly_line = ?
-            ORDER BY mpp.planned_sequence ASC LIMIT 1
-        """
-        active_module_params.append(station_line_type) # Filter by A, B, or C
-
-    if active_module_query:
-        active_module_cursor = db.execute(active_module_query, tuple(active_module_params))
-        module_row = active_module_cursor.fetchone()
-        if module_row:
-            module_data = {
-                'module_id': None, # No Modules table, so no module_id in this direct sense
-                'plan_id': module_row['plan_id'],
-                'house_type_id': module_row['house_type_id'],
-                'module_sequence_in_house': module_row['module_number'], # Use module_number as sequence
-                'module_status': module_row['status'], # This is ModuleProductionPlan.status
-                'project_name': module_row['project_name'],
-                'house_identifier': module_row['house_identifier'],
-                'module_number': module_row['module_number'],
-                'sub_type_id': module_row['sub_type_id'],
-                'planned_sequence': module_row['planned_sequence'],
-                'house_type_name': module_row['house_type_name'],
-                'number_of_modules': module_row['number_of_modules'],
-                'sub_type_name': module_row['sub_type_name'],
-                'current_station_id': station_id # Contextually for this station
-            }
-            panels = _get_panels_with_status_for_plan(db, module_data['plan_id'], module_data['house_type_id'],
-                                                      module_data['module_number'], module_data['sub_type_id'])
-            
-            # Fetch tasks for the active module
-            # Fetch tasks for the active module, including their logged status
-            tasks = _get_tasks_with_status_for_active_plan(db, station_id, module_data['plan_id'], module_data['house_type_id'], specialty_id)
-            
-            logging.info(f"Found active plan {module_data['plan_id']} relevant for station {station_id}. Returning module, panels, and tasks with logged statuses.")
-            return {'module': module_data, 'panels': panels, 'tasks': tasks}
-
-    # Step 2: No Active Module - Special handling for W1 (first panel station)
-    if station_id == 'W1':
-        logging.info(f"No active module at W1. Looking for next 'Planned' module.")
-        next_planned_cursor = db.execute("""
-            SELECT 
-                mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.project_name, 
-                mpp.house_identifier, mpp.sub_type_id, mpp.planned_sequence,
-                mpp.planned_start_datetime, mpp.planned_assembly_line, mpp.status,
-                ht.name as house_type_name, ht.number_of_modules,
-                hst.name as sub_type_name
-            FROM ModuleProductionPlan mpp
-            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-            WHERE mpp.status = 'Planned'
-            ORDER BY mpp.planned_sequence ASC LIMIT 1
-        """)
-        next_planned_row = next_planned_cursor.fetchone()
-
-        if next_planned_row:
-            # Construct module_data from the plan item. This module doesn't exist in Modules table yet.
-            module_data_from_plan = {
-                'module_id': None, # Indicates it's not an existing module instance from Modules table
-                'plan_id': next_planned_row['plan_id'],
-                'house_type_id': next_planned_row['house_type_id'],
-                'module_sequence_in_house': next_planned_row['module_number'], # MPP.module_number is sequence in house
-                'module_status': next_planned_row['status'], # This is the ModuleProductionPlan status
-                'project_name': next_planned_row['project_name'],
-                'house_identifier': next_planned_row['house_identifier'],
-                'module_number': next_planned_row['module_number'], # from MPP
-                'sub_type_id': next_planned_row['sub_type_id'],
-                'planned_sequence': next_planned_row['planned_sequence'], # from MPP
-                'planned_start_datetime': next_planned_row['planned_start_datetime'],
-                'planned_assembly_line': next_planned_row['planned_assembly_line'],
-                'house_type_name': next_planned_row['house_type_name'],
-                'number_of_modules': next_planned_row['number_of_modules'],
-                'sub_type_name': next_planned_row['sub_type_name'],
-                'current_station_id': station_id # Contextually, it's for this station
-            }
-            panels = _get_panel_definitions_for_planned_module(db, 
-                                                              next_planned_row['house_type_id'], 
-                                                              next_planned_row['module_number'], # This is module_sequence_in_house
-                                                              next_planned_row['sub_type_id'])
-            
-            # Fetch tasks for this upcoming planned module
-            module_tasks_planned = get_tasks_for_plan_at_station(station_id, module_data_from_plan['plan_id'], module_data_from_plan['house_type_id'], specialty_id, is_panel_task=0)
-            panel_tasks_planned = get_tasks_for_plan_at_station(station_id, module_data_from_plan['plan_id'], module_data_from_plan['house_type_id'], specialty_id, is_panel_task=1)
-            tasks = module_tasks_planned + panel_tasks_planned
-
-            logging.info(f"Found next planned module (plan_id: {next_planned_row['plan_id']}) for W1. Returning its definition, panels, and tasks.")
-            return {'module': module_data_from_plan, 'panels': panels, 'tasks': tasks}
-        else:
-            logging.info("No 'Planned' modules available for W1.")
-            
-    # Step 3: No Active Module - Assembly Stations (A,B,C)
-    elif station_line_type in ['A', 'B', 'C']:
-        logging.info(f"No active module at assembly station {station_id}. Looking for next 'Magazine' module for line {station_line_type}.")
-        next_magazine_cursor = db.execute(f"""
-            SELECT mpp.plan_id, mpp.house_type_id, mpp.module_number, mpp.project_name, mpp.house_identifier, mpp.sub_type_id,
-                   ht.name as house_type_name, ht.number_of_modules, hst.name as sub_type_name
-            FROM ModuleProductionPlan mpp
-            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-            WHERE mpp.status = 'Magazine' AND mpp.planned_assembly_line = ?
-            ORDER BY mpp.planned_sequence ASC LIMIT 1
-        """, (station_line_type,))
-        next_magazine_row = next_magazine_cursor.fetchone()
-
-        if next_magazine_row:
-            plan_id = next_magazine_row['plan_id']
-            logging.info(f"Found next magazine module (plan_id: {plan_id}) for station {station_id}. Creating/assigning module entry.")
-            # Update ModuleProductionPlan status to 'Assembly'
-            success_update = update_module_production_plan_item(plan_id, {'status': 'Assembly'})
-            if success_update:
-                # After updating, this module is now the active one. Re-fetch context.
-                logging.info(f"Plan {plan_id} status updated to Assembly. Re-fetching context for station {station_id}.")
-                return get_module_and_panels_for_station(station_id, specialty_id) # Recursive call, pass specialty_id
-            else:
-                logging.error(f"Failed to update plan_id {plan_id} status to 'Assembly' at station {station_id}.")
-        else:
-            logging.info(f"No 'Magazine' modules available for station {station_id} on line {station_line_type}.")
-
-    # If no module determined by any rule
-    logging.info(f"No suitable module found for station {station_id}. Returning empty context.")
-    return {'module': None, 'panels': [], 'tasks': []}
-
-
-def get_next_pending_panel_for_plan(plan_id): # Renamed from get_next_pending_panel_for_module
-    """
-    Finds the next panel (PanelDefinition) for a given plan_id that is 'not_started'.
-    This relies on _get_panels_with_status_for_plan to determine panel statuses.
-    Requires house_type_id, module_sequence_in_house (module_number from MPP), and sub_type_id from the plan.
-    """
-    db = get_db()
-    plan_details_cursor = db.execute("""
-        SELECT mpp.house_type_id, mpp.module_number, mpp.sub_type_id
-        FROM ModuleProductionPlan mpp
-        WHERE mpp.plan_id = ?
-    """, (plan_id,))
-    plan_details = plan_details_cursor.fetchone()
-
-    if not plan_details:
-        logging.warning(f"Plan {plan_id} not found for get_next_pending_panel_for_plan.")
-        return None
-
-    # module_number from ModuleProductionPlan is the module_sequence_in_house
-    panels_with_status = _get_panels_with_status_for_plan(
-        db, plan_id, plan_details['house_type_id'],
-        plan_details['module_number'], # This is module_sequence_in_house
-        plan_details['sub_type_id']
-    )
-
-    for panel in panels_with_status:
-        if panel['status'] == 'not_started':
-            # Return the full panel object as determined by _get_panels_with_status_for_module
-            return panel 
-    return None
-
-
-# === Workers ===
-
-def get_all_workers():
-    """Fetches all workers with their specialty name and supervisor name."""
-    db = get_db()
-    query = """
-        SELECT
-            w.worker_id, w.first_name, w.last_name, w.pin, w.is_active,
-            w.specialty_id, s.name as specialty_name,
-            w.supervisor_id, atm.first_name as supervisor_first_name, atm.last_name as supervisor_last_name
-        FROM Workers w
-        LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
-        LEFT JOIN AdminTeam atm ON w.supervisor_id = atm.admin_team_id
-        ORDER BY w.last_name, w.first_name
-    """
-    cursor = db.execute(query)
-    workers_data = cursor.fetchall()
-    result = []
-    for row_data in workers_data:
-        worker_dict = dict(row_data)
-        if worker_dict['supervisor_first_name'] and worker_dict['supervisor_last_name']:
-            worker_dict['supervisor_name'] = f"{worker_dict['supervisor_first_name']} {worker_dict['supervisor_last_name']}"
-        else:
-            worker_dict['supervisor_name'] = None
-        result.append(worker_dict)
-    return result
-
-def get_worker_by_id(worker_id):
-    """Fetches a single worker by their ID, including specialty and supervisor names."""
-    db = get_db()
-    query = """
-        SELECT
-            w.worker_id, w.first_name, w.last_name, w.pin, w.is_active,
-            w.specialty_id, s.name as specialty_name,
-            w.supervisor_id, atm.first_name as supervisor_first_name, atm.last_name as supervisor_last_name
-        FROM Workers w
-        LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
-        LEFT JOIN AdminTeam atm ON w.supervisor_id = atm.admin_team_id
-        WHERE w.worker_id = ?
-    """
-    cursor = db.execute(query, (worker_id,))
-    row_data = cursor.fetchone()
-    if not row_data:
-        return None
-
-    worker_dict = dict(row_data)
-    if worker_dict['supervisor_first_name'] and worker_dict['supervisor_last_name']:
-        worker_dict['supervisor_name'] = f"{worker_dict['supervisor_first_name']} {worker_dict['supervisor_last_name']}"
-    else:
-        worker_dict['supervisor_name'] = None
-    return worker_dict
-
-def get_worker_by_pin(pin):
-    """Fetches a worker by their PIN, including specialty for context."""
-    db = get_db()
-    # Include specialty_id and specialty_name for immediate use after login
-    cursor = db.execute(
-        """SELECT w.worker_id, w.first_name, w.last_name, w.pin, w.specialty_id, s.name as specialty_name, w.is_active
-           FROM Workers w
-           LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
-           WHERE w.pin = ?""",
-        (pin,)
-    )
-    row = cursor.fetchone()
-    return dict(row) if row else None
-
-def add_worker(first_name, last_name, pin, specialty_id, supervisor_id, is_active):
-    """Adds a new worker to the database."""
-    db = get_db()
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
         cursor = db.execute(
-            """INSERT INTO Workers
-               (first_name, last_name, pin, specialty_id, supervisor_id, is_active)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (first_name, last_name, pin, specialty_id, supervisor_id, is_active)
+            """INSERT INTO TaskLogs
+               (plan_id, task_definition_id, worker_id, station_start, started_at, status, notes)
+               VALUES (?, ?, ?, ?, ?, ?, NULL)""",
+            (plan_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
         )
         db.commit()
         return cursor.lastrowid
-    except sqlite3.IntegrityError as e: # Catch IntegrityError for duplicate PINs if PIN is UNIQUE
-        logging.error(f"Error adding worker (IntegrityError, possibly duplicate PIN): {e}", exc_info=True)
-        raise e # Re-raise for API to handle
+    except sqlite3.IntegrityError as e:
+        logging.error(f"Error starting task log (IntegrityError): {e}", exc_info=True)
+        raise e
     except sqlite3.Error as e:
-        logging.error(f"Error adding worker: {e}", exc_info=True)
+        logging.error(f"Error starting task log: {e}", exc_info=True)
         return None
 
-def update_worker(worker_id, first_name, last_name, pin, specialty_id, supervisor_id, is_active):
-    """Updates an existing worker."""
+def update_task_log_status(task_log_id, status, station_finish=None, notes=None):
+    """Updates the status of a TaskLog. Sets completed_at if status is 'Completed'."""
     db = get_db()
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        if status == 'Completed':
+            cursor = db.execute(
+                "UPDATE TaskLogs SET status = ?, completed_at = ?, station_finish = ?, notes = ? WHERE task_log_id = ?",
+                (status, current_timestamp, station_finish, notes, task_log_id)
+            )
+        else:
+            cursor = db.execute(
+                "UPDATE TaskLogs SET status = ?, notes = ? WHERE task_log_id = ?", # station_finish and completed_at not set if not 'Completed'
+                (status, notes, task_log_id)
+            )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logging.error(f"Error updating task log {task_log_id} status: {e}", exc_info=True)
+        return False
+
+
+# === PanelTaskLog Operations ===
+
+def start_panel_task_log(plan_id, panel_definition_id, task_definition_id, worker_id, station_start):
+    """
+    Starts a PANEL task (is_panel_task=1) by inserting a new record into PanelTaskLogs using plan_id.
+    Sets status to 'In Progress' and records the start time and station.
+    """
+    db = get_db()
+    # Verify this task definition IS a panel task
+    td_cursor = db.execute("SELECT is_panel_task FROM TaskDefinitions WHERE task_definition_id = ?", (task_definition_id,))
+    td_data = td_cursor.fetchone()
+    if not td_data or td_data['is_panel_task'] == 0:
+        logging.error(f"Attempted to start task_definition_id {task_definition_id} in PanelTaskLogs, but it's not a panel task or does not exist.")
+        raise ValueError("This task should be logged in TaskLogs or task definition is invalid.")
+
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
         cursor = db.execute(
-            """UPDATE Workers SET
-               first_name = ?, last_name = ?, pin = ?, specialty_id = ?,
-               supervisor_id = ?, is_active = ?
-               WHERE worker_id = ?""",
-            (first_name, last_name, pin, specialty_id, supervisor_id, is_active, worker_id)
+            """INSERT INTO PanelTaskLogs
+               (plan_id, panel_definition_id, task_definition_id, worker_id, station_start, started_at, status, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, NULL)""",
+            (plan_id, panel_definition_id, task_definition_id, worker_id, station_start, current_timestamp, 'In Progress')
         )
         db.commit()
-        return cursor.rowcount > 0
-    except sqlite3.IntegrityError as e: # Catch IntegrityError for duplicate PINs
-        logging.error(f"Error updating worker (IntegrityError, possibly duplicate PIN): {e}", exc_info=True)
-        raise e # Re-raise
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        logging.error(f"Error starting panel task log (IntegrityError): {e}", exc_info=True)
+        raise e
     except sqlite3.Error as e:
-        logging.error(f"Error updating worker: {e}", exc_info=True)
-        return False
+        logging.error(f"Error starting panel task log: {e}", exc_info=True)
+        return None
 
-def delete_worker(worker_id):
-    """Deletes a worker."""
+def update_panel_task_log_status(panel_task_log_id, status, station_finish=None, notes=None):
+    """Updates the status of a PanelTaskLog. Sets completed_at if status is 'Completed'."""
     db = get_db()
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
-        # Workers.supervisor_id has ON DELETE SET NULL
-        # TaskLogs/PanelTaskLogs have worker_id as FOREIGN KEY ON DELETE RESTRICT - this might cause issues if worker has logs.
-        # This should be handled by ensuring a worker cannot be deleted if they have logs, or by anonymizing logs.
-        # For now, let's assume deletion is allowed if no RESTRICT constraint is violated.
-        cursor = db.execute("DELETE FROM Workers WHERE worker_id = ?", (worker_id,))
+        if status == 'Completed':
+            cursor = db.execute(
+                "UPDATE PanelTaskLogs SET status = ?, completed_at = ?, station_finish = ?, notes = ? WHERE panel_task_log_id = ?",
+                (status, current_timestamp, station_finish, notes, panel_task_log_id)
+            )
+        else:
+            cursor = db.execute(
+                "UPDATE PanelTaskLogs SET status = ?, notes = ? WHERE panel_task_log_id = ?",
+                (status, notes, panel_task_log_id)
+            )
         db.commit()
         return cursor.rowcount > 0
     except sqlite3.Error as e:
-        logging.error(f"Error deleting worker: {e}", exc_info=True) # This will show if FK constraint fails
+        logging.error(f"Error updating panel task log {panel_task_log_id} status: {e}", exc_info=True)
         return False
-
-# === Production Plan related functions were moved up for clarity ===
-# (add_module_production_plan_item, get_module_production_plan, etc.)
 
 
 # === Station Status and Upcoming Modules ===
@@ -1966,3 +1351,123 @@ def delete_parameter_from_house_type_module_sub_type(house_type_id, parameter_id
 # They are removed to avoid confusion. If ProjectModules table is still needed for other purposes,
 # its functions should be reviewed and potentially kept, but they are not part of this refactor's scope
 # for production planning.
+
+# === Workers ===
+
+def get_all_workers():
+    """Fetches all workers with their specialty name and supervisor name."""
+    db = get_db()
+    query = """
+        SELECT
+            w.worker_id, w.first_name, w.last_name, w.pin, w.is_active,
+            w.specialty_id, s.name as specialty_name,
+            w.supervisor_id, atm.first_name as supervisor_first_name, atm.last_name as supervisor_last_name
+        FROM Workers w
+        LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
+        LEFT JOIN AdminTeam atm ON w.supervisor_id = atm.admin_team_id
+        ORDER BY w.last_name, w.first_name
+    """
+    cursor = db.execute(query)
+    workers_data = cursor.fetchall()
+    result = []
+    for row_data in workers_data:
+        worker_dict = dict(row_data)
+        if worker_dict['supervisor_first_name'] and worker_dict['supervisor_last_name']:
+            worker_dict['supervisor_name'] = f"{worker_dict['supervisor_first_name']} {worker_dict['supervisor_last_name']}"
+        else:
+            worker_dict['supervisor_name'] = None
+        result.append(worker_dict)
+    return result
+
+def get_worker_by_id(worker_id):
+    """Fetches a single worker by their ID, including specialty and supervisor names."""
+    db = get_db()
+    query = """
+        SELECT
+            w.worker_id, w.first_name, w.last_name, w.pin, w.is_active,
+            w.specialty_id, s.name as specialty_name,
+            w.supervisor_id, atm.first_name as supervisor_first_name, atm.last_name as supervisor_last_name
+        FROM Workers w
+        LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
+        LEFT JOIN AdminTeam atm ON w.supervisor_id = atm.admin_team_id
+        WHERE w.worker_id = ?
+    """
+    cursor = db.execute(query, (worker_id,))
+    row_data = cursor.fetchone()
+    if not row_data:
+        return None
+
+    worker_dict = dict(row_data)
+    if worker_dict['supervisor_first_name'] and worker_dict['supervisor_last_name']:
+        worker_dict['supervisor_name'] = f"{worker_dict['supervisor_first_name']} {worker_dict['supervisor_last_name']}"
+    else:
+        worker_dict['supervisor_name'] = None
+    return worker_dict
+
+def get_worker_by_pin(pin):
+    """Fetches a worker by their PIN, including specialty for context."""
+    db = get_db()
+    # Include specialty_id and specialty_name for immediate use after login
+    cursor = db.execute(
+        """SELECT w.worker_id, w.first_name, w.last_name, w.pin, w.specialty_id, s.name as specialty_name, w.is_active
+           FROM Workers w
+           LEFT JOIN Specialties s ON w.specialty_id = s.specialty_id
+           WHERE w.pin = ?""",
+        (pin,)
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def add_worker(first_name, last_name, pin, specialty_id, supervisor_id, is_active):
+    """Adds a new worker to the database."""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            """INSERT INTO Workers
+               (first_name, last_name, pin, specialty_id, supervisor_id, is_active)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (first_name, last_name, pin, specialty_id, supervisor_id, is_active)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e: # Catch IntegrityError for duplicate PINs if PIN is UNIQUE
+        logging.error(f"Error adding worker (IntegrityError, possibly duplicate PIN): {e}", exc_info=True)
+        raise e # Re-raise for API to handle
+    except sqlite3.Error as e:
+        logging.error(f"Error adding worker: {e}", exc_info=True)
+        return None
+
+def update_worker(worker_id, first_name, last_name, pin, specialty_id, supervisor_id, is_active):
+    """Updates an existing worker."""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            """UPDATE Workers SET
+               first_name = ?, last_name = ?, pin = ?, specialty_id = ?,
+               supervisor_id = ?, is_active = ?
+               WHERE worker_id = ?""",
+            (first_name, last_name, pin, specialty_id, supervisor_id, is_active, worker_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.IntegrityError as e: # Catch IntegrityError for duplicate PINs
+        logging.error(f"Error updating worker (IntegrityError, possibly duplicate PIN): {e}", exc_info=True)
+        raise e # Re-raise
+    except sqlite3.Error as e:
+        logging.error(f"Error updating worker: {e}", exc_info=True)
+        return False
+
+def delete_worker(worker_id):
+    """Deletes a worker."""
+    db = get_db()
+    try:
+        # Workers.supervisor_id has ON DELETE SET NULL
+        # TaskLogs/PanelTaskLogs have worker_id as FOREIGN KEY ON DELETE RESTRICT - this might cause issues if worker has logs.
+        # This should be handled by ensuring a worker cannot be deleted if they have logs, or by anonymizing logs.
+        # For now, let's assume deletion is allowed if no RESTRICT constraint is violated.
+        cursor = db.execute("DELETE FROM Workers WHERE worker_id = ?", (worker_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logging.error(f"Error deleting worker: {e}", exc_info=True) # This will show if FK constraint fails
+        return False
