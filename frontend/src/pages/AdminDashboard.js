@@ -104,8 +104,8 @@ function AdminDashboard() {
                     </li>
                     <li style={navItemStyles}>
                         <Link
-                            to="/admin/station-context"
-                            style={{ ...navLinkStyles, ...(isActive('/admin/station-context') ? navLinkActiveStyles : {}) }}
+                            to="/admin/station-manager"
+                            style={{ ...navLinkStyles, ...(isActive('/admin/station-manager') ? navLinkActiveStyles : {}) }}
                         >
                             Estaciones
                         </Link>
