@@ -34,16 +34,26 @@ function StationManager() {
     };
 
     const getStationOptions = () => {
-        if (!allStations || allStations.length === 0) return [];
+        if (!allStations || allStations.length === 0) {
+            return {
+                general: [],
+                panelLineSpecific: [],
+                assemblyLines: []
+            };
+        }
 
-        const options = [];
-        const sequenceMap = new Map();
+        const groupedOptions = {
+            general: [],
+            panelLineSpecific: [],
+            assemblyLines: []
+        };
 
         // 1. Add Panel Line General option
-        options.push({
+        groupedOptions.general.push({
             value: PANEL_LINE_GENERAL_VALUE,
             label: PANEL_LINE_GENERAL_LABEL,
-            description: 'Estaciones W1-W5'
+            description: 'Estaciones W1-W5',
+            type: 'general'
         });
 
         // 2. Add individual Panel Line stations (W1-W5)
@@ -52,22 +62,25 @@ function StationManager() {
             .sort((a, b) => a.sequence_order - b.sequence_order); // Ensure W1, W2, etc. order
 
         panelLineStations.forEach(station => {
-            options.push({
+            groupedOptions.panelLineSpecific.push({
                 value: station.station_id, // Use station_id for individual W stations
                 label: station.name, // e.g., "Estación de Estructura (W1)"
-                description: `Estación individual de la Línea de Paneles`
+                description: `Estación individual de la Línea de Paneles`,
+                type: 'specific_panel_line'
             });
         });
 
         // 3. Group assembly stations by sequence order (7-12 for assembly stations 1-6)
+        const sequenceMap = new Map();
         allStations.forEach(station => {
             if (station.sequence_order >= 7 && station.sequence_order <= 12) {
                 const assemblyNumber = station.sequence_order - 6; // 7->1, 8->2, etc.
                 if (!sequenceMap.has(station.sequence_order)) {
                     sequenceMap.set(station.sequence_order, {
-                        value: station.sequence_order,
+                        value: station.sequence_order.toString(), // Convert to string for consistency with localStorage
                         label: `Estación de Ensamblaje ${assemblyNumber}`,
-                        description: `Secuencia ${station.sequence_order} (Líneas A, B, C)`
+                        description: `Secuencia ${station.sequence_order} (Líneas A, B, C)`,
+                        type: 'assembly_line_group'
                     });
                 }
             }
@@ -76,11 +89,11 @@ function StationManager() {
         // 4. Add assembly stations in order
         for (let seq = 7; seq <= 12; seq++) {
             if (sequenceMap.has(seq)) {
-                options.push(sequenceMap.get(seq));
+                groupedOptions.assemblyLines.push(sequenceMap.get(seq));
             }
         }
 
-        return options;
+        return groupedOptions;
     };
 
     const handleStationSelect = (value) => {
@@ -93,7 +106,7 @@ function StationManager() {
         localStorage.removeItem('selectedStationContext');
     };
 
-    const stationOptions = getStationOptions();
+    const groupedStationOptions = getStationOptions();
 
     const containerStyle = {
         padding: '20px',
@@ -196,16 +209,53 @@ function StationManager() {
 
                     <h3>Seleccionar Contexto de Estación:</h3>
                     <div style={optionContainerStyle}>
-                        {stationOptions.map(option => (
-                            <div
-                                key={option.value}
-                                style={selectedStationContext === option.value ? selectedOptionCardStyle : optionCardStyle}
-                                onClick={() => handleStationSelect(option.value)}
-                            >
-                                <div style={optionTitleStyle}>{option.label}</div>
-                                <div style={optionDescriptionStyle}>{option.description}</div>
-                            </div>
-                        ))}
+                        {groupedStationOptions.general.length > 0 && (
+                            <>
+                                <h4 style={{ gridColumn: '1 / -1', textAlign: 'left', margin: '10px 0 5px 0', color: '#555' }}>Opciones Generales</h4>
+                                {groupedStationOptions.general.map(option => (
+                                    <div
+                                        key={option.value}
+                                        style={selectedStationContext === option.value ? selectedOptionCardStyle : optionCardStyle}
+                                        onClick={() => handleStationSelect(option.value)}
+                                    >
+                                        <div style={optionTitleStyle}>{option.label}</div>
+                                        <div style={optionDescriptionStyle}>{option.description}</div>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+
+                        {groupedStationOptions.panelLineSpecific.length > 0 && (
+                            <>
+                                <h4 style={{ gridColumn: '1 / -1', textAlign: 'left', margin: '10px 0 5px 0', color: '#555' }}>Estaciones Específicas de Línea de Paneles</h4>
+                                {groupedStationOptions.panelLineSpecific.map(option => (
+                                    <div
+                                        key={option.value}
+                                        style={selectedStationContext === option.value ? selectedOptionCardStyle : optionCardStyle}
+                                        onClick={() => handleStationSelect(option.value)}
+                                    >
+                                        <div style={optionTitleStyle}>{option.label}</div>
+                                        <div style={optionDescriptionStyle}>{option.description}</div>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+
+                        {groupedStationOptions.assemblyLines.length > 0 && (
+                            <>
+                                <h4 style={{ gridColumn: '1 / -1', textAlign: 'left', margin: '10px 0 5px 0', color: '#555' }}>Estaciones de Ensamblaje (Grupos)</h4>
+                                {groupedStationOptions.assemblyLines.map(option => (
+                                    <div
+                                        key={option.value}
+                                        style={selectedStationContext === option.value ? selectedOptionCardStyle : optionCardStyle}
+                                        onClick={() => handleStationSelect(option.value)}
+                                    >
+                                        <div style={optionTitleStyle}>{option.label}</div>
+                                        <div style={optionDescriptionStyle}>{option.description}</div>
+                                    </div>
+                                ))}
+                            </>
+                        )}
                     </div>
 
                     <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
