@@ -11,8 +11,6 @@ def create_app(config_class=AppConfig):
     app = Flask(__name__, static_folder='../../frontend/build', static_url_path='/')
     app.config.from_object(config_class)
 
-    # Enable CORS for all domains on all routes. For development purposes.
-    # TODO: Restrict CORS origins in production.
     CORS(app, resources={r"/api/*": {"origins": "*"}}) # Allow frontend dev server
 
     # Initialize database check and creation logic

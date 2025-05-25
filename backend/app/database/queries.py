@@ -1426,10 +1426,6 @@ def delete_worker(worker_id):
     """Deletes a worker."""
     db = get_db()
     try:
-        # Workers.supervisor_id has ON DELETE SET NULL
-        # TaskLogs/PanelTaskLogs have worker_id as FOREIGN KEY ON DELETE RESTRICT - this might cause issues if worker has logs.
-        # This should be handled by ensuring a worker cannot be deleted if they have logs, or by anonymizing logs.
-        # For now, let's assume deletion is allowed if no RESTRICT constraint is violated.
         cursor = db.execute("DELETE FROM Workers WHERE worker_id = ?", (worker_id,))
         db.commit()
         return cursor.rowcount > 0
