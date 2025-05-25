@@ -1,7 +1,7 @@
 import logging
 import sqlite3
 from flask import Blueprint, request, jsonify
-from ..database import queries, connection # Import connection for direct db access if needed
+from ..database import queries, connection
 
 # Configure logging for this blueprint
 logger = logging.getLogger(__name__)
@@ -17,10 +17,9 @@ def handle_exception(e):
 # === House Types Routes ===
 
 @admin_definitions_bp.route('/house_types', methods=['GET'])
-def get_house_types_route(): # Renamed for clarity
+def get_house_types_route():
     """Get all house types, including their sub_types and parameters."""
     try:
-        # Using the detailed fetcher from queries that includes sub_types and parameters
         types = queries.get_all_house_types_with_details()
         return jsonify(types)
     except Exception as e:
@@ -28,7 +27,7 @@ def get_house_types_route(): # Renamed for clarity
         return jsonify(error="Failed to fetch house types with details"), 500
 
 @admin_definitions_bp.route('/house_types', methods=['POST'])
-def add_house_type_route(): # Renamed for clarity
+def add_house_type_route():
     """Add a new house type and its associated sub_types."""
     data = request.get_json()
     if not data or 'name' not in data or 'number_of_modules' not in data:
@@ -42,18 +41,17 @@ def add_house_type_route(): # Renamed for clarity
 
     name = data['name']
     description = data.get('description', '')
-    sub_types_data = data.get('sub_types', []) # Expect a list of sub_type objects
+    sub_types_data = data.get('sub_types', [])
 
     db = connection.get_db()
     try:
-        with db: # Start transaction
+        with db:
             new_house_type_id = queries.add_house_type(name, description, num_modules)
             if not new_house_type_id:
-                # This case should ideally be caught by IntegrityError if name is unique
-                existing = queries.get_house_type_by_name(name) # Assumes this query exists
+                existing = queries.get_house_type_by_name(name)
                 if existing:
                     return jsonify(error="House type name already exists"), 409
-                raise Exception("Failed to add house type for an unknown reason") # Trigger rollback
+                raise Exception("Failed to add house type for an unknown reason")
 
             created_sub_types = []
             if sub_types_data:
@@ -62,20 +60,17 @@ def add_house_type_route(): # Renamed for clarity
                         raise ValueError("Each sub_type must have a name.")
                     st_name = st_data['name']
                     st_description = st_data.get('description', '')
-                    # Call the query to add sub_type, linking it to the new_house_type_id
                     sub_type_id = queries.add_sub_type_to_house_type(new_house_type_id, st_name, st_description)
                     if not sub_type_id:
-                        raise Exception(f"Failed to add sub_type '{st_name}'.") # Trigger rollback
+                        raise Exception(f"Failed to add sub_type '{st_name}'.")
                     created_sub_types.append({'sub_type_id': sub_type_id, 'name': st_name, 'description': st_description})
         
-        # Fetch the complete house type with details to return
-        final_house_type = queries.get_all_house_types_with_details() # Inefficient, better to get by ID
-        # Find the newly added one (this is a workaround for not having get_house_type_details_by_id)
+        final_house_type = queries.get_all_house_types_with_details()
         new_type_details = next((ht for ht in final_house_type if ht['house_type_id'] == new_house_type_id), None)
 
         if new_type_details:
              return jsonify(new_type_details), 201
-        else: # Fallback
+        else:
             logger.warning(f"House Type {new_house_type_id} created but couldn't be refetched with details.")
             return jsonify({'house_type_id': new_house_type_id, 'name': name, 'description': description, 'number_of_modules': num_modules, 'sub_types': created_sub_types}), 201
 
@@ -94,7 +89,7 @@ def add_house_type_route(): # Renamed for clarity
 
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>', methods=['PUT'])
-def update_house_type_route(house_type_id): # Renamed
+def update_house_type_route(house_type_id):
     """Update an existing house type, including its sub_types."""
     data = request.get_json()
     if not data or 'name' not in data or 'number_of_modules' not in data:
@@ -108,23 +103,23 @@ def update_house_type_route(house_type_id): # Renamed
 
     name = data['name']
     description = data.get('description', '')
-    sub_types_data = data.get('sub_types', []) # Expect list of sub_type objects
+    sub_types_data = data.get('sub_types', [])
 
     db = connection.get_db()
     try:
-        with db: # Start transaction
+        with db:
             success = queries.update_house_type(house_type_id, name, description, num_modules)
             if not success:
-                existing = queries.get_house_type_by_id(house_type_id) # Assumes this basic query exists
+                existing = queries.get_house_type_by_id(house_type_id)
                 if not existing:
                     return jsonify(error="House type not found"), 404
-                raise Exception("House type update failed for an unknown reason.") # Trigger rollback
+                raise Exception("House type update failed for an unknown reason.")
 
             # Handle sub_types: very basic handling - delete existing and re-add.
             # A more sophisticated approach would involve diffing and updating/adding/deleting individually.
             existing_sub_types = queries.get_sub_types_for_house_type(house_type_id)
             for est in existing_sub_types:
-                queries.delete_sub_type(est['sub_type_id']) # Assumes direct delete without checking dependencies not handled by CASCADE
+                queries.delete_sub_type(est['sub_type_id'])
 
             updated_sub_types = []
             if sub_types_data:
@@ -133,13 +128,11 @@ def update_house_type_route(house_type_id): # Renamed
                         raise ValueError("Each sub_type must have a name.")
                     st_name = st_data['name']
                     st_description = st_data.get('description', '')
-                    # If sub_type has an ID, it might be an update, but simple re-add for now
                     sub_type_id = queries.add_sub_type_to_house_type(house_type_id, st_name, st_description)
                     if not sub_type_id:
-                        raise Exception(f"Failed to add/update sub_type '{st_name}'.") # Trigger rollback
+                        raise Exception(f"Failed to add/update sub_type '{st_name}'.")
                     updated_sub_types.append({'sub_type_id': sub_type_id, 'name': st_name, 'description': st_description})
         
-        # Fetch the complete house type with details to return
         final_house_type = queries.get_all_house_types_with_details()
         updated_type_details = next((ht for ht in final_house_type if ht['house_type_id'] == house_type_id), None)
 
@@ -165,7 +158,7 @@ def update_house_type_route(house_type_id): # Renamed
 
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>', methods=['DELETE'])
-def delete_house_type_route(house_type_id): # Renamed
+def delete_house_type_route(house_type_id):
     """Delete a house type. SubTypes and other direct dependencies are handled by CASCADE in DB."""
     try:
         success = queries.delete_house_type(house_type_id)
@@ -185,10 +178,10 @@ def delete_house_type_route(house_type_id): # Renamed
         return jsonify(error="Failed to delete house type"), 500
 
 
-# === House SubType Routes (formerly Tipologias) ===
+# === House SubType Routes ===
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/sub_types', methods=['GET'])
-def get_house_sub_types_route(house_type_id): # Renamed
+def get_house_sub_types_route(house_type_id):
     """Get all sub_types for a specific house type."""
     try:
         sub_types = queries.get_sub_types_for_house_type(house_type_id)
@@ -198,7 +191,7 @@ def get_house_sub_types_route(house_type_id): # Renamed
         return jsonify(error="Failed to fetch sub_types"), 500
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/sub_types', methods=['POST'])
-def add_house_sub_type_route(house_type_id): # Renamed
+def add_house_sub_type_route(house_type_id):
     """Add a new sub_type to a house type."""
     data = request.get_json()
     if not data or 'name' not in data:
@@ -211,10 +204,9 @@ def add_house_sub_type_route(house_type_id): # Renamed
         if new_id:
             new_sub_type = queries.get_sub_type_by_id(new_id)
             return jsonify(new_sub_type), 201
-        # This part might be unreachable if add_sub_type_to_house_type raises IntegrityError
         return jsonify(error="Failed to add sub_type, possibly duplicate name for this house type."), 500
     except sqlite3.IntegrityError as ie:
-        if 'UNIQUE constraint failed' in str(ie): # More generic check for UNIQUE
+        if 'UNIQUE constraint failed' in str(ie):
             return jsonify(error="Sub-type name already exists for this house type"), 409
         elif 'FOREIGN KEY constraint failed' in str(ie):
              return jsonify(error="Invalid house type specified"), 400
@@ -225,8 +217,8 @@ def add_house_sub_type_route(house_type_id): # Renamed
         logger.error(f"Error adding sub_type for house type {house_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to add sub_type"), 500
 
-@admin_definitions_bp.route('/sub_types/<int:sub_type_id>', methods=['PUT']) # Renamed route and param
-def update_sub_type_route(sub_type_id): # Renamed
+@admin_definitions_bp.route('/sub_types/<int:sub_type_id>', methods=['PUT'])
+def update_sub_type_route(sub_type_id):
     """Update an existing sub_type."""
     data = request.get_json()
     if not data or 'name' not in data:
@@ -254,8 +246,8 @@ def update_sub_type_route(sub_type_id): # Renamed
         logger.error(f"Error updating sub_type {sub_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to update sub_type"), 500
 
-@admin_definitions_bp.route('/sub_types/<int:sub_type_id>', methods=['DELETE']) # Renamed route and param
-def delete_sub_type_route(sub_type_id): # Renamed
+@admin_definitions_bp.route('/sub_types/<int:sub_type_id>', methods=['DELETE'])
+def delete_sub_type_route(sub_type_id):
     """Delete a sub_type. Dependencies (HouseTypeParameters, PanelDefinitions, ModuleProductionPlan) are handled by DB constraints."""
     try:
         success = queries.delete_sub_type(sub_type_id)
@@ -265,10 +257,9 @@ def delete_sub_type_route(sub_type_id): # Renamed
             existing = queries.get_sub_type_by_id(sub_type_id)
             if not existing:
                  return jsonify(error="Sub-type not found"), 404
-            # If not found but delete failed, could be an unexpected issue.
             logger.warning(f"Delete failed for sub_type {sub_type_id} though it exists.")
             return jsonify(error="Sub-type delete failed for an unknown reason"), 500
-    except sqlite3.IntegrityError as ie: # Though schema uses SET NULL or CASCADE, some DBs might still error on RESTRICT
+    except sqlite3.IntegrityError as ie:
         logger.warning(f"Integrity error deleting sub_type {sub_type_id}: {ie}")
         return jsonify(error="Cannot delete sub_type due to integrity constraints."), 409
     except Exception as e:
@@ -279,7 +270,7 @@ def delete_sub_type_route(sub_type_id): # Renamed
 # === House Parameters Routes ===
 
 @admin_definitions_bp.route('/house_parameters', methods=['GET'])
-def get_house_parameters_route(): # Renamed
+def get_house_parameters_route():
     """Get all house parameter definitions."""
     try:
         params = queries.get_all_house_parameters()
@@ -289,7 +280,7 @@ def get_house_parameters_route(): # Renamed
         return jsonify(error="Failed to fetch house parameters"), 500
 
 @admin_definitions_bp.route('/house_parameters', methods=['POST'])
-def add_house_parameter_route(): # Renamed
+def add_house_parameter_route():
     """Add a new house parameter definition."""
     data = request.get_json()
     if not data or 'name' not in data:
@@ -301,7 +292,7 @@ def add_house_parameter_route(): # Renamed
         if new_id:
             new_param = {'parameter_id': new_id, 'name': name, 'unit': unit}
             return jsonify(new_param), 201
-        else: # Should be caught by IntegrityError
+        else:
             return jsonify(error="Failed to add house parameter, possibly duplicate name."), 500
     except sqlite3.IntegrityError as ie:
          if 'UNIQUE constraint failed: HouseParameters.name' in str(ie):
@@ -314,7 +305,7 @@ def add_house_parameter_route(): # Renamed
         return jsonify(error="Failed to add house parameter"), 500
 
 @admin_definitions_bp.route('/house_parameters/<int:parameter_id>', methods=['PUT'])
-def update_house_parameter_route(parameter_id): # Renamed
+def update_house_parameter_route(parameter_id):
     """Update an existing house parameter definition."""
     data = request.get_json()
     if not data or 'name' not in data:
@@ -327,13 +318,13 @@ def update_house_parameter_route(parameter_id): # Renamed
             updated_param = {'parameter_id': parameter_id, 'name': name, 'unit': unit}
             return jsonify(updated_param)
         else:
-            existing = queries.get_house_parameter_by_id(parameter_id) # Assumes this query exists
+            existing = queries.get_house_parameter_by_id(parameter_id)
             if not existing:
                  return jsonify(error="House parameter not found"), 404
             return jsonify(error="House parameter update failed for an unknown reason"), 500
     except sqlite3.IntegrityError as ie:
          if 'UNIQUE constraint failed: HouseParameters.name' in str(ie):
-             existing = queries.get_house_parameter_by_name(name) # Assumes this query exists
+             existing = queries.get_house_parameter_by_name(name)
              if existing and existing['parameter_id'] != parameter_id:
                  return jsonify(error="House parameter name already exists"), 409
          logger.error(f"Integrity error updating house parameter {parameter_id}: {ie}", exc_info=True)
@@ -343,7 +334,7 @@ def update_house_parameter_route(parameter_id): # Renamed
         return jsonify(error="Failed to update house parameter"), 500
 
 @admin_definitions_bp.route('/house_parameters/<int:parameter_id>', methods=['DELETE'])
-def delete_house_parameter_route(parameter_id): # Renamed
+def delete_house_parameter_route(parameter_id):
     """Delete a house parameter definition. Dependencies (HouseTypeParameters) handled by CASCADE."""
     try:
         success = queries.delete_house_parameter(parameter_id)
@@ -353,9 +344,8 @@ def delete_house_parameter_route(parameter_id): # Renamed
             existing = queries.get_house_parameter_by_id(parameter_id)
             if not existing:
                  return jsonify(error="House parameter not found"), 404
-            logger.warning(f"Delete failed for house parameter {parameter_id} though it exists.")
             return jsonify(error="House parameter delete failed for an unknown reason"), 500
-    except sqlite3.IntegrityError as ie: # Should not happen if CASCADE works for HouseTypeParameters
+    except sqlite3.IntegrityError as ie:
         logger.warning(f"Integrity error deleting house parameter {parameter_id}: {ie}")
         return jsonify(error="Cannot delete house parameter, check dependencies."), 409
     except Exception as e:
@@ -387,7 +377,6 @@ def generate_module_production_plan_batch_route():
         if success:
             return jsonify(message=f"Successfully generated production plan items for project '{project_name}'."), 201
         else:
-            # This path might not be hit if queries.generate_module_production_plan raises exceptions for failures
             return jsonify(error="Failed to generate module production plan batch."), 500
     except ValueError as ve:
         logger.warning(f"ValueError generating production plan batch for project {project_name}: {ve}")
@@ -400,17 +389,17 @@ def generate_module_production_plan_batch_route():
 # === House Type Parameters (Linking) Routes ===
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/parameters', methods=['GET'])
-def get_house_type_parameters_route(house_type_id): # Renamed
+def get_house_type_parameters_route(house_type_id):
     """Get all parameters assigned to a specific house type, including sub_type specifics."""
     try:
-        params = queries.get_parameters_for_house_type(house_type_id) # This query now includes sub_type_name
+        params = queries.get_parameters_for_house_type(house_type_id)
         return jsonify(params)
     except Exception as e:
         logger.error(f"Error getting parameters for house type {house_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to fetch parameters for house type"), 500
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/parameters', methods=['POST'])
-def add_or_update_house_type_parameter_route(house_type_id): # Name retained, logic updated
+def add_or_update_house_type_parameter_route(house_type_id):
     """Add or update a parameter value for a specific module and optional sub_type within a house type."""
     data = request.get_json()
     required_fields = ['parameter_id', 'module_sequence_number', 'value']
@@ -420,7 +409,7 @@ def add_or_update_house_type_parameter_route(house_type_id): # Name retained, lo
     parameter_id = data['parameter_id']
     module_sequence_number = data['module_sequence_number']
     value_str = data['value']
-    sub_type_id = data.get('sub_type_id') # Changed from tipologia_id
+    sub_type_id = data.get('sub_type_id')
 
     try:
         value = float(value_str) if value_str is not None and str(value_str).strip() != '' else None
@@ -435,9 +424,8 @@ def add_or_update_house_type_parameter_route(house_type_id): # Name retained, lo
         return jsonify(error="Invalid value (must be numeric), module_sequence_number, or sub_type_id (must be integer if provided)"), 400
 
     try:
-        # Validate sub_type_id if provided
         if sub_type_id is not None:
-            sub_type_obj = queries.get_sub_type_by_id(sub_type_id) # Changed from get_tipologia_by_id
+            sub_type_obj = queries.get_sub_type_by_id(sub_type_id)
             if not sub_type_obj or sub_type_obj['house_type_id'] != house_type_id:
                 return jsonify(error=f"Invalid sub_type_id {sub_type_id} for house type {house_type_id}"), 400
 
@@ -449,9 +437,8 @@ def add_or_update_house_type_parameter_route(house_type_id): # Name retained, lo
             }
             return jsonify(result), 200
         else:
-            # Check FKs
             ht_exists = queries.get_house_type_by_id(house_type_id)
-            param_exists = queries.get_house_parameter_by_id(parameter_id) # Assumes this query exists
+            param_exists = queries.get_house_parameter_by_id(parameter_id)
             if not ht_exists: return jsonify(error="House type not found"), 404
             if not param_exists: return jsonify(error="House parameter not found"), 404
             logger.error(f"Failed to set parameter value for HT {house_type_id}, P {parameter_id}, M {module_seq_int}, ST {sub_type_id}")
@@ -481,7 +468,7 @@ def delete_house_type_parameter_by_id_route(house_type_parameter_id):
 # Updated route to handle optional sub_type_id for deletion by composite key
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/parameters/<int:parameter_id>/module/<int:module_sequence_number>', methods=['DELETE'])
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/parameters/<int:parameter_id>/module/<int:module_sequence_number>/sub_type/<int:sub_type_id>', methods=['DELETE'])
-def delete_parameter_from_house_type_module_sub_type_route(house_type_id, parameter_id, module_sequence_number, sub_type_id=None): # Renamed
+def delete_parameter_from_house_type_module_sub_type_route(house_type_id, parameter_id, module_sequence_number, sub_type_id=None):
     """Remove a parameter value by composite key: house_type, parameter, module sequence, and optionally sub_type."""
     try:
         module_seq_int = int(module_sequence_number)
@@ -505,20 +492,19 @@ def delete_parameter_from_house_type_module_sub_type_route(house_type_id, parame
 
 
 # === Multiwalls Routes ===
-# Multiwalls are defined per house_type, not per module_sequence_number as per new schema.
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/multiwalls', methods=['GET'])
-def get_house_type_multiwalls_route(house_type_id): # module_sequence_number removed
+def get_house_type_multiwalls_route(house_type_id):
     """Get all multiwalls for a specific house type."""
     try:
-        multiwalls = queries.get_multiwalls_for_house_type_module(house_type_id) # module_sequence_number removed from query call
+        multiwalls = queries.get_multiwalls_for_house_type_module(house_type_id)
         return jsonify(multiwalls)
     except Exception as e:
         logger.error(f"Error getting multiwalls for house type {house_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to fetch multiwalls"), 500
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/multiwalls', methods=['POST'])
-def add_house_type_multiwall_route(house_type_id): # module_sequence_number removed
+def add_house_type_multiwall_route(house_type_id):
     """Add a new multiwall to a specific house type."""
     data = request.get_json()
     if not data or not all(k in data for k in ('panel_group', 'multiwall_code')):
@@ -528,14 +514,13 @@ def add_house_type_multiwall_route(house_type_id): # module_sequence_number remo
     multiwall_code = data['multiwall_code']
 
     try:
-        new_id = queries.add_multiwall(house_type_id, panel_group, multiwall_code) # module_sequence_number removed
+        new_id = queries.add_multiwall(house_type_id, panel_group, multiwall_code)
         if new_id:
             new_multiwall = {
                 'multiwall_id': new_id, 'house_type_id': house_type_id,
                 'panel_group': panel_group, 'multiwall_code': multiwall_code
             }
             return jsonify(new_multiwall), 201
-        # This case might not be reached if add_multiwall raises IntegrityError
         return jsonify(error="Failed to add multiwall, possibly duplicate code for this group."), 500
     except (ValueError, sqlite3.IntegrityError) as e:
         logger.warning(f"Failed to add multiwall for house type {house_type_id}: {e}")
@@ -553,7 +538,7 @@ def add_house_type_multiwall_route(house_type_id): # module_sequence_number remo
         return jsonify(error="Failed to add multiwall"), 500
 
 @admin_definitions_bp.route('/multiwalls/<int:multiwall_id>', methods=['PUT'])
-def update_multiwall_route(multiwall_id): # Renamed
+def update_multiwall_route(multiwall_id):
     """Update an existing multiwall by its ID. House_type_id is not changed here."""
     data = request.get_json()
     if not data or not all(k in data for k in ('panel_group', 'multiwall_code')):
@@ -565,12 +550,9 @@ def update_multiwall_route(multiwall_id): # Renamed
     try:
         success = queries.update_multiwall(multiwall_id, panel_group, multiwall_code)
         if success:
-            # Fetch the updated multiwall to reflect any changes from query (though likely none for these fields)
-            # This also confirms the multiwall_id is valid.
-            updated_multiwall_data = queries.get_multiwall_by_id(multiwall_id) # Assumes this query exists
+            updated_multiwall_data = queries.get_multiwall_by_id(multiwall_id)
             if updated_multiwall_data:
                 return jsonify(updated_multiwall_data), 200
-            # Fallback if get_multiwall_by_id isn't available or doesn't find it after update
             return jsonify({'multiwall_id': multiwall_id, 'panel_group': panel_group, 'multiwall_code': multiwall_code}), 200
 
         else:
@@ -592,7 +574,7 @@ def update_multiwall_route(multiwall_id): # Renamed
         return jsonify(error="Failed to update multiwall"), 500
 
 @admin_definitions_bp.route('/multiwalls/<int:multiwall_id>', methods=['DELETE'])
-def delete_multiwall_route(multiwall_id): # Renamed
+def delete_multiwall_route(multiwall_id):
     """Delete a multiwall by its ID. Associated PanelDefinitions.multiwall_id will be SET NULL."""
     try:
         success = queries.delete_multiwall(multiwall_id)
@@ -602,9 +584,8 @@ def delete_multiwall_route(multiwall_id): # Renamed
             existing = queries.get_multiwall_by_id(multiwall_id)
             if not existing:
                  return jsonify(error="Multiwall not found"), 404
-            logger.warning(f"Delete failed for multiwall {multiwall_id} though it exists.")
             return jsonify(error="Multiwall delete failed for an unknown reason"), 500
-    except sqlite3.IntegrityError: # Should be rare due to ON DELETE SET NULL
+    except sqlite3.IntegrityError:
         logger.warning(f"Integrity error deleting multiwall {multiwall_id}")
         return jsonify(error="Cannot delete multiwall due to unexpected integrity constraints."), 409
     except Exception as e:
@@ -612,11 +593,10 @@ def delete_multiwall_route(multiwall_id): # Renamed
         return jsonify(error="Failed to delete multiwall"), 500
 
 
-# === Panel Definitions Routes (formerly HouseTypePanels) ===
-# URL structure changed to reflect PanelDefinitions is defined per house_type, module, and optionally sub_type.
+# === Panel Definitions Routes ===
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/modules/<int:module_sequence_number>/panel_definitions', methods=['GET'])
-def get_panel_definitions_route(house_type_id, module_sequence_number): # Renamed
+def get_panel_definitions_route(house_type_id, module_sequence_number):
     """
     Get all panel definitions for a specific module within a house type.
     Optionally filter by sub_type_id if provided as a query parameter.
@@ -644,7 +624,7 @@ def get_panel_definitions_route(house_type_id, module_sequence_number): # Rename
         return jsonify(error="Failed to fetch panel definitions"), 500
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/modules/<int:module_sequence_number>/panel_definitions', methods=['POST'])
-def add_panel_definition_route(house_type_id, module_sequence_number): # Renamed
+def add_panel_definition_route(house_type_id, module_sequence_number):
     """Add a new panel definition to a specific module, optionally for a sub_type."""
     data = request.get_json()
     if not data or not all(k in data for k in ('panel_group', 'panel_code')):
@@ -652,8 +632,8 @@ def add_panel_definition_route(house_type_id, module_sequence_number): # Renamed
 
     panel_group = data['panel_group']
     panel_code = data['panel_code']
-    sub_type_id = data.get('sub_type_id') # Optional, corresponds to HouseSubType
-    multiwall_id = data.get('multiwall_id') # Optional
+    sub_type_id = data.get('sub_type_id')
+    multiwall_id = data.get('multiwall_id')
 
     try:
         module_seq_int = int(module_sequence_number)
@@ -671,18 +651,12 @@ def add_panel_definition_route(house_type_id, module_sequence_number): # Renamed
             house_type_id, module_seq_int, panel_group, panel_code, sub_type_id, multiwall_id
         )
         if new_id:
-            # Fetch the newly added panel definition for response
-            # This requires a get_panel_definition_by_id query. Assuming it exists or adapting.
-            # For now, construct response manually.
             new_panel_def = {
                 'panel_definition_id': new_id, 'house_type_id': house_type_id,
                 'module_sequence_number': module_seq_int, 'panel_group': panel_group,
                 'panel_code': panel_code, 'sub_type_id': sub_type_id, 'multiwall_id': multiwall_id
             }
-            # Ideally, fetch to get joined names:
-            # new_panel_def = queries.get_panel_definition_by_id(new_id)
             return jsonify(new_panel_def), 201
-        # This case might not be reached if query raises IntegrityError
         return jsonify(error="Failed to add panel definition, possibly duplicate."), 500
     except (ValueError, sqlite3.IntegrityError) as e:
         logger.warning(f"Failed to add panel definition for HT {house_type_id}, M {module_seq_int}: {e}")
@@ -690,8 +664,8 @@ def add_panel_definition_route(house_type_id, module_sequence_number): # Renamed
              return jsonify(error="Panel definition code already exists for this group, module, and sub_type combination."), 409
         elif 'CHECK constraint failed' in str(e) or "Invalid panel_group" in str(e):
              return jsonify(error="Invalid panel group specified."), 400
-        elif "Panel group must match" in str(e) or "multiwall_id" in str(e).lower() and "does not exist" in str(e).lower(): # More robust check
-             return jsonify(error=str(e)), 400 # Pass specific error from query
+        elif "Panel group must match" in str(e) or "multiwall_id" in str(e).lower() and "does not exist" in str(e).lower():
+             return jsonify(error=str(e)), 400
         elif 'FOREIGN KEY constraint failed' in str(e):
              return jsonify(error="Invalid house_type, module, sub_type, or multiwall specified."), 400
         else:
@@ -701,8 +675,8 @@ def add_panel_definition_route(house_type_id, module_sequence_number): # Renamed
         logger.error(f"Error adding panel definition for HT {house_type_id}, M {module_seq_int}: {e}", exc_info=True)
         return jsonify(error="Failed to add panel definition"), 500
 
-@admin_definitions_bp.route('/panel_definitions/<int:panel_definition_id>', methods=['PUT']) # Changed route
-def update_panel_definition_route(panel_definition_id): # Renamed
+@admin_definitions_bp.route('/panel_definitions/<int:panel_definition_id>', methods=['PUT'])
+def update_panel_definition_route(panel_definition_id):
     """Update an existing panel definition by its ID."""
     data = request.get_json()
     if not data or not all(k in data for k in ('panel_group', 'panel_code')):
@@ -710,8 +684,8 @@ def update_panel_definition_route(panel_definition_id): # Renamed
 
     panel_group = data['panel_group']
     panel_code = data['panel_code']
-    sub_type_id = data.get('sub_type_id') # Optional
-    multiwall_id = data.get('multiwall_id') # Optional
+    sub_type_id = data.get('sub_type_id')
+    multiwall_id = data.get('multiwall_id')
 
     try:
         if sub_type_id is not None: sub_type_id = int(sub_type_id)
@@ -724,19 +698,13 @@ def update_panel_definition_route(panel_definition_id): # Renamed
             panel_definition_id, panel_group, panel_code, sub_type_id, multiwall_id
         )
         if success:
-            # Fetch updated panel definition for response
-            # updated_panel_def = queries.get_panel_definition_by_id(panel_definition_id)
-            # For now, construct manually:
             updated_panel_def = {
                  'panel_definition_id': panel_definition_id, 'panel_group': panel_group,
                  'panel_code': panel_code, 'sub_type_id': sub_type_id, 'multiwall_id': multiwall_id
             }
             return jsonify(updated_panel_def), 200
         else:
-            # existing = queries.get_panel_definition_by_id(panel_definition_id) # Requires this query
-            # if not existing:
-            return jsonify(error="Panel definition not found or no changes made."), 404 # Or 400 if no changes
-            # return jsonify(error="Panel definition update failed for an unknown reason"), 500
+            return jsonify(error="Panel definition not found or no changes made."), 404
     except (ValueError, sqlite3.IntegrityError) as e:
         logger.warning(f"Failed to update panel definition {panel_definition_id}: {e}")
         if 'UNIQUE constraint failed' in str(e):
@@ -754,20 +722,16 @@ def update_panel_definition_route(panel_definition_id): # Renamed
         logger.error(f"Error updating panel definition {panel_definition_id}: {e}", exc_info=True)
         return jsonify(error="Failed to update panel definition"), 500
 
-@admin_definitions_bp.route('/panel_definitions/<int:panel_definition_id>', methods=['DELETE']) # Changed route
-def delete_panel_definition_route(panel_definition_id): # Renamed
+@admin_definitions_bp.route('/panel_definitions/<int:panel_definition_id>', methods=['DELETE'])
+def delete_panel_definition_route(panel_definition_id):
     """Delete a panel definition by its ID."""
     try:
         success = queries.delete_panel_definition(panel_definition_id)
         if success:
             return jsonify(message="Panel definition deleted successfully"), 200
         else:
-            # existing = queries.get_panel_definition_by_id(panel_definition_id)
-            # if not existing:
             return jsonify(error="Panel definition not found"), 404
-            # logger.warning(f"Delete failed for panel definition {panel_definition_id}.")
-            # return jsonify(error="Panel definition delete failed for an unknown reason"), 500
-    except Exception as e: # Includes IntegrityError if ON DELETE RESTRICT was used and violated
+    except Exception as e:
         logger.error(f"Error deleting panel definition {panel_definition_id}: {e}", exc_info=True)
         return jsonify(error="Failed to delete panel definition, check dependencies (e.g. PanelTaskLogs)."), 500
 
@@ -775,20 +739,20 @@ def delete_panel_definition_route(panel_definition_id): # Renamed
 # === Task Definitions Routes ===
 
 @admin_definitions_bp.route('/task_definitions', methods=['GET'])
-def get_task_definitions_route(): # Renamed
+def get_task_definitions_route():
     """Get all task definitions."""
     try:
-        task_defs = queries.get_all_task_definitions() # This query should now include is_panel_task
+        task_defs = queries.get_all_task_definitions()
         return jsonify(task_defs)
     except Exception as e:
         logger.error(f"Error in get_task_definitions_route: {e}", exc_info=True)
         return jsonify(error="Failed to fetch task definitions"), 500
 
 @admin_definitions_bp.route('/task_definitions', methods=['POST'])
-def add_task_definition_route(): # Renamed
+def add_task_definition_route():
     """Add a new task definition."""
     data = request.get_json()
-    if not data or 'name' not in data or 'is_panel_task' not in data: # Added is_panel_task as required
+    if not data or 'name' not in data or 'is_panel_task' not in data:
         return jsonify(error="Missing 'name' or 'is_panel_task' in request data"), 400
 
     name = data.get('name')
@@ -797,11 +761,11 @@ def add_task_definition_route(): # Renamed
     specialty_id = data.get('specialty_id')
     station_sequence_order = data.get('station_sequence_order')
     task_dependencies_input = data.get('task_dependencies', [])
-    is_panel_task = data.get('is_panel_task') # Boolean (0 or 1)
+    is_panel_task = data.get('is_panel_task')
 
     try:
         station_seq_int = int(station_sequence_order) if station_sequence_order is not None else None
-        is_panel_task_bool = bool(int(is_panel_task)) # Ensure it's a boolean after converting from int
+        is_panel_task_bool = bool(int(is_panel_task))
     except (ValueError, TypeError):
         return jsonify(error="Invalid station_sequence_order (must be integer or null) or is_panel_task (must be 0 or 1)"), 400
 
@@ -814,7 +778,6 @@ def add_task_definition_route(): # Renamed
         if new_id:
             new_task_def = queries.get_task_definition_by_id(new_id)
             return jsonify(new_task_def), 201
-        # This case might not be reached if query raises IntegrityError
         return jsonify(error="Failed to add task definition, possibly duplicate name."), 500
     except sqlite3.IntegrityError as ie:
          if 'UNIQUE constraint failed: TaskDefinitions.name' in str(ie):
@@ -830,10 +793,10 @@ def add_task_definition_route(): # Renamed
 
 
 @admin_definitions_bp.route('/task_definitions/<int:task_definition_id>', methods=['PUT'])
-def update_task_definition_route(task_definition_id): # Renamed
+def update_task_definition_route(task_definition_id):
     """Update an existing task definition."""
     data = request.get_json()
-    if not data or 'name' not in data or 'is_panel_task' not in data: # Added is_panel_task as required
+    if not data or 'name' not in data or 'is_panel_task' not in data:
         return jsonify(error="Missing 'name' or 'is_panel_task' in request data"), 400
 
     name = data.get('name')
@@ -842,7 +805,7 @@ def update_task_definition_route(task_definition_id): # Renamed
     specialty_id = data.get('specialty_id')
     station_sequence_order = data.get('station_sequence_order')
     task_dependencies_input = data.get('task_dependencies', [])
-    is_panel_task = data.get('is_panel_task') # Boolean (0 or 1)
+    is_panel_task = data.get('is_panel_task')
 
     try:
         station_seq_int = int(station_sequence_order) if station_sequence_order is not None else None
@@ -879,7 +842,7 @@ def update_task_definition_route(task_definition_id): # Renamed
 
 
 @admin_definitions_bp.route('/task_definitions/<int:task_definition_id>', methods=['DELETE'])
-def delete_task_definition_route(task_definition_id): # Renamed
+def delete_task_definition_route(task_definition_id):
     """Delete a task definition."""
     try:
         success = queries.delete_task_definition(task_definition_id)
@@ -889,7 +852,6 @@ def delete_task_definition_route(task_definition_id): # Renamed
             existing = queries.get_task_definition_by_id(task_definition_id)
             if not existing:
                  return jsonify(error="Task Definition not found"), 404
-            logger.warning(f"Delete failed for task definition {task_definition_id}, possibly due to dependencies (e.g., task logs).")
             return jsonify(error="Task Definition delete failed, check dependencies (e.g., task logs, panel task logs)."), 409
     except sqlite3.IntegrityError as ie:
         logger.warning(f"Integrity error deleting task definition {task_definition_id}: {ie}")
@@ -900,7 +862,7 @@ def delete_task_definition_route(task_definition_id): # Renamed
 
 
 @admin_definitions_bp.route('/task_definitions/potential_dependencies', methods=['GET'])
-def get_potential_dependencies_route(): # Renamed
+def get_potential_dependencies_route():
     """
     Get potential task dependencies.
     Requires 'current_station_sequence_order' (optional) and 'is_panel_task' (optional) query parameters.
@@ -935,10 +897,10 @@ def get_potential_dependencies_route(): # Renamed
         return jsonify(error="Failed to fetch potential task dependencies"), 500
 
 
-# === Stations Route (Read-only for dropdowns) ===
+# === Stations Route ===
 
 @admin_definitions_bp.route('/stations', methods=['GET'])
-def get_stations_route(): # Renamed
+def get_stations_route():
     """Get all stations for dropdowns."""
     try:
         stations = queries.get_all_stations()
@@ -948,7 +910,7 @@ def get_stations_route(): # Renamed
         return jsonify(error="Failed to fetch stations"), 500
 
 
-# === Station Context (Replaces Station Overview) ===
+# === Station Context ===
 @admin_definitions_bp.route('/station-context/<string:station_id>', methods=['GET'])
 def get_station_context_route(station_id):
     """
@@ -965,15 +927,11 @@ def get_station_context_route(station_id):
             return jsonify(error="Invalid specialty_id parameter, must be an integer."), 400
     
     try:
-        # Pass specialty_id to the query function
         context_data = queries.get_module_and_panels_for_station(station_id, specialty_id)
         
         if context_data:
-            # queries.get_module_and_panels_for_station now returns {'module': ..., 'panels': ..., 'tasks': ...}
             return jsonify(context_data)
         else:
-            # Return an empty structure if no module is available for the station
-            # Ensure 'tasks' key is present for consistency
             return jsonify({'module': None, 'panels': [], 'tasks': []})
     except Exception as e:
         logger.error(f"Error fetching station context data for station {station_id}: {e}", exc_info=True)
@@ -981,18 +939,15 @@ def get_station_context_route(station_id):
 
 
 # === Task Operations ===
-# These endpoints are critical for the worker interaction part of the application.
-# They involve finding or creating module instances and then logging tasks against them or their panels.
 
 @admin_definitions_bp.route('/tasks/start', methods=['POST'])
-def start_task_route(): # Renamed
+def start_task_route():
     """
     Starts a task log entry (either TaskLog or PanelTaskLog).
     If the module doesn't exist yet (i.e., starting the first task for a planned module),
     it creates the module record from ModuleProductionPlan.plan_id.
     """
     data = request.get_json()
-    # plan_id is now required.
     required_fields = ['plan_id', 'task_definition_id', 'worker_id', 'station_start']
     if not data or not all(field in data for field in required_fields):
         missing = [field for field in required_fields if field not in data]
@@ -1011,37 +966,27 @@ def start_task_route(): # Renamed
         if panel_definition_id_req is not None:
             panel_definition_id = int(panel_definition_id_req)
         else:
-            panel_definition_id = None # Ensure it's None if not provided
+            panel_definition_id = None
     except (ValueError, TypeError):
         return jsonify(error="Invalid ID format. IDs must be integers (except station_id)."), 400
 
     db = connection.get_db()
     try:
-        with db: # Transaction
-            # 1. Get Task Definition
+        with db:
             task_def = queries.get_task_definition_by_id(task_definition_id)
             if not task_def:
                 return jsonify(error=f"Task Definition ID {task_definition_id} not found."), 404
             is_panel_task = task_def['is_panel_task']
 
-            # 2. Get ModuleProductionPlan item
             plan_item = queries.get_module_production_plan_item_by_id(plan_id)
             if not plan_item:
                 return jsonify(error=f"Production Plan ID {plan_id} not found."), 404
 
-            # 3. Status transition logic for ModuleProductionPlan
-            # Example: If starting a panel task at a 'W' station and plan is 'Planned', update to 'Panels'
-            # The 'Magazine' to 'Assembly' transition is handled in get_module_and_panels_for_station
             if station_start_req.startswith('W') and plan_item['status'] == 'Planned':
                 updated_plan = queries.update_module_production_plan_item(plan_id, {'status': 'Panels'})
                 if not updated_plan:
                     logger.warning(f"Failed to update plan {plan_id} status to 'Panels'.")
-                    # Decide if this is a critical failure or can proceed
             
-            # Add other transitions as needed, e.g. 'Panels' to 'Magazine' upon completion of all panel tasks for the plan.
-            # This would likely be in a different endpoint or task update logic.
-
-            # 4. Start the appropriate task log
             new_log_id = None
             log_type = ""
 
@@ -1049,7 +994,6 @@ def start_task_route(): # Renamed
                 if panel_definition_id is None:
                     return jsonify(error="panel_definition_id is required for panel tasks."), 400
                 
-                # Check for existing active/completed PanelTaskLog using plan_id
                 existing_panel_log_cursor = db.execute(
                     "SELECT status FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ?",
                     (plan_id, panel_definition_id, task_definition_id))
@@ -1063,8 +1007,7 @@ def start_task_route(): # Renamed
                     task_definition_id=task_definition_id, worker_id=worker_id, station_start=station_start_req
                 )
                 log_type = "PanelTaskLog"
-            else: # Module Task
-                # Check for existing active/completed TaskLog using plan_id
+            else:
                 existing_module_log_cursor = db.execute(
                     "SELECT status FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ?",
                     (plan_id, task_definition_id))
@@ -1083,10 +1026,6 @@ def start_task_route(): # Renamed
                 return jsonify(message=f"{log_type} started successfully", log_id=new_log_id, plan_id=plan_id, log_type=log_type.lower()), 201
             else:
                 raise Exception(f"Failed to start {log_type}")
-
-    except ValueError as ve:
-        logger.warning(f"ValueError starting task for plan {plan_id}: {ve}")
-        return jsonify(error=str(ve)), 400
 
     except ValueError as ve:
         logger.warning(f"ValueError starting task for plan {plan_id}: {ve}")
