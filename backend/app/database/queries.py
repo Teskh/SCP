@@ -1548,3 +1548,578 @@ def delete_parameter_from_house_type_module_sub_type(house_type_id, parameter_id
 # They are removed to avoid confusion. If ProjectModules table is still needed for other purposes,
 # its functions should be reviewed and potentially kept, but they are not part of this refactor's scope
 # for production planning.
+
+# === Station Context and Task Management ===
+
+def get_station_context(station_id, worker_specialty_id=None):
+    """
+    Get the current production context for a specific station.
+    Returns the module/panels that should be worked on at this station.
+    Implements the production system rules for context selection.
+    """
+    db = get_db()
+    
+    # Get station info
+    station_cursor = db.execute(
+        "SELECT station_id, name, line_type, sequence_order FROM Stations WHERE station_id = ?",
+        (station_id,)
+    )
+    station = station_cursor.fetchone()
+    if not station:
+        return None
+    
+    station_dict = dict(station)
+    
+    # For W1 station, implement the special logic for starting the process
+    if station_id == 'W1':
+        return _get_w1_station_context(db, station_dict, worker_specialty_id)
+    
+    # For other stations, find modules/panels currently at this station
+    return _get_general_station_context(db, station_dict, worker_specialty_id)
+
+def _get_w1_station_context(db, station_dict, worker_specialty_id):
+    """
+    Special logic for W1 station - the root of the production process.
+    Find the lowest planned_sequence plan_id that's not completed and check its panels.
+    """
+    # Find the lowest planned_sequence module that's not completed
+    module_cursor = db.execute("""
+        SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
+               mpp.house_identifier, mpp.module_number, ht.number_of_modules,
+               mpp.status, mpp.sub_type_id, hst.name as sub_type_name, mpp.planned_sequence
+        FROM ModuleProductionPlan mpp
+        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+        WHERE mpp.status != 'Completed'
+        ORDER BY mpp.planned_sequence ASC
+        LIMIT 1
+    """)
+    
+    module_row = module_cursor.fetchone()
+    if not module_row:
+        return {
+            'station': station_dict,
+            'current_module': None,
+            'message': 'No modules in production queue'
+        }
+    
+    module_dict = dict(module_row)
+    
+    # Get panels for this module
+    panels = _get_panels_with_status_for_plan(
+        db, 
+        module_dict['plan_id'], 
+        module_dict['house_type_id'],
+        module_dict['module_number'],
+        module_dict['sub_type_id']
+    )
+    
+    # Check if any panels are "planned" (can start new work)
+    planned_panels = [p for p in panels if p['status'] == 'planned']
+    in_progress_panels = [p for p in panels if p['status'] == 'in_progress']
+    
+    # If all panels are in progress, look at the next module
+    if not planned_panels and in_progress_panels:
+        # All panels are being worked on, check next module
+        next_module_cursor = db.execute("""
+            SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
+                   mpp.house_identifier, mpp.module_number, ht.number_of_modules,
+                   mpp.status, mpp.sub_type_id, hst.name as sub_type_name, mpp.planned_sequence
+            FROM ModuleProductionPlan mpp
+            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+            WHERE mpp.status != 'Completed' AND mpp.planned_sequence > ?
+            ORDER BY mpp.planned_sequence ASC
+            LIMIT 1
+        """, (module_dict['planned_sequence'],))
+        
+        next_module_row = next_module_cursor.fetchone()
+        if next_module_row:
+            module_dict = dict(next_module_row)
+            panels = _get_panels_with_status_for_plan(
+                db, 
+                module_dict['plan_id'], 
+                module_dict['house_type_id'],
+                module_dict['module_number'],
+                module_dict['sub_type_id']
+            )
+    
+    # Add task information to panels
+    panels_with_tasks = []
+    for panel in panels:
+        panel_with_tasks = dict(panel)
+        panel_with_tasks['available_tasks'] = _get_available_tasks_for_panel(
+            db, module_dict['plan_id'], panel['panel_definition_id'], 
+            station_dict['sequence_order'], worker_specialty_id
+        )
+        panel_with_tasks['current_task'] = _get_current_task_for_panel(
+            db, module_dict['plan_id'], panel['panel_definition_id']
+        )
+        panels_with_tasks.append(panel_with_tasks)
+    
+    return {
+        'station': station_dict,
+        'current_module': {
+            'plan_id': module_dict['plan_id'],
+            'project_name': module_dict['project_name'],
+            'house_identifier': module_dict['house_identifier'],
+            'module_number': module_dict['module_number'],
+            'status': module_dict['status'],
+            'house_type_name': module_dict['house_type_name'],
+            'house_type_id': module_dict['house_type_id'],
+            'number_of_modules': module_dict['number_of_modules'],
+            'sub_type_name': module_dict.get('sub_type_name'),
+            'sub_type_id': module_dict.get('sub_type_id'),
+            'planned_sequence': module_dict['planned_sequence'],
+            'panels': panels_with_tasks
+        }
+    }
+
+def _get_general_station_context(db, station_dict, worker_specialty_id):
+    """
+    General logic for non-W1 stations.
+    Find modules/panels currently at this station.
+    """
+    # Find modules currently at this station based on status and line type
+    if station_dict['line_type'] == 'W':
+        # Panel line stations - look for modules in 'Panels' status
+        module_cursor = db.execute("""
+            SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
+                   mpp.house_identifier, mpp.module_number, ht.number_of_modules,
+                   mpp.status, mpp.sub_type_id, hst.name as sub_type_name, mpp.planned_sequence
+            FROM ModuleProductionPlan mpp
+            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+            WHERE mpp.status = 'Panels'
+            ORDER BY mpp.planned_sequence ASC
+            LIMIT 1
+        """)
+    elif station_dict['line_type'] == 'M':
+        # Magazine station
+        module_cursor = db.execute("""
+            SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
+                   mpp.house_identifier, mpp.module_number, ht.number_of_modules,
+                   mpp.status, mpp.sub_type_id, hst.name as sub_type_name, mpp.planned_sequence
+            FROM ModuleProductionPlan mpp
+            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+            WHERE mpp.status = 'Magazine'
+            ORDER BY mpp.planned_sequence ASC
+            LIMIT 1
+        """)
+    else:
+        # Assembly line stations (A, B, C)
+        module_cursor = db.execute("""
+            SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
+                   mpp.house_identifier, mpp.module_number, ht.number_of_modules,
+                   mpp.status, mpp.sub_type_id, hst.name as sub_type_name, mpp.planned_sequence,
+                   mpp.current_station
+            FROM ModuleProductionPlan mpp
+            JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+            LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+            WHERE mpp.status = 'Assembly' AND mpp.planned_assembly_line = ? 
+                  AND (mpp.current_station = ? OR mpp.current_station IS NULL)
+            ORDER BY mpp.planned_sequence ASC
+            LIMIT 1
+        """, (station_dict['line_type'], station_dict['station_id']))
+    
+    module_row = module_cursor.fetchone()
+    if not module_row:
+        return {
+            'station': station_dict,
+            'current_module': None,
+            'message': f'No modules currently at station {station_dict["station_id"]}'
+        }
+    
+    module_dict = dict(module_row)
+    
+    # Get panels for this module
+    panels = _get_panels_with_status_for_plan(
+        db, 
+        module_dict['plan_id'], 
+        module_dict['house_type_id'],
+        module_dict['module_number'],
+        module_dict['sub_type_id']
+    )
+    
+    # Add task information to panels
+    panels_with_tasks = []
+    for panel in panels:
+        panel_with_tasks = dict(panel)
+        panel_with_tasks['available_tasks'] = _get_available_tasks_for_panel(
+            db, module_dict['plan_id'], panel['panel_definition_id'], 
+            station_dict['sequence_order'], worker_specialty_id
+        )
+        panel_with_tasks['current_task'] = _get_current_task_for_panel(
+            db, module_dict['plan_id'], panel['panel_definition_id']
+        )
+        panels_with_tasks.append(panel_with_tasks)
+    
+    return {
+        'station': station_dict,
+        'current_module': {
+            'plan_id': module_dict['plan_id'],
+            'project_name': module_dict['project_name'],
+            'house_identifier': module_dict['house_identifier'],
+            'module_number': module_dict['module_number'],
+            'status': module_dict['status'],
+            'house_type_name': module_dict['house_type_name'],
+            'house_type_id': module_dict['house_type_id'],
+            'number_of_modules': module_dict['number_of_modules'],
+            'sub_type_name': module_dict.get('sub_type_name'),
+            'sub_type_id': module_dict.get('sub_type_id'),
+            'planned_sequence': module_dict['planned_sequence'],
+            'panels': panels_with_tasks
+        }
+    }
+
+def _get_available_tasks_for_panel(db, plan_id, panel_definition_id, station_sequence_order, worker_specialty_id):
+    """Get available tasks for a panel at the current station."""
+    query = """
+        SELECT td.task_definition_id, td.name, td.description, td.specialty_id, s.name as specialty_name
+        FROM TaskDefinitions td
+        LEFT JOIN Specialties s ON td.specialty_id = s.specialty_id
+        WHERE td.is_panel_task = 1 
+              AND (td.station_sequence_order = ? OR td.station_sequence_order IS NULL)
+              AND (td.specialty_id = ? OR td.specialty_id IS NULL OR ? IS NULL)
+              AND td.task_definition_id NOT IN (
+                  SELECT ptl.task_definition_id 
+                  FROM PanelTaskLogs ptl 
+                  WHERE ptl.plan_id = ? AND ptl.panel_definition_id = ? 
+                        AND ptl.status = 'Completed'
+              )
+        ORDER BY td.name
+    """
+    cursor = db.execute(query, (station_sequence_order, worker_specialty_id, worker_specialty_id, plan_id, panel_definition_id))
+    return [dict(row) for row in cursor.fetchall()]
+
+def _get_current_task_for_panel(db, plan_id, panel_definition_id):
+    """Get the current active task for a panel (if any)."""
+    query = """
+        SELECT ptl.panel_task_log_id, ptl.task_definition_id, ptl.status, ptl.started_at,
+               td.name as task_name, ptl.worker_id, w.first_name, w.last_name
+        FROM PanelTaskLogs ptl
+        JOIN TaskDefinitions td ON ptl.task_definition_id = td.task_definition_id
+        LEFT JOIN Workers w ON ptl.worker_id = w.worker_id
+        WHERE ptl.plan_id = ? AND ptl.panel_definition_id = ? 
+              AND ptl.status IN ('In Progress', 'Paused')
+        ORDER BY ptl.started_at DESC
+        LIMIT 1
+    """
+    cursor = db.execute(query, (plan_id, panel_definition_id))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def start_panel_task(plan_id, panel_definition_id, task_definition_id, worker_id, station_id):
+    """Start a new task for a panel."""
+    db = get_db()
+    
+    # Check if worker already has a task in progress
+    existing_task_cursor = db.execute("""
+        SELECT panel_task_log_id FROM PanelTaskLogs 
+        WHERE worker_id = ? AND status IN ('In Progress', 'Paused')
+    """, (worker_id,))
+    
+    if existing_task_cursor.fetchone():
+        raise ValueError("Worker already has a task in progress. Must finish or pause current task first.")
+    
+    # Check if this specific task is already in progress for this panel
+    existing_panel_task_cursor = db.execute("""
+        SELECT panel_task_log_id FROM PanelTaskLogs 
+        WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ? 
+              AND status IN ('In Progress', 'Paused')
+    """, (plan_id, panel_definition_id, task_definition_id))
+    
+    if existing_panel_task_cursor.fetchone():
+        raise ValueError("This task is already in progress for this panel.")
+    
+    try:
+        # Insert new task log
+        cursor = db.execute("""
+            INSERT INTO PanelTaskLogs 
+            (plan_id, panel_definition_id, task_definition_id, worker_id, status, started_at, station_start)
+            VALUES (?, ?, ?, ?, 'In Progress', ?, ?)
+        """, (plan_id, panel_definition_id, task_definition_id, worker_id, 
+              datetime.now().strftime('%Y-%m-%d %H:%M:%S'), station_id))
+        
+        task_log_id = cursor.lastrowid
+        
+        # Update panel status to in_progress if it was planned
+        db.execute("""
+            UPDATE PanelsProductionPlan 
+            SET status = 'in_progress', current_station = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE plan_id = ? AND panel_definition_id = ? AND status = 'planned'
+        """, (station_id, plan_id, panel_definition_id))
+        
+        db.commit()
+        return task_log_id
+    except sqlite3.Error as e:
+        logging.error(f"Error starting panel task: {e}", exc_info=True)
+        return None
+
+def pause_panel_task(panel_task_log_id, worker_id, reason=None):
+    """Pause an active panel task."""
+    db = get_db()
+    
+    try:
+        # Update task status to paused
+        cursor = db.execute("""
+            UPDATE PanelTaskLogs 
+            SET status = 'Paused'
+            WHERE panel_task_log_id = ? AND worker_id = ? AND status = 'In Progress'
+        """, (panel_task_log_id, worker_id))
+        
+        if cursor.rowcount == 0:
+            return False
+        
+        # Insert pause record
+        db.execute("""
+            INSERT INTO TaskPauses (panel_task_log_id, paused_by_worker_id, paused_at, reason)
+            VALUES (?, ?, ?, ?)
+        """, (panel_task_log_id, worker_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), reason))
+        
+        db.commit()
+        return True
+    except sqlite3.Error as e:
+        logging.error(f"Error pausing panel task: {e}", exc_info=True)
+        return False
+
+def resume_panel_task(panel_task_log_id, worker_id):
+    """Resume a paused panel task."""
+    db = get_db()
+    
+    # Check if worker already has another task in progress
+    existing_task_cursor = db.execute("""
+        SELECT panel_task_log_id FROM PanelTaskLogs 
+        WHERE worker_id = ? AND status = 'In Progress' AND panel_task_log_id != ?
+    """, (worker_id, panel_task_log_id))
+    
+    if existing_task_cursor.fetchone():
+        raise ValueError("Worker already has another task in progress.")
+    
+    try:
+        # Update task status to in progress
+        cursor = db.execute("""
+            UPDATE PanelTaskLogs 
+            SET status = 'In Progress'
+            WHERE panel_task_log_id = ? AND worker_id = ? AND status = 'Paused'
+        """, (panel_task_log_id, worker_id))
+        
+        if cursor.rowcount == 0:
+            return False
+        
+        # Update the most recent pause record
+        db.execute("""
+            UPDATE TaskPauses 
+            SET resumed_at = ?
+            WHERE panel_task_log_id = ? AND resumed_at IS NULL
+        """, (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), panel_task_log_id))
+        
+        db.commit()
+        return True
+    except sqlite3.Error as e:
+        logging.error(f"Error resuming panel task: {e}", exc_info=True)
+        return False
+
+def finish_panel_task(panel_task_log_id, worker_id, station_id, notes=None):
+    """Finish a panel task and update production flow."""
+    db = get_db()
+    
+    try:
+        # Get task details
+        task_cursor = db.execute("""
+            SELECT ptl.plan_id, ptl.panel_definition_id, ptl.task_definition_id
+            FROM PanelTaskLogs ptl
+            WHERE ptl.panel_task_log_id = ? AND ptl.worker_id = ? 
+                  AND ptl.status IN ('In Progress', 'Paused')
+        """, (panel_task_log_id, worker_id))
+        
+        task_row = task_cursor.fetchone()
+        if not task_row:
+            return False
+        
+        plan_id, panel_definition_id, task_definition_id = task_row
+        
+        # Update task status to completed
+        db.execute("""
+            UPDATE PanelTaskLogs 
+            SET status = 'Completed', completed_at = ?, station_finish = ?, notes = ?
+            WHERE panel_task_log_id = ?
+        """, (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), station_id, notes, panel_task_log_id))
+        
+        # Check if all tasks for this panel at this station are completed
+        _check_and_update_panel_progression(db, plan_id, panel_definition_id, station_id)
+        
+        # Check if all panels for this module at this station are completed
+        _check_and_update_module_progression(db, plan_id, station_id)
+        
+        db.commit()
+        return True
+    except sqlite3.Error as e:
+        logging.error(f"Error finishing panel task: {e}", exc_info=True)
+        return False
+
+def _check_and_update_panel_progression(db, plan_id, panel_definition_id, current_station_id):
+    """Check if panel should move to next station or be marked as completed."""
+    # Get current station sequence order
+    station_cursor = db.execute(
+        "SELECT sequence_order, line_type FROM Stations WHERE station_id = ?",
+        (current_station_id,)
+    )
+    station_row = station_cursor.fetchone()
+    if not station_row:
+        return
+    
+    current_sequence_order, line_type = station_row
+    
+    # Check if there are any incomplete tasks for this panel at this station
+    incomplete_tasks_cursor = db.execute("""
+        SELECT COUNT(*) as incomplete_count
+        FROM TaskDefinitions td
+        WHERE td.is_panel_task = 1 
+              AND td.station_sequence_order = ?
+              AND td.task_definition_id NOT IN (
+                  SELECT ptl.task_definition_id 
+                  FROM PanelTaskLogs ptl 
+                  WHERE ptl.plan_id = ? AND ptl.panel_definition_id = ? 
+                        AND ptl.status = 'Completed'
+              )
+    """, (current_sequence_order, plan_id, panel_definition_id))
+    
+    incomplete_count = incomplete_tasks_cursor.fetchone()[0]
+    
+    if incomplete_count == 0:
+        # All tasks completed at this station, move to next station
+        if line_type == 'W' and current_station_id == 'W5':
+            # Last panel station, move to magazine
+            db.execute("""
+                UPDATE PanelsProductionPlan 
+                SET status = 'magazine', current_station = 'M1', updated_at = CURRENT_TIMESTAMP
+                WHERE plan_id = ? AND panel_definition_id = ?
+            """, (plan_id, panel_definition_id))
+        elif line_type == 'M':
+            # Magazine complete, mark as consumed (ready for assembly)
+            db.execute("""
+                UPDATE PanelsProductionPlan 
+                SET status = 'consumed', current_station = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE plan_id = ? AND panel_definition_id = ?
+            """, (plan_id, panel_definition_id))
+        else:
+            # Move to next station in the same line
+            next_station_cursor = db.execute("""
+                SELECT station_id FROM Stations 
+                WHERE line_type = ? AND sequence_order > ?
+                ORDER BY sequence_order ASC LIMIT 1
+            """, (line_type, current_sequence_order))
+            
+            next_station_row = next_station_cursor.fetchone()
+            if next_station_row:
+                next_station_id = next_station_row[0]
+                db.execute("""
+                    UPDATE PanelsProductionPlan 
+                    SET current_station = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE plan_id = ? AND panel_definition_id = ?
+                """, (next_station_id, plan_id, panel_definition_id))
+
+def _check_and_update_module_progression(db, plan_id, current_station_id):
+    """Check if module should move to next phase of production."""
+    # Get current station info
+    station_cursor = db.execute(
+        "SELECT sequence_order, line_type FROM Stations WHERE station_id = ?",
+        (current_station_id,)
+    )
+    station_row = station_cursor.fetchone()
+    if not station_row:
+        return
+    
+    current_sequence_order, line_type = station_row
+    
+    if line_type == 'W':
+        # Check if all panels for this module are completed in panel line
+        incomplete_panels_cursor = db.execute("""
+            SELECT COUNT(*) as incomplete_count
+            FROM PanelsProductionPlan ppp
+            WHERE ppp.plan_id = ? AND ppp.status IN ('planned', 'in_progress')
+        """, (plan_id,))
+        
+        incomplete_count = incomplete_panels_cursor.fetchone()[0]
+        
+        if incomplete_count == 0:
+            # All panels completed, move module to Magazine status
+            db.execute("""
+                UPDATE ModuleProductionPlan 
+                SET status = 'Magazine', current_station = 'M1', updated_at = CURRENT_TIMESTAMP
+                WHERE plan_id = ?
+            """, (plan_id,))
+    
+    elif line_type == 'M':
+        # Check if all panels are consumed (ready for assembly)
+        unconsumed_panels_cursor = db.execute("""
+            SELECT COUNT(*) as unconsumed_count
+            FROM PanelsProductionPlan ppp
+            WHERE ppp.plan_id = ? AND ppp.status != 'consumed'
+        """, (plan_id,))
+        
+        unconsumed_count = unconsumed_panels_cursor.fetchone()[0]
+        
+        if unconsumed_count == 0:
+            # All panels consumed, move module to Assembly status
+            # Get the planned assembly line for this module
+            module_cursor = db.execute(
+                "SELECT planned_assembly_line FROM ModuleProductionPlan WHERE plan_id = ?",
+                (plan_id,)
+            )
+            module_row = module_cursor.fetchone()
+            if module_row:
+                planned_line = module_row[0]
+                # Find first station in the assembly line
+                first_assembly_station_cursor = db.execute("""
+                    SELECT station_id FROM Stations 
+                    WHERE line_type = ? 
+                    ORDER BY sequence_order ASC LIMIT 1
+                """, (planned_line,))
+                
+                first_station_row = first_assembly_station_cursor.fetchone()
+                if first_station_row:
+                    first_station_id = first_station_row[0]
+                    db.execute("""
+                        UPDATE ModuleProductionPlan 
+                        SET status = 'Assembly', current_station = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE plan_id = ?
+                    """, (first_station_id, plan_id))
+    
+    elif line_type in ['A', 'B', 'C']:
+        # Assembly line - check if module should move to next station or be completed
+        # This would require module-level tasks, which aren't fully implemented yet
+        # For now, we'll leave this as a placeholder
+        pass
+
+def get_worker_current_task(worker_id):
+    """Get the current active task for a worker."""
+    db = get_db()
+    
+    # Check panel tasks first
+    panel_task_cursor = db.execute("""
+        SELECT ptl.panel_task_log_id, ptl.plan_id, ptl.panel_definition_id, 
+               ptl.task_definition_id, ptl.status, ptl.started_at, ptl.station_start,
+               td.name as task_name, pd.panel_code, pd.panel_group,
+               mpp.project_name, mpp.house_identifier, mpp.module_number
+        FROM PanelTaskLogs ptl
+        JOIN TaskDefinitions td ON ptl.task_definition_id = td.task_definition_id
+        JOIN PanelDefinitions pd ON ptl.panel_definition_id = pd.panel_definition_id
+        JOIN ModuleProductionPlan mpp ON ptl.plan_id = mpp.plan_id
+        WHERE ptl.worker_id = ? AND ptl.status IN ('In Progress', 'Paused')
+        ORDER BY ptl.started_at DESC
+        LIMIT 1
+    """, (worker_id,))
+    
+    panel_task_row = panel_task_cursor.fetchone()
+    if panel_task_row:
+        task_dict = dict(panel_task_row)
+        task_dict['task_type'] = 'panel'
+        return task_dict
+    
+    # Check module tasks (if implemented)
+    # TODO: Add module task checking when module tasks are implemented
+    
+    return None
