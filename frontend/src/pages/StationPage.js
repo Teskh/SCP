@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
-import { 
-    getStationOverviewData, 
-} from '../services/adminService'; // Import services
+import {
+    getStationContext,
+    startPanelTask,
+    pausePanelTask,
+    resumePanelTask,
+    finishPanelTask,
+} from '../services/productionService'; // Import services
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
@@ -37,9 +41,9 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
     const [isLoadingStationData, setIsLoadingStationData] = useState(false);
     const [stationDataError, setStationDataError] = useState('');
 
-    // State for panel selection UI
-    const [selectingPanelForTask, setSelectingPanelForTask] = useState(null); // task_definition_id
-    const [selectedPanelId, setSelectedPanelId] = useState('');
+    // State for task actions
+    const [isTaskUpdating, setIsTaskUpdating] = useState({}); // e.g., { [taskKey]: true }
+    const [taskErrors, setTaskErrors] = useState({}); // e.g., { [taskKey]: "Error message" }
 
 
     useEffect(() => {
@@ -101,12 +105,49 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         setAvailablePanels([]); // Clear panels before fetch
         try {
             // console.log("Fetching station data for:", currentSpecificStationId, "Specialty:", user.specialty_id);
-            const data = await getStationOverviewData(currentSpecificStationId, user.specialty_id);
-            // console.log("Station Overview Data Received:", data); // Debugging
-            setModuleData(data.module); // Will be null if no module at station
-            setUpcomingModuleData(data.upcoming_module); // Will be null if module exists or not seq 1 or no upcoming
-            setTasks(data.tasks || []); // Ensure tasks is an array (tasks for current or upcoming module)
-            setAvailablePanels(data.panels || []); // Store panels if returned (for current or upcoming module)
+            const data = await getStationContext(currentSpecificStationId, user.specialty_id);
+            // console.log("Station Context Data Received:", data); // Debugging
+
+            setModuleData(data.current_module || null);
+            setUpcomingModuleData(null); // Not provided by getStationContext
+
+            let flattenedTasks = [];
+            if (data.current_module && data.current_module.panels) {
+                data.current_module.panels.forEach(panel => {
+                    if (panel.current_task) {
+                        flattenedTasks.push({
+                            ...panel.current_task,
+                            plan_id: data.current_module.plan_id,
+                            panel_definition_id: panel.panel_definition_id,
+                            // task_name is already in current_task
+                            // task_description is already in current_task (assuming it has 'description')
+                            // task_status is already in current_task
+                            is_panel_task: true,
+                        });
+                    } else if (panel.available_tasks) {
+                        panel.available_tasks.forEach(availTask => {
+                            // Filter by specialty_id if it exists on availTask and user has a specialty_id
+                            if (user && user.specialty_id !== undefined && availTask.specialty_id !== undefined) {
+                                if (availTask.specialty_id !== user.specialty_id) {
+                                    return; // Skip this task if specialty doesn't match
+                                }
+                            }
+                            flattenedTasks.push({
+                                ...availTask, // Includes task_definition_id, name, description, specialty_id, specialty_name
+                                plan_id: data.current_module.plan_id,
+                                panel_definition_id: panel.panel_definition_id,
+                                task_name: availTask.name, // Explicitly map name
+                                task_description: availTask.description, // Explicitly map description
+                                task_status: 'Not Started',
+                                panel_task_log_id: null,
+                                is_panel_task: true,
+                            });
+                        });
+                    }
+                });
+            }
+            setTasks(data.current_module ? flattenedTasks : []);
+            setAvailablePanels(data.current_module && data.current_module.panels ? data.current_module.panels : []);
         } catch (error) {
             console.error("Error fetching station data:", error);
             setStationDataError(error.message || 'Error al cargar datos de la estación.');
@@ -120,11 +161,98 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         fetchStationData();
     }, [fetchStationData]); // Depend on the stable fetchStationData function
 
+    // Task Action Handlers
+    const getTaskKey = (task, index) => `${task.plan_id}-${task.panel_definition_id}-${task.task_definition_id}-${task.panel_task_log_id || index}`;
+
+    const handleStartTask = async (task, taskKey) => {
+        if (!user || !user.worker_id || !currentSpecificStationId || !task.plan_id || !task.panel_definition_id || !task.task_definition_id) {
+            setTaskErrors(prev => ({ ...prev, [taskKey]: "Faltan datos para iniciar la tarea." }));
+            return;
+        }
+        setIsTaskUpdating(prev => ({ ...prev, [taskKey]: true }));
+        setTaskErrors(prev => ({ ...prev, [taskKey]: null }));
+        try {
+            await startPanelTask(
+                task.plan_id,
+                task.panel_definition_id,
+                task.task_definition_id,
+                user.worker_id,
+                currentSpecificStationId
+            );
+            fetchStationData(); // Refresh data
+        } catch (error) {
+            console.error("Error starting task:", error);
+            setTaskErrors(prev => ({ ...prev, [taskKey]: error.message || 'Error al iniciar la tarea.' }));
+        } finally {
+            setIsTaskUpdating(prev => ({ ...prev, [taskKey]: false }));
+        }
+    };
+
+    const handlePauseTask = async (task, taskKey) => {
+        if (!user || !user.worker_id || !task.panel_task_log_id) {
+            setTaskErrors(prev => ({ ...prev, [taskKey]: "Faltan datos para pausar la tarea." }));
+            return;
+        }
+        setIsTaskUpdating(prev => ({ ...prev, [taskKey]: true }));
+        setTaskErrors(prev => ({ ...prev, [taskKey]: null }));
+        try {
+            await pausePanelTask(task.panel_task_log_id, user.worker_id);
+            fetchStationData(); // Refresh data
+        } catch (error) {
+            console.error("Error pausing task:", error);
+            setTaskErrors(prev => ({ ...prev, [taskKey]: error.message || 'Error al pausar la tarea.' }));
+        } finally {
+            setIsTaskUpdating(prev => ({ ...prev, [taskKey]: false }));
+        }
+    };
+
+    const handleResumeTask = async (task, taskKey) => {
+        if (!user || !user.worker_id || !task.panel_task_log_id) {
+            setTaskErrors(prev => ({ ...prev, [taskKey]: "Faltan datos para reanudar la tarea." }));
+            return;
+        }
+        setIsTaskUpdating(prev => ({ ...prev, [taskKey]: true }));
+        setTaskErrors(prev => ({ ...prev, [taskKey]: null }));
+        try {
+            await resumePanelTask(task.panel_task_log_id, user.worker_id);
+            fetchStationData(); // Refresh data
+        } catch (error) {
+            console.error("Error resuming task:", error);
+            setTaskErrors(prev => ({ ...prev, [taskKey]: error.message || 'Error al reanudar la tarea.' }));
+        } finally {
+            setIsTaskUpdating(prev => ({ ...prev, [taskKey]: false }));
+        }
+    };
+
+    const handleCompleteTask = async (task, taskKey) => {
+        if (!user || !user.worker_id || !task.panel_task_log_id || !currentSpecificStationId) {
+            setTaskErrors(prev => ({ ...prev, [taskKey]: "Faltan datos para completar la tarea." }));
+            return;
+        }
+        setIsTaskUpdating(prev => ({ ...prev, [taskKey]: true }));
+        setTaskErrors(prev => ({ ...prev, [taskKey]: null }));
+        try {
+            await finishPanelTask(task.panel_task_log_id, user.worker_id, currentSpecificStationId);
+            fetchStationData(); // Refresh data
+        } catch (error) {
+            console.error("Error completing task:", error);
+            setTaskErrors(prev => ({ ...prev, [taskKey]: error.message || 'Error al completar la tarea.' }));
+        } finally {
+            setIsTaskUpdating(prev => ({ ...prev, [taskKey]: false }));
+        }
+    };
+
     const handleSaveSpecificStation = (specificStationId) => {
         localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
         setCurrentSpecificStationId(specificStationId);
         setShowSpecificStationModal(false);
         // Data fetching will be triggered by the useEffect watching currentSpecificStationId via fetchStationData
+    };
+
+    const handleChangeStationClick = () => {
+        localStorage.removeItem(SELECTED_SPECIFIC_STATION_ID_KEY);
+        setCurrentSpecificStationId(null); // Also clear it from state immediately
+        setShowSpecificStationModal(true);
     };
 
     const displayStationName = useMemo(() => {
@@ -202,6 +330,9 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
     const stationInfoStyle = {
         fontSize: '0.9em',
         color: '#555',
+        display: 'flex', // Added for alignment
+        flexDirection: 'column', // Stack text and button
+        alignItems: 'flex-end', // Align to the right
     };
 
     if (isLoadingAllStations && !allStations.length) { // Show loading only if truly no station data yet
@@ -228,7 +359,15 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
             <div style={headerStyle}>
                 <h1>Bienvenido/a, {user.first_name}</h1>
                 <div style={stationInfoStyle}>
-                    Estación: {displayStationName}
+                    <div>Estación: {displayStationName}</div>
+                    {currentSpecificStationId && !showSpecificStationModal && (
+                        <button
+                            onClick={handleChangeStationClick}
+                            style={{...buttonStyle, marginTop: '5px', padding: '5px 10px', fontSize: '0.8em', backgroundColor: '#6c757d' }} // Secondary color
+                        >
+                            Cambiar Estación
+                        </button>
+                    )}
                 </div>
             </div>
             {allStationsError && <p style={{ color: 'red' }}>{allStationsError}</p>}
@@ -268,85 +407,63 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                         <div style={{ marginTop: '30px' }}>
                             <h3>Tareas {moduleData ? 'Pendientes/En Progreso' : 'Próximo Módulo'}</h3>
                             <ul style={{ listStyleType: 'none', padding: 0 }}>
-                                {tasks.map(task => {
-                                    const isSelectingPanel = selectingPanelForTask === task.task_definition_id;
-                                    const error = null; // No task actions, so no error state
+                                {tasks.map((task, index) => {
+                                    const taskKey = getTaskKey(task, index);
+                                    const isLoading = isTaskUpdating[taskKey];
+                                    const error = taskErrors[taskKey];
 
                                     return (
-                                        <li key={task.task_definition_id} style={taskListItemStyle}>
+                                        <li key={taskKey} style={taskListItemStyle}>
                                             <div style={taskInfoStyle}>
                                                 <h4>{task.task_name}</h4>
-                                                <p>{task.task_description}</p>
+                                                <p>{task.task_description || 'Sin descripción detallada.'}</p>
                                                 <p><strong>Estado:</strong> {task.task_status}</p>
-                                                {task.house_type_panel_id && <p><em>Panel ID: {task.house_type_panel_id}</em></p>}
+                                                {task.panel_definition_id && <p><em>Panel ID: {task.panel_definition_id} (Def)</em></p>}
+                                                {task.is_panel_task && <p><small>Tarea de Panel</small></p>}
                                             </div>
                                             <div style={taskActionsStyle}>
-                                                {task.task_status === 'Not Started' && !isSelectingPanel && (
+                                                {task.task_status === 'Not Started' && (
                                                     <button
-                                                        disabled={true}
+                                                        onClick={() => handleStartTask(task, taskKey)}
+                                                        disabled={isLoading}
                                                         style={buttonStyle}
                                                     >
-                                                        Iniciar
+                                                        {isLoading ? 'Iniciando...' : 'Iniciar'}
                                                     </button>
-                                                )}
-                                                {isSelectingPanel && (
-                                                    <div style={panelSelectorContainerStyle}>
-                                                        <select
-                                                            value={selectedPanelId}
-                                                            onChange={(e) => setSelectedPanelId(e.target.value)}
-                                                            style={selectStyle}
-                                                            disabled={true}
-                                                        >
-                                                            <option value="">-- Seleccione Panel --</option>
-                                                            {availablePanels.map(panel => (
-                                                                <option key={panel.panel_definition_id} value={panel.panel_definition_id}>
-                                                                    {panel.panel_code} ({panel.panel_group}{panel.multiwall_code ? ` / ${panel.multiwall_code}` : ''})
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <button
-                                                            disabled={true}
-                                                            style={{...buttonStyle, marginLeft: '10px'}}
-                                                        >
-                                                            Confirmar Inicio
-                                                        </button>
-                                                        <button
-                                                            disabled={true}
-                                                            style={{...buttonStyle, marginLeft: '5px', backgroundColor: '#6c757d'}} // Secondary color
-                                                        >
-                                                            Cancelar
-                                                        </button>
-                                                    </div>
                                                 )}
                                                 {task.task_status === 'In Progress' && (
                                                     <>
                                                         <button
-                                                            disabled={true}
+                                                            onClick={() => handlePauseTask(task, taskKey)}
+                                                            disabled={isLoading}
                                                             style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black', marginRight: '5px'}}
                                                         >
-                                                            Pausar
+                                                            {isLoading ? 'Pausando...' : 'Pausar'}
                                                         </button>
                                                         <button
-                                                            disabled={true}
+                                                            onClick={() => handleCompleteTask(task, taskKey)}
+                                                            disabled={isLoading}
                                                             style={{...buttonStyle, backgroundColor: '#28a745'}}
                                                         >
-                                                            Completar
+                                                            {isLoading ? 'Completando...' : 'Completar'}
                                                         </button>
                                                     </>
                                                 )}
                                                 {task.task_status === 'Paused' && (
                                                     <>
                                                         <button
-                                                            disabled={true}
+                                                            onClick={() => handleResumeTask(task, taskKey)}
+                                                            disabled={isLoading}
                                                             style={{...buttonStyle, backgroundColor: '#17a2b8', marginRight: '5px'}}
                                                         >
-                                                            Reanudar
+                                                            {isLoading ? 'Reanudando...' : 'Reanudar'}
                                                         </button>
                                                         <button
-                                                            disabled={true}
+                                                            onClick={() => handleCompleteTask(task, taskKey)}
+                                                            disabled={isLoading}
                                                             style={{...buttonStyle, backgroundColor: '#28a745'}}
                                                         >
-                                                            Completar
+                                                            {isLoading ? 'Completando...' : 'Completar'}
                                                         </button>
                                                     </>
                                                 )}
@@ -407,19 +524,7 @@ const taskActionsStyle = {
     minWidth: '200px', // Ensure actions have some minimum width
 };
 
-const panelSelectorContainerStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    marginTop: '10px',
-    flexWrap: 'wrap', // Allow buttons to wrap below select
-};
-
-const selectStyle = {
-    padding: '8px',
-    marginRight: '10px', // Space between select and button
-    minWidth: '150px',
-    flexGrow: 1, // Allow select to grow
-};
+// panelSelectorContainerStyle and selectStyle are removed as they are no longer used.
 
 const buttonStyle = {
     padding: '8px 15px',
