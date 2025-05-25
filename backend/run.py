@@ -10,7 +10,7 @@ app = create_app()
 if __name__ == '__main__':
     # Use environment variables for host and port if available, otherwise default
     host = os.environ.get('FLASK_RUN_HOST', '127.0.0.1')
-    port = int(os.environ.get('FLASK_RUN_PORT', 5001)) # Use 5001 to avoid conflict with React's 3000
+    port = int(os.environ.get('FLASK_RUN_PORT', 5004)) # Use 5004 to match frontend configuration
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true' # Default to debug mode
 
     print(f" * Starting Flask server on http://{host}:{port}")
