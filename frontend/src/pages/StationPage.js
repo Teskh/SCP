@@ -6,26 +6,30 @@ import { getStationOverviewData, startTask } from '../services/adminService'; //
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
 const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId';
+const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext'; // New constant for the main key
 
 // Helper function to check if a specific station ID is valid for the ambiguous context
-const checkSpecificIdValidity = (specificId, ambiguousSequence, stations) => {
-    if (!specificId || !stations || stations.length === 0) return false;
-    const station = stations.find(s => s.station_id === specificId);
+const checkSpecificIdValidity = (specificId, ambiguousContextValue, allStations) => {
+    if (!specificId || !allStations || allStations.length === 0) return false;
+    const station = allStations.find(s => s.station_id === specificId);
     if (!station) return false;
 
-    if (ambiguousSequence === PANEL_LINE_GENERAL_VALUE) {
-        return station.sequence_order >= 1 && station.sequence_order <= 5; // W stations
+    if (ambiguousContextValue === PANEL_LINE_GENERAL_VALUE) {
+        // For 'PANEL_LINE_GENERAL', the specific ID must be a 'W' type station
+        return station.line_type === 'W';
     } else {
-        const numericAmbiguousSeq = parseInt(ambiguousSequence, 10);
+        // For numeric assembly sequences (7-12), the specific ID must match that sequence order
+        const numericAmbiguousSeq = parseInt(ambiguousContextValue, 10);
         if (isNaN(numericAmbiguousSeq)) return false;
         return station.sequence_order === numericAmbiguousSeq;
     }
 };
 
 
-const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingAllStations, allStationsError }) => {
+const StationPage = ({ user, allStations, isLoadingAllStations, allStationsError }) => { // Removed activeStationSequenceOrder prop
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
-    const [currentSpecificStationId, setCurrentSpecificStationId] = useState(null);
+    const [userSelectedStationContext, setUserSelectedStationContext] = useState(null); // New state for the main context from localStorage
+    const [resolvedSpecificStationId, setResolvedSpecificStationId] = useState(null); // The actual station_id to use for API calls
 
     // State for station overview data (current module, upcoming module, tasks, panels)
     const [moduleData, setModuleData] = useState(null); // Module currently at station
@@ -42,52 +46,58 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
     const [selectedPanelId, setSelectedPanelId] = useState('');
 
 
+    // Effect to determine the station context and specific station ID
     useEffect(() => {
         if (!user || isLoadingAllStations || !allStations || allStations.length === 0) {
-            // If stations are loading or not available, or no user, don't do anything yet.
-            // If activeStationSequenceOrder is null/undefined (not configured), also wait.
-            if (!activeStationSequenceOrder && user) {
-                 // If user is logged in but no station context is set at all,
-                 // this page might show a message or redirect to context selection.
-                 // For now, we assume activeStationSequenceOrder will be set.
-            }
+            return;
+        }
+
+        const storedContext = localStorage.getItem(SELECTED_STATION_CONTEXT_KEY);
+        setUserSelectedStationContext(storedContext); // Set the main context
+
+        if (!storedContext) {
+            // No station context selected at all, clear resolved ID and ensure modal is closed
+            setResolvedSpecificStationId(null);
+            setShowSpecificStationModal(false);
             return;
         }
 
         const specificIdFromStorage = localStorage.getItem(SELECTED_SPECIFIC_STATION_ID_KEY);
-        setCurrentSpecificStationId(specificIdFromStorage);
 
-        const parsedSequenceOrder = typeof activeStationSequenceOrder === 'string' && activeStationSequenceOrder !== PANEL_LINE_GENERAL_VALUE
-            ? parseInt(activeStationSequenceOrder, 10)
-            : activeStationSequenceOrder;
+        const isAmbiguousContext =
+            storedContext === PANEL_LINE_GENERAL_VALUE ||
+            (typeof storedContext === 'string' && parseInt(storedContext, 10) >= 7 && parseInt(storedContext, 10) <= 12);
 
-        const isAmbiguous =
-            parsedSequenceOrder === PANEL_LINE_GENERAL_VALUE ||
-            (typeof parsedSequenceOrder === 'number' && parsedSequenceOrder >= 7 && parsedSequenceOrder <= 12);
-
-        if (isAmbiguous) {
-            const isValid = checkSpecificIdValidity(specificIdFromStorage, parsedSequenceOrder, allStations);
-            if (!isValid) {
-                setShowSpecificStationModal(true);
+        if (isAmbiguousContext) {
+            const isValidSpecificId = checkSpecificIdValidity(specificIdFromStorage, storedContext, allStations);
+            if (!isValidSpecificId) {
+                // Ambiguous context, but no valid specific ID chosen yet or it's invalid
+                setResolvedSpecificStationId(null); // Clear invalid specific ID
+                setShowSpecificStationModal(true); // Prompt user to select specific station
             } else {
+                // Ambiguous context, and a valid specific ID is already chosen
+                setResolvedSpecificStationId(specificIdFromStorage);
                 setShowSpecificStationModal(false);
             }
         } else {
-            // Not ambiguous, clear any lingering specific ID and don't show modal
+            // Not an ambiguous context (it's a direct station ID like 'W1', 'A1A', etc.)
+            // In this case, the 'selectedStationContext' IS the specific station ID.
+            setResolvedSpecificStationId(storedContext);
             setShowSpecificStationModal(false);
+            // Clear any lingering specific ID from previous ambiguous selections, as it's not relevant now
             if (specificIdFromStorage) {
                 localStorage.removeItem(SELECTED_SPECIFIC_STATION_ID_KEY);
-                setCurrentSpecificStationId(null);
             }
         }
-    }, [user, activeStationSequenceOrder, allStations, isLoadingAllStations]); // Removed currentSpecificStationId from deps as it's set inside
+    }, [user, allStations, isLoadingAllStations]); // Dependencies for this effect
 
     // Define fetchStationData using useCallback to stabilize its identity
     const fetchStationData = useCallback(async () => {
-        if (!currentSpecificStationId || !user || user.specialty_id === undefined) {
+        // Use resolvedSpecificStationId for API calls
+        if (!resolvedSpecificStationId || !user || user.specialty_id === undefined) {
             // Clear data if station or user/specialty is not set
             setModuleData(null);
-            setUpcomingModuleData(null); // Clear upcoming module too
+            setUpcomingModuleData(null);
             setTasks([]);
             setAvailablePanels([]);
             return;
@@ -100,9 +110,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         setTasks([]);
         setAvailablePanels([]); // Clear panels before fetch
         try {
-            // console.log("Fetching station data for:", currentSpecificStationId, "Specialty:", user.specialty_id);
-            const data = await getStationOverviewData(currentSpecificStationId, user.specialty_id);
-            // console.log("Station Overview Data Received:", data); // Debugging
+            const data = await getStationOverviewData(resolvedSpecificStationId, user.specialty_id); // Use resolvedSpecificStationId
             setModuleData(data.module); // Will be null if no module at station
             setUpcomingModuleData(data.upcoming_module); // Will be null if module exists or not seq 1 or no upcoming
             setTasks(data.tasks || []); // Ensure tasks is an array (tasks for current or upcoming module)
@@ -113,25 +121,25 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         } finally {
             setIsLoadingStationData(false);
         }
-    }, [currentSpecificStationId, user]); // Dependencies for useCallback
+    }, [resolvedSpecificStationId, user]); // Dependencies for useCallback
 
-    // Effect to fetch module, task, and panel data
+    // Effect to trigger data fetching when resolvedSpecificStationId changes
     useEffect(() => {
         fetchStationData();
     }, [fetchStationData]); // Depend on the stable fetchStationData function
 
     const handleSaveSpecificStation = (specificStationId) => {
         localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
-        setCurrentSpecificStationId(specificStationId);
+        setResolvedSpecificStationId(specificStationId); // Update resolved ID
         setShowSpecificStationModal(false);
-        // Data fetching will be triggered by the useEffect watching currentSpecificStationId via fetchStationData
+        // fetchStationData will be triggered by the useEffect watching resolvedSpecificStationId
     };
 
     const isPanelLineStation = useMemo(() => {
-        if (!currentSpecificStationId || !allStations || allStations.length === 0) return false;
-        const station = allStations.find(s => s.station_id === currentSpecificStationId);
-        return station && station.sequence_order >= 1 && station.sequence_order <= 5;
-    }, [currentSpecificStationId, allStations]);
+        if (!resolvedSpecificStationId || !allStations || allStations.length === 0) return false;
+        const station = allStations.find(s => s.station_id === resolvedSpecificStationId);
+        return station && station.line_type === 'W'; // Check line_type 'W' for panel line stations
+    }, [resolvedSpecificStationId, allStations]);
 
     // --- Task Action Handlers ---
 
@@ -165,8 +173,8 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         // Determine if we are starting for a current module or an upcoming one
         const targetModule = moduleData || upcomingModuleData;
 
-        if (!targetModule || !targetModule.plan_id || !user || !user.id || !currentSpecificStationId) {
-            console.error("Missing data needed to start task:", { targetModule, user, currentSpecificStationId });
+        if (!targetModule || !targetModule.plan_id || !user || !user.id || !resolvedSpecificStationId) {
+            console.error("Missing data needed to start task:", { targetModule, user, resolvedSpecificStationId });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para iniciar la tarea (plan_id, usuario, estación)." });
             return;
         }
@@ -180,7 +188,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                 targetModule.plan_id, // Use plan_id from current or upcoming module
                 taskDefinitionId,
                 user.id, // worker_id
-                currentSpecificStationId, // stationStart
+                resolvedSpecificStationId, // stationStart
                 panelId // house_type_panel_id (will be null if not panel line or not selected)
             );
             // Success! Refresh data to show updated task status (module should now appear as current)
@@ -200,33 +208,29 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
     const displayStationName = useMemo(() => {
         if (isLoadingAllStations) return "Cargando info de estación...";
         if (allStationsError) return `Error de estación: ${allStationsError}`;
-        if (!activeStationSequenceOrder && !currentSpecificStationId) return "Estación No Configurada";
+        if (!userSelectedStationContext && !resolvedSpecificStationId) return "Estación No Configurada";
 
-        // Determine the effective station ID to display.
-        // If currentSpecificStationId is set (meaning an ambiguous context was chosen and then a specific sub-station), use it.
-        // Otherwise, use activeStationSequenceOrder (which could be a specific station ID like W1, or an ambiguous one like PANEL_LINE_GENERAL_VALUE or a sequence number).
-        const effectiveStationIdOrSequence = currentSpecificStationId || activeStationSequenceOrder;
-
-        if (effectiveStationIdOrSequence && allStations && allStations.length > 0) {
-            // Try to find a direct station match first (for W1-W5, A1A, etc.)
-            const directStationMatch = allStations.find(s => s.station_id === effectiveStationIdOrSequence);
-            if (directStationMatch) {
-                return `${directStationMatch.name} (${directStationMatch.station_id})`;
+        // If a specific station has been resolved, use its name
+        if (resolvedSpecificStationId && allStations && allStations.length > 0) {
+            const station = allStations.find(s => s.station_id === resolvedSpecificStationId);
+            if (station) {
+                return `${station.name} (${station.station_id})`;
             }
         }
         
-        // If no direct station match, handle ambiguous contexts or general labels
+        // If modal is showing, it means we're waiting for a specific selection
         if (showSpecificStationModal) {
             return "Esperando selección de estación específica...";
         }
 
-        if (activeStationSequenceOrder === PANEL_LINE_GENERAL_VALUE) {
+        // If userSelectedStationContext is set but no specific station resolved yet (e.g., just loaded page with ambiguous context)
+        if (userSelectedStationContext === PANEL_LINE_GENERAL_VALUE) {
             return PANEL_LINE_GENERAL_LABEL;
         }
 
         // Handle assembly sequence numbers (7-12)
-        if (allStations && allStations.length > 0) {
-            const numericSequence = parseInt(activeStationSequenceOrder, 10);
+        if (userSelectedStationContext && allStations && allStations.length > 0) {
+            const numericSequence = parseInt(userSelectedStationContext, 10);
             if (!isNaN(numericSequence) && numericSequence >= 7 && numericSequence <= 12) {
                 // Find any station with this sequence order to get the general assembly name
                 const sampleStation = allStations.find(s => s.sequence_order === numericSequence);
@@ -238,9 +242,9 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
         }
         
         // Fallback if nothing matches
-        return activeStationSequenceOrder ? `Contexto: ${activeStationSequenceOrder}` : "Estación No Configurada";
+        return userSelectedStationContext ? `Contexto: ${userSelectedStationContext}` : "Estación No Configurada";
 
-    }, [activeStationSequenceOrder, currentSpecificStationId, allStations, isLoadingAllStations, allStationsError, showSpecificStationModal]);
+    }, [userSelectedStationContext, resolvedSpecificStationId, allStations, isLoadingAllStations, allStationsError, showSpecificStationModal]);
 
     if (!user) {
         return <Navigate to="/" replace />;
@@ -281,7 +285,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                 <SpecificStationSelectorModal
                     show={showSpecificStationModal}
                     onSave={handleSaveSpecificStation}
-                    ambiguousSequenceOrder={activeStationSequenceOrder}
+                    selectedStationContext={userSelectedStationContext} // Pass the main context
                     allStations={allStations}
                     isLoadingOptions={isLoadingAllStations}
                 />
@@ -294,7 +298,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
             </div>
             {allStationsError && <p style={{ color: 'red' }}>{allStationsError}</p>}
 
-            {!showSpecificStationModal && currentSpecificStationId ? (
+            {!showSpecificStationModal && resolvedSpecificStationId ? (
                 <div>
                     {isLoadingStationData && <p>Cargando datos del módulo y tareas...</p>}
                     {stationDataError && <p style={{ color: 'red' }}>{stationDataError}</p>}
@@ -398,7 +402,7 @@ const StationPage = ({ user, activeStationSequenceOrder, allStations, isLoadingA
                     )}
                 </div>
             ) : (
-                 !currentSpecificStationId && !showSpecificStationModal && <p>Configurando estación...</p>
+                 !resolvedSpecificStationId && !showSpecificStationModal && <p>Configurando estación...</p>
             )}
              {showSpecificStationModal && (
                 <p>Por favor, seleccione su estación específica para continuar.</p>

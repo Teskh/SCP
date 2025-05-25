@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL'; // From StationContextSelector/StationPage
 const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId'; // Key for localStorage
+const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext'; // New constant for the main context key
 
 // Basic modal styling
 const modalOverlayStyle = {
@@ -89,41 +90,54 @@ const disabledSaveButtonStyle = {
 function SpecificStationSelectorModal({
     show,
     onSave, // (specificStationId) => void
-    ambiguousSequenceOrder, // The general sequence order (e.g., 'PANEL_LINE_GENERAL' or '7')
+    selectedStationContext, // Renamed from ambiguousSequenceOrder
     allStations, // Array of all station objects { station_id, name, line_type, sequence_order }
     isLoadingOptions, // New prop
 }) {
-    const [selectedSpecificStation, setSelectedSpecificStation] = useState('');
+    const [selectedSpecificStation, setSelectedSpecificStation] = useState(''); // Local state for selection within the modal
     const [error, setError] = useState('');
 
     const specificOptions = useMemo(() => {
-        if (!allStations || !allStations.length || !ambiguousSequenceOrder) return [];
+        if (!allStations || !allStations.length || !selectedStationContext) return [];
 
-        if (ambiguousSequenceOrder === PANEL_LINE_GENERAL_VALUE) {
-            // W1 to W5 (sequence_order 1 to 5)
-            return allStations.filter(s => s.sequence_order >= 1 && s.sequence_order <= 5)
+        if (selectedStationContext === PANEL_LINE_GENERAL_VALUE) {
+            // Filter for 'W' type stations (Panel Line)
+            return allStations.filter(s => s.line_type === 'W')
                               .sort((a, b) => a.sequence_order - b.sequence_order);
         } else {
-            // Assembly lines: stations matching the numeric sequence_order
-            const numericSequence = parseInt(ambiguousSequenceOrder, 10);
+            // Filter for stations matching the numeric sequence_order (Assembly Lines)
+            const numericSequence = parseInt(selectedStationContext, 10);
             if (isNaN(numericSequence) || numericSequence < 7) return []; // Assembly lines start at seq 7
             return allStations.filter(s => s.sequence_order === numericSequence)
                               .sort((a,b) => a.station_id.localeCompare(b.station_id)); // Sort A, B, C
         }
-    }, [allStations, ambiguousSequenceOrder]);
+    }, [allStations, selectedStationContext]);
 
     useEffect(() => {
-        // Reset selection when options change or modal reopens
-        setSelectedSpecificStation('');
+        // When modal opens or context changes, try to pre-select if a specific ID is already stored
+        const storedSpecificId = localStorage.getItem(SELECTED_SPECIFIC_STATION_ID_KEY);
+        // Only pre-select if the stored ID is actually one of the valid options for the current ambiguous context
+        if (storedSpecificId && specificOptions.some(opt => opt.station_id === storedSpecificId)) {
+            setSelectedSpecificStation(storedSpecificId);
+        } else {
+            setSelectedSpecificStation(''); // Clear if no valid stored selection
+        }
         setError('');
-    }, [ambiguousSequenceOrder, show]); // Re-evaluate if show changes (modal opens)
+    }, [selectedStationContext, show, specificOptions]); // Added specificOptions to deps
 
     const handleStationSelect = (stationId) => {
-        // Save the selected station immediately on click
-        localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, stationId);
+        setSelectedSpecificStation(stationId); // Update local state for visual feedback
+        setError(''); // Clear error on new selection
+    };
+
+    const handleSaveClick = () => {
+        if (!selectedSpecificStation) {
+            setError("Por favor, seleccione una estación específica.");
+            return;
+        }
         // Call the parent's onSave function to update state and close the modal
-        onSave(stationId);
-        // Clear any previous error
+        onSave(selectedSpecificStation);
+        // The parent (StationPage) will then handle storing this in localStorage and re-fetching data.
         setError('');
     };
 
@@ -134,10 +148,10 @@ function SpecificStationSelectorModal({
     let title = "Seleccione la Estación Específica";
     let description = "";
 
-    if (ambiguousSequenceOrder === PANEL_LINE_GENERAL_VALUE) {
+    if (selectedStationContext === PANEL_LINE_GENERAL_VALUE) {
         description = `Ha configurado "Línea de Paneles (General)" para este dispositivo. Por favor, especifique a cuál estación de panel corresponde:`;
     } else {
-        const numericSequence = parseInt(ambiguousSequenceOrder, 10);
+        const numericSequence = parseInt(selectedStationContext, 10);
         if (!isNaN(numericSequence) && numericSequence >= 7) {
             description = `Ha configurado la secuencia de ensamblaje general "${numericSequence}" para este dispositivo. Por favor, especifique la línea y estación exacta (A, B, o C):`;
         }
@@ -151,7 +165,9 @@ function SpecificStationSelectorModal({
 
                 {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
 
-                {specificOptions.length > 0 ? (
+                {isLoadingOptions ? (
+                    <p>Cargando opciones de estación...</p>
+                ) : specificOptions.length > 0 ? (
                     <div style={buttonContainerStyle}>
                         {specificOptions.map(station => (
                             <div 
@@ -165,8 +181,15 @@ function SpecificStationSelectorModal({
                         ))}
                     </div>
                 ) : (
-                    <p>No hay opciones específicas disponibles para esta selección, o las estaciones aún no se han cargado.</p>
+                    <p>No hay opciones específicas disponibles para esta selección.</p>
                 )}
+                <button
+                    onClick={handleSaveClick}
+                    style={selectedSpecificStation ? saveButtonStyle : disabledSaveButtonStyle}
+                    disabled={!selectedSpecificStation || isLoadingOptions}
+                >
+                    Guardar Selección
+                </button>
             </div>
         </div>
     );

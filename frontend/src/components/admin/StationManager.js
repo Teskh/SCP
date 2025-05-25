@@ -3,6 +3,7 @@ import { getStations } from '../../services/adminService';
 
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
 const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
+const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext'; // New constant for the localStorage key
 
 function StationManager() {
     const [allStations, setAllStations] = useState([]);
@@ -13,7 +14,7 @@ function StationManager() {
     useEffect(() => {
         fetchStations();
         // Load current selection from localStorage
-        const saved = localStorage.getItem('selectedStationContext');
+        const saved = localStorage.getItem(SELECTED_STATION_CONTEXT_KEY);
         if (saved) {
             setSelectedStationContext(saved);
         }
@@ -58,7 +59,7 @@ function StationManager() {
 
         // 2. Add individual Panel Line stations (W1-W5)
         const panelLineStations = allStations
-            .filter(station => station.line_type === 'W' && station.sequence_order >= 1 && station.sequence_order <= 5)
+            .filter(station => station.line_type === 'W') // Filter by line_type 'W'
             .sort((a, b) => a.sequence_order - b.sequence_order); // Ensure W1, W2, etc. order
 
         panelLineStations.forEach(station => {
@@ -75,6 +76,7 @@ function StationManager() {
         allStations.forEach(station => {
             if (station.sequence_order >= 7 && station.sequence_order <= 12) {
                 const assemblyNumber = station.sequence_order - 6; // 7->1, 8->2, etc.
+                // Use the sequence_order as the value for the ambiguous group
                 if (!sequenceMap.has(station.sequence_order)) {
                     sequenceMap.set(station.sequence_order, {
                         value: station.sequence_order.toString(), // Convert to string for consistency with localStorage
@@ -98,12 +100,13 @@ function StationManager() {
 
     const handleStationSelect = (value) => {
         setSelectedStationContext(value);
-        localStorage.setItem('selectedStationContext', value);
+        localStorage.setItem(SELECTED_STATION_CONTEXT_KEY, value);
     };
 
     const clearSelection = () => {
         setSelectedStationContext('');
-        localStorage.removeItem('selectedStationContext');
+        localStorage.removeItem(SELECTED_STATION_CONTEXT_KEY);
+        localStorage.removeItem('selectedSpecificStationId'); // Also clear the specific ID if the general context is cleared
     };
 
     const groupedStationOptions = getStationOptions();
