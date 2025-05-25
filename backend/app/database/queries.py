@@ -1321,6 +1321,58 @@ def get_all_house_types():
     cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes ORDER BY name")
     return [dict(row) for row in cursor.fetchall()]
 
+def get_house_type_by_id(house_type_id):
+    """Fetches a single house type by its ID."""
+    db = get_db()
+    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes WHERE house_type_id = ?", (house_type_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def get_house_type_by_name(name):
+    """Fetches a house type by its name."""
+    db = get_db()
+    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes WHERE name = ?", (name,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def get_house_parameter_by_id(parameter_id):
+    """Fetches a single house parameter by its ID."""
+    db = get_db()
+    cursor = db.execute("SELECT parameter_id, name, unit FROM HouseParameters WHERE parameter_id = ?", (parameter_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def get_house_parameter_by_name(name):
+    """Fetches a house parameter by its name."""
+    db = get_db()
+    cursor = db.execute("SELECT parameter_id, name, unit FROM HouseParameters WHERE name = ?", (name,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def get_multiwall_by_id(multiwall_id):
+    """Fetches a single multiwall by its ID."""
+    db = get_db()
+    cursor = db.execute("SELECT multiwall_id, house_type_id, panel_group, multiwall_code FROM Multiwalls WHERE multiwall_id = ?", (multiwall_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def get_panel_definition_by_id(panel_definition_id):
+    """Fetches a single panel definition by its ID."""
+    db = get_db()
+    query = """
+        SELECT
+            pd.panel_definition_id, pd.house_type_id, pd.module_sequence_number,
+            pd.panel_group, pd.panel_code, pd.sub_type_id, pd.multiwall_id,
+            hst.name as sub_type_name, mw.multiwall_code
+        FROM PanelDefinitions pd
+        LEFT JOIN HouseSubType hst ON pd.sub_type_id = hst.sub_type_id
+        LEFT JOIN Multiwalls mw ON pd.multiwall_id = mw.multiwall_id
+        WHERE pd.panel_definition_id = ?
+    """
+    cursor = db.execute(query, (panel_definition_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
 
 def add_house_type(name, description, number_of_modules):
     """Adds a new house type."""

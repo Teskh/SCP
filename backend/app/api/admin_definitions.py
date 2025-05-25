@@ -935,6 +935,289 @@ def get_potential_dependencies_route(): # Renamed
         return jsonify(error="Failed to fetch potential task dependencies"), 500
 
 
+# === Workers Routes ===
+
+@admin_definitions_bp.route('/workers', methods=['GET'])
+def get_workers_route():
+    """Get all workers with their specialty and supervisor information."""
+    try:
+        workers = queries.get_all_workers()
+        return jsonify(workers)
+    except Exception as e:
+        logger.error(f"Error in get_workers_route: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch workers"), 500
+
+@admin_definitions_bp.route('/workers', methods=['POST'])
+def add_worker_route():
+    """Add a new worker."""
+    data = request.get_json()
+    required_fields = ['first_name', 'last_name', 'pin']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    first_name = data['first_name']
+    last_name = data['last_name']
+    pin = data['pin']
+    specialty_id = data.get('specialty_id')
+    supervisor_id = data.get('supervisor_id')
+    is_active = data.get('is_active', 1)
+
+    try:
+        new_id = queries.add_worker(first_name, last_name, pin, specialty_id, supervisor_id, is_active)
+        if new_id:
+            new_worker = queries.get_worker_by_id(new_id)
+            return jsonify(new_worker), 201
+        return jsonify(error="Failed to add worker"), 500
+    except sqlite3.IntegrityError as ie:
+        if 'UNIQUE constraint failed' in str(ie) or 'duplicate' in str(ie).lower():
+            return jsonify(error="Worker PIN already exists"), 409
+        logger.error(f"Integrity error adding worker: {ie}", exc_info=True)
+        return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        logger.error(f"Error in add_worker_route: {e}", exc_info=True)
+        return jsonify(error="Failed to add worker"), 500
+
+@admin_definitions_bp.route('/workers/<int:worker_id>', methods=['PUT'])
+def update_worker_route(worker_id):
+    """Update an existing worker."""
+    data = request.get_json()
+    required_fields = ['first_name', 'last_name', 'pin']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    first_name = data['first_name']
+    last_name = data['last_name']
+    pin = data['pin']
+    specialty_id = data.get('specialty_id')
+    supervisor_id = data.get('supervisor_id')
+    is_active = data.get('is_active', 1)
+
+    try:
+        success = queries.update_worker(worker_id, first_name, last_name, pin, specialty_id, supervisor_id, is_active)
+        if success:
+            updated_worker = queries.get_worker_by_id(worker_id)
+            return jsonify(updated_worker)
+        else:
+            existing = queries.get_worker_by_id(worker_id)
+            if not existing:
+                return jsonify(error="Worker not found"), 404
+            return jsonify(error="Worker update failed"), 500
+    except sqlite3.IntegrityError as ie:
+        if 'UNIQUE constraint failed' in str(ie) or 'duplicate' in str(ie).lower():
+            return jsonify(error="Worker PIN already exists"), 409
+        logger.error(f"Integrity error updating worker {worker_id}: {ie}", exc_info=True)
+        return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        logger.error(f"Error in update_worker_route {worker_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update worker"), 500
+
+@admin_definitions_bp.route('/workers/<int:worker_id>', methods=['DELETE'])
+def delete_worker_route(worker_id):
+    """Delete a worker."""
+    try:
+        success = queries.delete_worker(worker_id)
+        if success:
+            return jsonify(message="Worker deleted successfully"), 200
+        else:
+            existing = queries.get_worker_by_id(worker_id)
+            if not existing:
+                return jsonify(error="Worker not found"), 404
+            return jsonify(error="Worker delete failed, possibly due to existing task logs"), 409
+    except sqlite3.IntegrityError as ie:
+        logger.warning(f"Integrity error deleting worker {worker_id}: {ie}")
+        return jsonify(error="Cannot delete worker, they have existing task logs"), 409
+    except Exception as e:
+        logger.error(f"Error in delete_worker_route {worker_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to delete worker"), 500
+
+# === Specialties Routes ===
+
+@admin_definitions_bp.route('/specialties', methods=['GET'])
+def get_specialties_route():
+    """Get all specialties."""
+    try:
+        specialties = queries.get_all_specialties()
+        return jsonify(specialties)
+    except Exception as e:
+        logger.error(f"Error in get_specialties_route: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch specialties"), 500
+
+@admin_definitions_bp.route('/specialties', methods=['POST'])
+def add_specialty_route():
+    """Add a new specialty."""
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify(error="Missing required field 'name'"), 400
+
+    name = data['name']
+    description = data.get('description', '')
+
+    try:
+        new_id = queries.add_specialty(name, description)
+        if new_id:
+            new_specialty = {'specialty_id': new_id, 'name': name, 'description': description}
+            return jsonify(new_specialty), 201
+        return jsonify(error="Failed to add specialty, possibly duplicate name"), 500
+    except sqlite3.IntegrityError as ie:
+        if 'UNIQUE constraint failed' in str(ie):
+            return jsonify(error="Specialty name already exists"), 409
+        logger.error(f"Integrity error adding specialty: {ie}", exc_info=True)
+        return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        logger.error(f"Error in add_specialty_route: {e}", exc_info=True)
+        return jsonify(error="Failed to add specialty"), 500
+
+@admin_definitions_bp.route('/specialties/<int:specialty_id>', methods=['PUT'])
+def update_specialty_route(specialty_id):
+    """Update an existing specialty."""
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify(error="Missing required field 'name'"), 400
+
+    name = data['name']
+    description = data.get('description', '')
+
+    try:
+        success = queries.update_specialty(specialty_id, name, description)
+        if success:
+            updated_specialty = {'specialty_id': specialty_id, 'name': name, 'description': description}
+            return jsonify(updated_specialty)
+        else:
+            return jsonify(error="Specialty not found"), 404
+    except sqlite3.IntegrityError as ie:
+        if 'UNIQUE constraint failed' in str(ie):
+            return jsonify(error="Specialty name already exists"), 409
+        logger.error(f"Integrity error updating specialty {specialty_id}: {ie}", exc_info=True)
+        return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        logger.error(f"Error in update_specialty_route {specialty_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update specialty"), 500
+
+@admin_definitions_bp.route('/specialties/<int:specialty_id>', methods=['DELETE'])
+def delete_specialty_route(specialty_id):
+    """Delete a specialty."""
+    try:
+        success = queries.delete_specialty(specialty_id)
+        if success:
+            return jsonify(message="Specialty deleted successfully"), 200
+        else:
+            return jsonify(error="Specialty not found"), 404
+    except sqlite3.IntegrityError as ie:
+        logger.warning(f"Integrity error deleting specialty {specialty_id}: {ie}")
+        return jsonify(error="Cannot delete specialty, it is currently in use"), 409
+    except Exception as e:
+        logger.error(f"Error in delete_specialty_route {specialty_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to delete specialty"), 500
+
+# === Admin Team Routes ===
+
+@admin_definitions_bp.route('/admin_team', methods=['GET'])
+def get_admin_team_route():
+    """Get all admin team members."""
+    try:
+        admin_team = queries.get_all_admin_team()
+        return jsonify(admin_team)
+    except Exception as e:
+        logger.error(f"Error in get_admin_team_route: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch admin team"), 500
+
+@admin_definitions_bp.route('/admin_team', methods=['POST'])
+def add_admin_team_member_route():
+    """Add a new admin team member."""
+    data = request.get_json()
+    required_fields = ['first_name', 'last_name', 'role', 'pin']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    first_name = data['first_name']
+    last_name = data['last_name']
+    role = data['role']
+    pin = data['pin']
+    is_active = data.get('is_active', 1)
+
+    try:
+        new_id = queries.add_admin_team_member(first_name, last_name, role, pin, is_active)
+        if new_id:
+            new_member = {
+                'admin_team_id': new_id,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role,
+                'pin': pin,
+                'is_active': is_active
+            }
+            return jsonify(new_member), 201
+        return jsonify(error="Failed to add admin team member"), 500
+    except ValueError as ve:
+        return jsonify(error=str(ve)), 400
+    except sqlite3.IntegrityError as ie:
+        if 'UNIQUE constraint failed' in str(ie):
+            return jsonify(error="PIN already exists"), 409
+        logger.error(f"Integrity error adding admin team member: {ie}", exc_info=True)
+        return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        logger.error(f"Error in add_admin_team_member_route: {e}", exc_info=True)
+        return jsonify(error="Failed to add admin team member"), 500
+
+@admin_definitions_bp.route('/admin_team/<int:admin_team_id>', methods=['PUT'])
+def update_admin_team_member_route(admin_team_id):
+    """Update an existing admin team member."""
+    data = request.get_json()
+    required_fields = ['first_name', 'last_name', 'role', 'pin']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    first_name = data['first_name']
+    last_name = data['last_name']
+    role = data['role']
+    pin = data['pin']
+    is_active = data.get('is_active', 1)
+
+    try:
+        success = queries.update_admin_team_member(admin_team_id, first_name, last_name, role, pin, is_active)
+        if success:
+            updated_member = {
+                'admin_team_id': admin_team_id,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role,
+                'pin': pin,
+                'is_active': is_active
+            }
+            return jsonify(updated_member)
+        else:
+            return jsonify(error="Admin team member not found"), 404
+    except ValueError as ve:
+        return jsonify(error=str(ve)), 400
+    except sqlite3.IntegrityError as ie:
+        if 'UNIQUE constraint failed' in str(ie):
+            return jsonify(error="PIN already exists"), 409
+        logger.error(f"Integrity error updating admin team member {admin_team_id}: {ie}", exc_info=True)
+        return jsonify(error="Database integrity error"), 409
+    except Exception as e:
+        logger.error(f"Error in update_admin_team_member_route {admin_team_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to update admin team member"), 500
+
+@admin_definitions_bp.route('/admin_team/<int:admin_team_id>', methods=['DELETE'])
+def delete_admin_team_member_route(admin_team_id):
+    """Delete an admin team member."""
+    try:
+        success = queries.delete_admin_team_member(admin_team_id)
+        if success:
+            return jsonify(message="Admin team member deleted successfully"), 200
+        else:
+            return jsonify(error="Admin team member not found"), 404
+    except sqlite3.IntegrityError as ie:
+        logger.warning(f"Integrity error deleting admin team member {admin_team_id}: {ie}")
+        return jsonify(error="Cannot delete admin team member, they may be supervising workers"), 409
+    except Exception as e:
+        logger.error(f"Error in delete_admin_team_member_route {admin_team_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to delete admin team member"), 500
+
 # === Stations Route (Read-only for dropdowns) ===
 
 @admin_definitions_bp.route('/stations', methods=['GET'])
