@@ -13,7 +13,7 @@ import SpecialtiesManager from './components/admin/SpecialtiesManager';
 import AdminTeamManager from './components/admin/AdminTeamManager';
 // import ProjectsManager from './components/admin/ProjectsManager'; // Removed
 import ActiveProductionDashboard from './components/admin/ActiveProductionDashboard'; // Import ActiveProductionDashboard
-import StationContextSelector from './components/admin/StationContextSelector'; // Import StationContextSelector
+import StationManager from './components/admin/StationManager'; // Import StationManager
 // Import other pages/components as needed
 
 // Basic Nav styling
@@ -159,7 +159,7 @@ function App() {
                     <Route path="admin-team" element={<AdminTeamManager />} />
                     {/* <Route path="projects" element={<ProjectsManager />} /> Removed */}
                     <Route path="production-status" element={<ActiveProductionDashboard />} />
-                    <Route path="station-context" element={<StationContextSelector allStations={allStations} isLoadingAllStations={isLoadingAllStations} />} />
+                    <Route path="station-manager" element={<StationManager />} />
                     <Route index element={
                         <div>
                             <h1 style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: 0 }}>Panel de Administración</h1>
