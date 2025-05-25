@@ -26,7 +26,7 @@ const checkSpecificIdValidity = (specificId, ambiguousContextValue, allStations)
 };
 
 
-const StationPage = ({ user, allStations, isLoadingAllStations, allStationsError }) => { // Removed activeStationSequenceOrder prop
+const ProductionManager = ({ user, allStations, isLoadingAllStations, allStationsError }) => {
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
     const [userSelectedStationContext, setUserSelectedStationContext] = useState(null); // New state for the main context from localStorage
     const [resolvedSpecificStationId, setResolvedSpecificStationId] = useState(null); // The actual station_id to use for API calls
@@ -488,4 +488,4 @@ const errorStyle = {
 };
 
 
-export default StationPage;
+export default ProductionManager;

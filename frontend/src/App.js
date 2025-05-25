@@ -4,7 +4,7 @@ import './App.css';
 import { getStations } from './services/adminService'; // Import getStations
 import AdminDashboard from './pages/AdminDashboard';
 import LoginPage from './pages/LoginPage'; // Import LoginPage
-import StationPage from './pages/StationPage'; // Import StationPage
+import ProductionManager from './pages/ProductionManager'; // Import ProductionManager
 import TaskDefinitionManager from './components/admin/TaskDefinitionManager';
 import WorkersManager from './components/admin/WorkersManager';
 import HouseTypesManager from './components/admin/HouseTypesManager';
@@ -135,9 +135,8 @@ function App() {
                     path="/station"
                     element={
                         currentUser ? (
-                            <StationPage
+                            <ProductionManager
                                 user={currentUser}
-                                activeStationSequenceOrder={activeStationSequenceOrder}
                                 allStations={allStations}
                                 isLoadingAllStations={isLoadingAllStations}
                                 allStationsError={allStationsError}
