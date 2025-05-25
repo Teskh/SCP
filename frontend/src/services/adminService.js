@@ -1,5 +1,5 @@
 // Using fetch API. Replace with Axios if preferred.
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api/admin'; // Use environment variable or default
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api/admin';
 
 // Helper function to handle response status and parsing
 const handleResponse = async (response) => {
@@ -31,125 +31,67 @@ export const addSpecialty = async (specialtyData) => {
 
 // === Station Context & Task Management (for StationContextSelector.js) ===
 
-// Removed mockModulesDataStore and related update functions as we'll use backend calls.
-
 export const getStationContext = async (stationId) => {
-    console.log(`adminService.getStationContext called for stationId: ${stationId}`);
-    // This will call the new backend endpoint: GET /api/admin/station-context/<station_id>
-    // The backend will determine the module and its panels.
     const response = await fetch(`${API_BASE_URL}/station-context/${stationId}`);
     return handleResponse(response); // Expects { module: {...} or null, panels: [...] }
 };
 
 
-// These functions (startPanel, pausePanel, etc.) will now interact with the generic task start/update endpoints.
-// The backend's task start/update logic will handle module creation/status changes.
 // The panelId parameter should correspond to panel_definition_id.
 // The moduleId parameter should correspond to the module_id of the currently active module.
 // The stationId is the current station context.
 
-// For starting/resuming a panel task.
-// Assumes a task_definition_id is known or can be determined for the panel at this station.
-// This is a simplification. A real system might need to specify which task_definition_id.
-// For now, we assume the backend's /tasks/start can infer or has a default task for a panel at a station.
 export const startOrResumePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    console.log(`adminService.startOrResumePanelTask: planId=${planId}, taskDefinitionId=${taskDefinitionId}, panelDefinitionId=${panelDefinitionId}`);
-    // This will call the existing POST /api/admin/tasks/start endpoint
-    // The backend will handle creating TaskLog/PanelTaskLog and updating statuses.
     const payload = {
-        plan_id: planId, // plan_id is used to find/create the module instance
-        task_definition_id: taskDefinitionId, // This needs to be determined by the frontend or a fixed value for "panel work"
-        worker_id: workerId, // Assuming worker context is available
+        plan_id: planId,
+        task_definition_id: taskDefinitionId,
+        worker_id: workerId,
         station_start: stationId,
         panel_definition_id: panelDefinitionId 
     };
-    // This is a placeholder for the actual task_definition_id that should be started for this panel.
-    // The current StationContextSelector doesn't manage task_definition_ids for panels directly.
-    // This will require further changes if each panel has multiple distinct tasks selectable by user.
-    // For now, let's assume a generic "work on panel" task.
-    // The existing /tasks/start endpoint needs to be robust.
     
-    // The current /tasks/start endpoint in admin_definitions.py is what we'll use.
-    // It requires plan_id, task_definition_id, worker_id, station_start, and optional panel_definition_id.
-    // The frontend will need to supply a relevant task_definition_id.
-    // This is a GAP: StationContextSelector doesn't know which task_definition_id to start for a panel.
-    // For now, this function cannot be fully implemented without that info.
-    // Let's assume the old mock behavior for panel actions for now, and focus on module fetching.
-    // TODO: Revisit panel task starting with specific task_definition_ids.
-
-    // TODO: Revisit panel task starting with specific task_definition_ids.
-    // The StationContextSelector currently passes a placeholder taskDefinitionId.
-    // This function now calls the generic startTask endpoint.
-    console.log(`Attempting to start/resume panel task via generic startTask endpoint.`);
     try {
-        // Call the generic startTask function which posts to /api/admin/tasks/start
         const result = await startTask(planId, taskDefinitionId, workerId, stationId, panelDefinitionId);
-        // The backend's /tasks/start should return a meaningful response,
-        // including new_status if applicable, or log_id.
-        // For now, we adapt the expected mock response structure if needed, or rely on startTask's actual return.
         return { 
-            success: true, // Assuming startTask throws on failure
+            success: true,
             message: result.message || `Panel ${panelDefinitionId} task action processed.`, 
-            panel_id: panelDefinitionId, // Keep for consistency with old mock if needed by UI
-            new_status: result.new_status || "in_progress", // Or derive from result if backend provides it
+            panel_id: panelDefinitionId,
+            new_status: result.new_status || "in_progress",
             log_id: result.log_id 
         };
     } catch (error) {
-        console.error("Error in startOrResumePanelTask calling startTask:", error);
-        // Re-throw or handle as per application's error handling strategy
         throw error; 
     }
 };
 
 export const pausePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    console.log(`adminService.pausePanelTask: panelDefinitionId=${panelDefinitionId}`);
-    // This would call a backend endpoint to update PanelTaskLog status to 'Paused'.
-    // e.g., PUT /api/admin/tasks/panel-log/<log_id>/status { status: "Paused" }
-    // This requires knowing the panel_task_log_id.
-    // TODO: Revisit panel task pausing.
-    console.warn("pausePanelTask is using mock behavior.");
     await new Promise(resolve => setTimeout(resolve, 300));
     return { success: true, message: `Panel ${panelDefinitionId} task paused (mocked)`, panel_id: panelDefinitionId, new_status: "paused" };
 };
 
 export const finishPanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    console.log(`adminService.finishPanelTask: panelDefinitionId=${panelDefinitionId}`);
-    // This would call a backend endpoint to update PanelTaskLog status to 'Completed'.
-    // e.g., PUT /api/admin/tasks/panel-log/<log_id>/status { status: "Completed" }
-    // TODO: Revisit panel task finishing.
-    console.warn("finishPanelTask is using mock behavior.");
     await new Promise(resolve => setTimeout(resolve, 300));
      return { success: true, message: `Panel ${panelDefinitionId} task finished (mocked)`, panel_id: panelDefinitionId, new_status: "completed" };
 };
 
 
-// This function will call the backend to update the ModuleProductionPlan item's status and optionally its assembly line.
 export const updatePlanStatus = async (planId, newStatus, newLine = null) => {
-    console.log(`adminService.updatePlanStatus: planId=${planId}, newStatus=${newStatus}, newLine=${newLine}`);
     
     const updateData = { status: newStatus };
     if (newLine !== null) {
         updateData.planned_assembly_line = newLine;
     }
 
-    // This uses the existing generic update endpoint for ModuleProductionPlan items.
-    // PUT /api/admin/module-production-plan/<plan_id>
     try {
         const updatedItem = await updateModuleProductionPlanItem(planId, updateData);
         return { 
             success: true, 
             message: `Plan ${planId} status updated to ${newStatus}` + (newLine ? ` and line to ${newLine}.` : '.'),
-            plan_id: planId, // Changed from module_id
-            new_status: updatedItem.status, // Reflect actual status from response
-            // Potentially include other details from updatedItem if needed by UI
+            plan_id: planId,
+            new_status: updatedItem.status,
         };
     } catch (error) {
-        console.error(`Error updating plan ${planId} status:`, error);
-        // Re-throw or handle as per application's error handling strategy
-        // For consistency with mock, we can return a similar structure on failure,
-        // but throwing is often better for React Query/SWR.
         throw error; 
-        // return { success: false, message: error.message || `Failed to update plan ${planId} status.` };
     }
 };
 
@@ -222,7 +164,7 @@ export const deleteWorker = async (id) => {
     return true; 
 };
 
-// === Panel Definitions (formerly HouseTypePanels) ===
+// === Panel Definitions ===
 
 export const getPanelDefinitions = async (houseTypeId, moduleSequenceNumber, subTypeId = null) => {
     let url = `${API_BASE_URL}/house_types/${houseTypeId}/modules/${moduleSequenceNumber}/panel_definitions`;
@@ -254,7 +196,7 @@ export const updatePanelDefinition = async (panelDefinitionId, panelData) => {
         sub_type_id: panelData.sub_type_id || null,
         multiwall_id: panelData.multiwall_id || null 
     };
-    const response = await fetch(`${API_BASE_URL}/panel_definitions/${panelDefinitionId}`, { // URL changed
+    const response = await fetch(`${API_BASE_URL}/panel_definitions/${panelDefinitionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -263,7 +205,7 @@ export const updatePanelDefinition = async (panelDefinitionId, panelData) => {
 };
 
 export const deletePanelDefinition = async (panelDefinitionId) => {
-    const response = await fetch(`${API_BASE_URL}/panel_definitions/${panelDefinitionId}`, { // URL changed
+    const response = await fetch(`${API_BASE_URL}/panel_definitions/${panelDefinitionId}`, {
         method: 'DELETE',
     });
     if (!response.ok && response.status !== 204) {
@@ -274,7 +216,6 @@ export const deletePanelDefinition = async (panelDefinitionId) => {
 };
 
 // === Multiwalls ===
-// moduleSequenceNumber is removed as Multiwalls are per HouseType now.
 export const getMultiwalls = async (houseTypeId) => {
     const response = await fetch(`${API_BASE_URL}/house_types/${houseTypeId}/multiwalls`);
     return handleResponse(response);
@@ -374,7 +315,7 @@ export const addTaskDefinition = async (taskDefData) => {
         house_type_id: taskDefData.house_type_id || null,
         specialty_id: taskDefData.specialty_id || null,
         station_sequence_order: taskDefData.station_sequence_order || null,
-        is_panel_task: Boolean(taskDefData.is_panel_task) // Added is_panel_task
+        is_panel_task: Boolean(taskDefData.is_panel_task)
     };
     const response = await fetch(`${API_BASE_URL}/task_definitions`, {
         method: 'POST',
@@ -390,7 +331,7 @@ export const updateTaskDefinition = async (id, taskDefData) => {
         house_type_id: taskDefData.house_type_id || null,
         specialty_id: taskDefData.specialty_id || null,
         station_sequence_order: taskDefData.station_sequence_order || null,
-        is_panel_task: Boolean(taskDefData.is_panel_task) // Added is_panel_task
+        is_panel_task: Boolean(taskDefData.is_panel_task)
     };
     const response = await fetch(`${API_BASE_URL}/task_definitions/${id}`, {
         method: 'PUT',
@@ -412,7 +353,6 @@ export const deleteTaskDefinition = async (id) => {
 };
 
 // === Fetching related data for dropdowns ===
-// getHouseTypes now fetches detailed house types including sub_types and parameters
 export const getHouseTypes = async () => {
     const response = await fetch(`${API_BASE_URL}/house_types`);
     return handleResponse(response); // Expects array of house types with their sub_types and parameters
@@ -549,7 +489,7 @@ export const setHouseTypeParameter = async (houseTypeId, parameterId, moduleSequ
             parameter_id: parameterId,
             module_sequence_number: moduleSequenceNumber,
             value: value,
-            sub_type_id: subTypeId // Changed from tipologia_id
+            sub_type_id: subTypeId
         }),
     });
     return handleResponse(response);
@@ -558,7 +498,7 @@ export const setHouseTypeParameter = async (houseTypeId, parameterId, moduleSequ
 export const deleteParameterFromHouseTypeModule = async (houseTypeId, parameterId, moduleSequenceNumber, subTypeId = null) => {
     let url = `${API_BASE_URL}/house_types/${houseTypeId}/parameters/${parameterId}/module/${moduleSequenceNumber}`;
     if (subTypeId !== null) {
-        url += `/sub_type/${subTypeId}`; // Changed from /tipologia/
+        url += `/sub_type/${subTypeId}`;
     }
     const response = await fetch(url, {
         method: 'DELETE',
@@ -586,7 +526,6 @@ export const addModuleProductionPlanItem = async (itemData) => {
 
 export const addModuleProductionPlanBatch = async (batchData) => {
     // batchData: { project_name, house_type_id, number_of_houses }
-    // house_identifier_base is removed from payload
     const response = await fetch(`${API_BASE_URL}/module-production-plan/generate-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -646,16 +585,16 @@ export const changeModuleProductionPlanItemsLineBulk = async (planIds, newLine) 
 };
 
 export const setModuleProductionPlanItemsSubTypeBulk = async (planIds, subTypeId) => {
-    const response = await fetch(`${API_BASE_URL}/module-production-plan/bulk-update-sub-type`, { // URL changed
+    const response = await fetch(`${API_BASE_URL}/module-production-plan/bulk-update-sub-type`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_ids: planIds, sub_type_id: subTypeId }), // Key changed
+        body: JSON.stringify({ plan_ids: planIds, sub_type_id: subTypeId }),
     });
     return handleResponse(response);
 };
 
 export const setModuleProductionPlanItemsDateTimeBulk = async (planIds, newDateTime) => {
-    const response = await fetch(`${API_BASE_URL}/module-production-plan/bulk-update-datetime`, { // URL changed
+    const response = await fetch(`${API_BASE_URL}/module-production-plan/bulk-update-datetime`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan_ids: planIds, new_datetime: newDateTime }),
@@ -680,12 +619,11 @@ export const getPotentialTaskDependencies = async (stationSequenceOrder, isPanel
 // === Production Status Dashboard / Station Overview ===
 
 export const getStationStatusOverview = async () => {
-    const response = await fetch(`${API_BASE_URL}/station-status-overview`); // URL changed
+    const response = await fetch(`${API_BASE_URL}/station-status-overview`);
     return handleResponse(response);
 };
 
 export const getStationOverviewData = async (stationId, specialtyId, panelDefinitionId = null) => {
-    // The endpoint /station_overview/{station_id} was replaced by /station-context/{station_id}.
     let url = `${API_BASE_URL}/station-context/${stationId}`;
 
     const params = new URLSearchParams();
@@ -703,13 +641,13 @@ export const getStationOverviewData = async (stationId, specialtyId, panelDefini
     return handleResponse(response);
 };
 
-export const startTask = async (planId, taskDefinitionId, workerId, stationStart, panelDefinitionId = null) => { // Renamed houseTypePanelId
+export const startTask = async (planId, taskDefinitionId, workerId, stationStart, panelDefinitionId = null) => {
     const payload = {
         plan_id: planId,
         task_definition_id: taskDefinitionId,
         worker_id: workerId,
         station_start: stationStart,
-        panel_definition_id: panelDefinitionId, // Renamed key
+        panel_definition_id: panelDefinitionId,
     };
 
     const response = await fetch(`${API_BASE_URL}/tasks/start`, { // URL might need /admin prefix if not already in API_BASE_URL for this specific route
