@@ -31,9 +31,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     const [userSelectedStationContext, setUserSelectedStationContext] = useState(null); // New state for the main context from localStorage
     const [resolvedSpecificStationId, setResolvedSpecificStationId] = useState(null); // The actual station_id to use for API calls
 
-    // State for station overview data (current module, upcoming module, tasks, panels)
+    // State for station overview data (current module, tasks, panels)
     const [moduleData, setModuleData] = useState(null); // Module currently at station
-    const [upcomingModuleData, setUpcomingModuleData] = useState(null); // Next module if seq=1 and no current module
     const [tasks, setTasks] = useState([]);
     const [availablePanels, setAvailablePanels] = useState([]); // State for panels
     const [isLoadingStationData, setIsLoadingStationData] = useState(false);
@@ -97,7 +96,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         if (!resolvedSpecificStationId || !user || user.specialty_id === undefined) {
             // Clear data if station or user/specialty is not set
             setModuleData(null);
-            setUpcomingModuleData(null);
             setTasks([]);
             setAvailablePanels([]);
             return;
@@ -106,15 +104,13 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         setIsLoadingStationData(true);
         setStationDataError('');
         setModuleData(null);
-        setUpcomingModuleData(null); // Clear upcoming module before fetch
         setTasks([]);
         setAvailablePanels([]); // Clear panels before fetch
         try {
             const data = await getStationOverviewData(resolvedSpecificStationId, user.specialty_id); // Use resolvedSpecificStationId
             setModuleData(data.module); // Will be null if no module at station
-            setUpcomingModuleData(data.upcoming_module); // Will be null if module exists or not seq 1 or no upcoming
-            setTasks(data.tasks || []); // Ensure tasks is an array (tasks for current or upcoming module)
-            setAvailablePanels(data.panels || []); // Store panels if returned (for current or upcoming module)
+            setTasks(data.tasks || []); // Ensure tasks is an array
+            setAvailablePanels(data.panels || []); // Store panels if returned
         } catch (error) {
             console.error("Error fetching station data:", error);
             setStationDataError(error.message || 'Error al cargar datos de la estación.');
@@ -170,11 +166,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     };
 
     const startTaskApiCall = async (taskDefinitionId, panelId) => {
-        // Determine if we are starting for a current module or an upcoming one
-        const targetModule = moduleData || upcomingModuleData;
-
-        if (!targetModule || !targetModule.plan_id || !user || !user.id || !resolvedSpecificStationId) {
-            console.error("Missing data needed to start task:", { targetModule, user, resolvedSpecificStationId });
+        // We are only working with the current module (if exists)
+        if (!moduleData || !moduleData.plan_id || !user || !user.id || !resolvedSpecificStationId) {
+            console.error("Missing data needed to start task:", { moduleData, user, resolvedSpecificStationId });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para iniciar la tarea (plan_id, usuario, estación)." });
             return;
         }
@@ -185,13 +179,13 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         try {
             // Send plan_id instead of module_id and use stationStart parameter name
             await startTask(
-                targetModule.plan_id, // Use plan_id from current or upcoming module
+                moduleData.plan_id, // Use plan_id from current module
                 taskDefinitionId,
                 user.id, // worker_id
                 resolvedSpecificStationId, // stationStart
                 panelId // house_type_panel_id (will be null if not panel line or not selected)
             );
-            // Success! Refresh data to show updated task status (module should now appear as current)
+            // Success! Refresh data to show updated task status
             fetchStationData(); // Re-fetch all station data
             setSelectingPanelForTask(null); // Close panel selector if open
             setSelectedPanelId('');
@@ -204,10 +198,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     };
 
     const handlePauseTaskClick = async (taskDefinitionId, panelId = null) => {
-        const targetModule = moduleData || upcomingModuleData;
-
-        if (!targetModule || !targetModule.plan_id || !user || !user.id) {
-            console.error("Missing data needed to pause task:", { targetModule, user });
+        if (!moduleData || !moduleData.plan_id || !user || !user.id) {
+            console.error("Missing data needed to pause task:", { moduleData, user });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para pausar la tarea." });
             return;
         }
@@ -217,7 +209,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
         try {
             await pauseTask(
-                targetModule.plan_id,
+                moduleData.plan_id,
                 taskDefinitionId,
                 user.id,
                 panelId,
@@ -233,10 +225,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     };
 
     const handleResumeTaskClick = async (taskDefinitionId, panelId = null) => {
-        const targetModule = moduleData || upcomingModuleData;
-
-        if (!targetModule || !targetModule.plan_id) {
-            console.error("Missing data needed to resume task:", { targetModule });
+        if (!moduleData || !moduleData.plan_id) {
+            console.error("Missing data needed to resume task:", { moduleData });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para reanudar la tarea." });
             return;
         }
@@ -246,7 +236,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
         try {
             await resumeTask(
-                targetModule.plan_id,
+                moduleData.plan_id,
                 taskDefinitionId,
                 panelId
             );
@@ -260,10 +250,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     };
 
     const handleCompleteTaskClick = async (taskDefinitionId, panelId = null) => {
-        const targetModule = moduleData || upcomingModuleData;
-
-        if (!targetModule || !targetModule.plan_id || !resolvedSpecificStationId) {
-            console.error("Missing data needed to complete task:", { targetModule, resolvedSpecificStationId });
+        if (!moduleData || !moduleData.plan_id || !resolvedSpecificStationId) {
+            console.error("Missing data needed to complete task:", { moduleData, resolvedSpecificStationId });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para completar la tarea." });
             return;
         }
@@ -273,7 +261,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
         try {
             await completeTask(
-                targetModule.plan_id,
+                moduleData.plan_id,
                 taskDefinitionId,
                 resolvedSpecificStationId, // station_finish
                 panelId,
@@ -388,7 +376,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     {isLoadingStationData && <p>Cargando datos del módulo y tareas...</p>}
                     {stationDataError && <p style={{ color: 'red' }}>{stationDataError}</p>}
 
-                    {/* Display Current Module OR Upcoming Module */}
+                    {/* Display Current Module */}
                     {moduleData ? (
                         <div style={moduleInfoBoxStyle}>
                             <h3>Módulo Actual</h3>
@@ -399,24 +387,14 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                             <p><strong>Secuencia Planificada:</strong> {moduleData.planned_sequence}</p>
                             <p><strong>Estado Módulo:</strong> {moduleData.module_status}</p>
                         </div>
-                    ) : upcomingModuleData ? (
-                        <div style={{...moduleInfoBoxStyle, backgroundColor: '#eef'}}> {/* Slightly different background for upcoming */}
-                            <h3>Próximo Módulo</h3>
-                            <p><strong>Proyecto:</strong> {upcomingModuleData.project_name}</p>
-                            <p><strong>Tipo de Casa:</strong> {upcomingModuleData.house_type_name} {upcomingModuleData.sub_type_name ? `(${upcomingModuleData.sub_type_name})` : ''}</p>
-                            <p><strong>Identificador Casa:</strong> {upcomingModuleData.house_identifier}</p>
-                            <p><strong>Módulo:</strong> {upcomingModuleData.module_number} de {upcomingModuleData.number_of_modules}</p>
-                            <p><strong>Secuencia Planificada:</strong> {upcomingModuleData.planned_sequence}</p>
-                            <p><strong>Estado Plan:</strong> {upcomingModuleData.status}</p>
-                        </div>
                     ) : !isLoadingStationData && !stationDataError && (
-                        <p style={{ marginTop: '20px' }}>No hay módulo asignado a esta estación actualmente ni módulo próximo en planificación.</p>
+                        <p style={{ marginTop: '20px' }}>No hay módulo asignado a esta estación actualmente.</p>
                     )}
 
-                    {/* Display Tasks (for current or upcoming module) */}
+                    {/* Display Tasks for current module */}
                     {tasks.length > 0 && (
                         <div style={{ marginTop: '30px' }}>
-                            <h3>Tareas {moduleData ? 'Pendientes/En Progreso' : 'Próximo Módulo'}</h3>
+                            <h3>Tareas Pendientes/En Progreso</h3>
                             <ul style={{ listStyleType: 'none', padding: 0 }}>
                                 {tasks.map(task => {
                                     const isSelectingPanel = selectingPanelForTask === task.task_definition_id;
@@ -508,8 +486,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                         </div>
                     )}
                     {/* Message when no tasks are available */}
-                    {!isLoadingStationData && !stationDataError && (moduleData || upcomingModuleData) && tasks.length === 0 && (
-                         <p style={{ marginTop: '20px' }}>No hay tareas disponibles para {moduleData ? 'este módulo' : 'el próximo módulo'} en esta estación para su especialidad.</p>
+                    {!isLoadingStationData && !stationDataError && moduleData && tasks.length === 0 && (
+                         <p style={{ marginTop: '20px' }}>No hay tareas disponibles para este módulo en esta estación para su especialidad.</p>
                     )}
                 </div>
             ) : (
