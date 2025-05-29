@@ -186,6 +186,51 @@ def get_station_status_and_upcoming_modules():
     logging.info(f"Returning station status and upcoming modules: {json.dumps(result, indent=2)}")
     return result
 
+def get_current_station_panels(station_id):
+    """
+    Retrieves panels currently assigned to a specific station from PanelProductionPlan.
+
+    Args:
+        station_id (str): The ID of the station to query.
+
+    Returns:
+        list: A list of dictionaries, where each dictionary contains:
+              - panel_production_plan_id (int)
+              - panel_definition_id (int)
+              - plan_id (int)
+              - module_name (str): Formatted as "Project Name - House Identifier - Mod Module Number"
+              - panel_name (str): The panel_code from PanelDefinitions
+    """
+    db = get_db()
+    cursor = db.execute("""
+        SELECT
+            ppp.panel_production_plan_id,
+            ppp.panel_definition_id,
+            ppp.plan_id,
+            pd.panel_code,
+            mpp.project_name,
+            mpp.house_identifier,
+            mpp.module_number
+        FROM PanelProductionPlan ppp
+        JOIN PanelDefinitions pd ON ppp.panel_definition_id = pd.panel_definition_id
+        JOIN ModuleProductionPlan mpp ON ppp.plan_id = mpp.plan_id
+        WHERE ppp.current_station = ? AND ppp.status = 'In Progress' -- Assuming we only want active panels
+    """, (station_id,))
+    
+    panels_at_station = []
+    for row_data in cursor.fetchall():
+        row = dict(row_data) # Convert sqlite3.Row to dict for easier access
+        panels_at_station.append({
+            'panel_production_plan_id': row['panel_production_plan_id'],
+            'panel_definition_id': row['panel_definition_id'],
+            'plan_id': row['plan_id'],
+            'module_name': f"{row['project_name']} - {row['house_identifier']} - Mod {row['module_number']}",
+            'panel_name': row['panel_code']
+        })
+    
+    logging.info(f"Found {len(panels_at_station)} panels at station {station_id}: {json.dumps(panels_at_station, indent=2)}")
+    return panels_at_station
+
 
 
 
