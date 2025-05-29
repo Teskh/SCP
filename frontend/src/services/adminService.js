@@ -557,21 +557,6 @@ export const getStationStatusOverview = async () => {
     return handleResponse(response);
 };
 
-export const getStationOverviewData = async (stationId, specialtyId) => {
-    let url = `${API_BASE_URL}/station-context/${stationId}`;
-
-    const params = new URLSearchParams();
-    if (specialtyId !== undefined && specialtyId !== null) {
-        params.append('specialty_id', specialtyId);
-    }
-
-    const queryString = params.toString();
-    if (queryString) {
-        url += `?${queryString}`;
-    }
-    const response = await fetch(url);
-    return handleResponse(response);
-};
 
 export const startTask = async (planId, taskDefinitionId, workerId, stationStart) => {
     const payload = {

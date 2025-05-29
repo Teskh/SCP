@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
-import { getStationOverviewData, startTask, pauseTask, resumeTask, completeTask } from '../services/adminService'; // Import services
+import { startTask, pauseTask, resumeTask, completeTask } from '../services/adminService'; // Import services
 
 const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext'; // New constant for the main key
 const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId'; // Key for localStorage, used by SpecificStationSelectorModal
@@ -11,14 +11,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
     const [userSelectedStationContext, setUserSelectedStationContext] = useState(null); // New state for the main context from localStorage
     const [resolvedSpecificStationId, setResolvedSpecificStationId] = useState(null); // The actual station_id to use for API calls
-
-    // State for station overview data (current module, tasks, panels)
-    const [moduleData, setModuleData] = useState(null); // Module currently at station
-    const [tasks, setTasks] = useState([]);
-    const [isLoadingStationData, setIsLoadingStationData] = useState(false);
-    const [stationDataError, setStationDataError] = useState('');
-    const [taskActionLoading, setTaskActionLoading] = useState(null); // Track loading state per task
-    const [taskActionError, setTaskActionError] = useState(null); // Track error state per task
 
     // Effect to determine the station context and specific station ID
     useEffect(() => {
@@ -56,154 +48,37 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
     }, [user, allStations, isLoadingAllStations]); // Dependencies for this effect
 
-    // Define fetchStationData using useCallback to stabilize its identity
-    const fetchStationData = useCallback(async () => {
-        // Use resolvedSpecificStationId for API calls
-        if (!resolvedSpecificStationId || !user || user.specialty_id === undefined) {
-            // Clear data if station or user/specialty is not set
-            setModuleData(null);
-            setTasks([]);
-            return;
-        }
-
-        setIsLoadingStationData(true);
-        setStationDataError('');
-        setModuleData(null);
-        setTasks([]);
-        try {
-            const data = await getStationOverviewData(resolvedSpecificStationId, user.specialty_id); // Use resolvedSpecificStationId
-            setModuleData(data.module); // Will be null if no module at station
-            setTasks(data.tasks || []); // Ensure tasks is an array
-        } catch (error) {
-            console.error("Error fetching station data:", error);
-            setStationDataError(error.message || 'Error al cargar datos de la estación.');
-        } finally {
-            setIsLoadingStationData(false);
-        }
-    }, [resolvedSpecificStationId, user]); // Dependencies for useCallback
-
-    // Effect to trigger data fetching when resolvedSpecificStationId changes
-    useEffect(() => {
-        fetchStationData();
-    }, [fetchStationData]); // Depend on the stable fetchStationData function
-
     const handleSaveSpecificStation = (specificStationId) => {
         // Store the specific station ID in localStorage for future visits
         localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
         setResolvedSpecificStationId(specificStationId); // Update resolved ID
         setShowSpecificStationModal(false);
-        // fetchStationData will be triggered by the useEffect watching resolvedSpecificStationId
     };
 
     // --- Task Action Handlers ---
+    // These handlers will no longer have moduleData or tasks to operate on directly
+    // as the station context fetching logic is removed.
+    // They are kept as placeholders but will likely need significant refactoring
+    // if task operations are to be re-implemented with a different data flow.
 
     const handleStartTaskClick = (taskDefinitionId) => {
-        setTaskActionError(null); // Clear previous errors
-        startTaskApiCall(taskDefinitionId);
-    };
-
-    const startTaskApiCall = async (taskDefinitionId) => {
-        // We are only working with the current module (if exists)
-        if (!moduleData || !moduleData.plan_id || !user || !user.id || !resolvedSpecificStationId) {
-            console.error("Missing data needed to start task:", { moduleData, user, resolvedSpecificStationId });
-            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para iniciar la tarea (plan_id, usuario, estación)." });
-            return;
-        }
-
-        setTaskActionLoading(taskDefinitionId);
-        setTaskActionError(null);
-
-        try {
-            await startTask(
-                moduleData.plan_id, // Use plan_id from current module
-                taskDefinitionId,
-                user.id, // worker_id
-                resolvedSpecificStationId // stationStart
-            );
-            // Success! Refresh data to show updated task status
-            fetchStationData(); // Re-fetch all station data
-        } catch (error) {
-            console.error("Error starting task:", error);
-            setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al iniciar la tarea.' });
-        } finally {
-            setTaskActionLoading(null);
-        }
+        console.warn("Start Task functionality is currently disabled due to backend changes.");
+        // Placeholder for future implementation
     };
 
     const handlePauseTaskClick = async (taskDefinitionId) => {
-        if (!moduleData || !moduleData.plan_id || !user || !user.id) {
-            console.error("Missing data needed to pause task:", { moduleData, user });
-            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para pausar la tarea." });
-            return;
-        }
-
-        setTaskActionLoading(taskDefinitionId);
-        setTaskActionError(null);
-
-        try {
-            await pauseTask(
-                moduleData.plan_id,
-                taskDefinitionId,
-                user.id,
-                'Worker initiated pause'
-            );
-            fetchStationData(); // Refresh data to show updated task status
-        } catch (error) {
-            console.error("Error pausing task:", error);
-            setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al pausar la tarea.' });
-        } finally {
-            setTaskActionLoading(null);
-        }
+        console.warn("Pause Task functionality is currently disabled due to backend changes.");
+        // Placeholder for future implementation
     };
 
     const handleResumeTaskClick = async (taskDefinitionId) => {
-        if (!moduleData || !moduleData.plan_id) {
-            console.error("Missing data needed to resume task:", { moduleData });
-            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para reanudar la tarea." });
-            return;
-        }
-
-        setTaskActionLoading(taskDefinitionId);
-        setTaskActionError(null);
-
-        try {
-            await resumeTask(
-                moduleData.plan_id,
-                taskDefinitionId
-            );
-            fetchStationData(); // Refresh data to show updated task status
-        } catch (error) {
-            console.error("Error resuming task:", error);
-            setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al reanudar la tarea.' });
-        } finally {
-            setTaskActionLoading(null);
-        }
+        console.warn("Resume Task functionality is currently disabled due to backend changes.");
+        // Placeholder for future implementation
     };
 
     const handleCompleteTaskClick = async (taskDefinitionId) => {
-        if (!moduleData || !moduleData.plan_id || !resolvedSpecificStationId) {
-            console.error("Missing data needed to complete task:", { moduleData, resolvedSpecificStationId });
-            setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para completar la tarea." });
-            return;
-        }
-
-        setTaskActionLoading(taskDefinitionId);
-        setTaskActionError(null);
-
-        try {
-            await completeTask(
-                moduleData.plan_id,
-                taskDefinitionId,
-                resolvedSpecificStationId, // station_finish
-                '' // notes - could be enhanced to ask user for notes
-            );
-            fetchStationData(); // Refresh data to show updated task status
-        } catch (error) {
-            console.error("Error completing task:", error);
-            setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al completar la tarea.' });
-        } finally {
-            setTaskActionLoading(null);
-        }
+        console.warn("Complete Task functionality is currently disabled due to backend changes.");
+        // Placeholder for future implementation
     };
 
     // --- End Task Action Handlers ---
@@ -285,89 +160,10 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
             {!showSpecificStationModal && resolvedSpecificStationId ? (
                 <div>
-                    {isLoadingStationData && <p>Cargando datos del módulo y tareas...</p>}
-                    {stationDataError && <p style={{ color: 'red' }}>{stationDataError}</p>}
-
+                    <p style={{ marginTop: '20px' }}>La funcionalidad de visualización de módulos y tareas está actualmente deshabilitada.</p>
+                    {/* The following sections are removed as their data source is no longer available */}
                     {/* Display Current Module */}
-                    {moduleData ? (
-                        <div style={moduleInfoBoxStyle}>
-                            <h3>Módulo Actual</h3>
-                            <p><strong>Proyecto:</strong> {moduleData.project_name}</p>
-                            <p><strong>Tipo de Casa:</strong> {moduleData.house_type_name} {moduleData.sub_type_name ? `(${moduleData.sub_type_name})` : ''}</p>
-                            <p><strong>Identificador Casa:</strong> {moduleData.house_identifier}</p>
-                            <p><strong>Módulo:</strong> {moduleData.module_number} de {moduleData.number_of_modules}</p>
-                            <p><strong>Secuencia Planificada:</strong> {moduleData.planned_sequence}</p>
-                            <p><strong>Estado Módulo:</strong> {moduleData.module_status}</p>
-                        </div>
-                    ) : !isLoadingStationData && !stationDataError && (
-                        <p style={{ marginTop: '20px' }}>No hay módulo asignado a esta estación actualmente.</p>
-                    )}
-
                     {/* Display Tasks for current module */}
-                    {tasks.length > 0 && (
-                        <div style={{ marginTop: '30px' }}>
-                            <h3>Tareas Pendientes/En Progreso</h3>
-                            <ul style={{ listStyleType: 'none', padding: 0 }}>
-                                {tasks.map(task => {
-                                    const isLoading = taskActionLoading === task.task_definition_id;
-                                    const error = taskActionError?.taskId === task.task_definition_id ? taskActionError.message : null;
-
-                                    return (
-                                        <li key={task.task_definition_id} style={taskListItemStyle}>
-                                            <div style={taskInfoStyle}>
-                                                <h4>{task.task_name}</h4>
-                                                <p>{task.task_description}</p>
-                                                <p><strong>Estado:</strong> {task.task_status}</p>
-                                            </div>
-                                            <div style={taskActionsStyle}>
-                                                {task.task_status === 'Not Started' && (
-                                                    <button
-                                                        onClick={() => handleStartTaskClick(task.task_definition_id)}
-                                                        disabled={isLoading}
-                                                        style={buttonStyle}
-                                                    >
-                                                        {isLoading ? 'Iniciando...' : 'Iniciar'}
-                                                    </button>
-                                                )}
-                                                {task.task_status === 'In Progress' && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handlePauseTaskClick(task.task_definition_id)}
-                                                            disabled={isLoading}
-                                                            style={{...buttonStyle, backgroundColor: '#ffc107', marginBottom: '5px'}}
-                                                        >
-                                                            {isLoading ? 'Pausando...' : 'Pausar'}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleCompleteTaskClick(task.task_definition_id)}
-                                                            disabled={isLoading}
-                                                            style={{...buttonStyle, backgroundColor: '#28a745'}}
-                                                        >
-                                                            {isLoading ? 'Completando...' : 'Completar'}
-                                                        </button>
-                                                    </>
-                                                )}
-                                                {task.task_status === 'Paused' && (
-                                                    <button
-                                                        onClick={() => handleResumeTaskClick(task.task_definition_id)}
-                                                        disabled={isLoading}
-                                                        style={{...buttonStyle, backgroundColor: '#17a2b8'}}
-                                                    >
-                                                        {isLoading ? 'Reanudando...' : 'Reanudar'}
-                                                    </button>
-                                                )}
-                                                {error && <p style={errorStyle}>{error}</p>}
-                                            </div>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        </div>
-                    )}
-                    {/* Message when no tasks are available */}
-                    {!isLoadingStationData && !stationDataError && moduleData && tasks.length === 0 && (
-                         <p style={{ marginTop: '20px' }}>No hay tareas disponibles para este módulo en esta estación para su especialidad.</p>
-                    )}
                 </div>
             ) : (
                  !resolvedSpecificStationId && !showSpecificStationModal && <p>Configurando estación...</p>
