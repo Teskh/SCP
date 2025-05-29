@@ -4,6 +4,8 @@ import SpecificStationSelectorModal from '../components/station/SpecificStationS
 import { getStationOverviewData, startTask, pauseTask, resumeTask, completeTask } from '../services/adminService'; // Import services
 
 const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext'; // New constant for the main key
+const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId'; // Key for localStorage, used by SpecificStationSelectorModal
+const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL'; // From StationContextSelector/StationManager
 
 const ProductionManager = ({ user, allStations, isLoadingAllStations, allStationsError }) => {
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
@@ -34,9 +36,24 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             return;
         }
 
-        // In this case, the 'selectedStationContext' IS the specific station ID.
-        setResolvedSpecificStationId(storedContext);
-        setShowSpecificStationModal(false);
+        if (storedContext === PANEL_LINE_GENERAL_VALUE) {
+            // If the general panel line is selected, we need a specific station from the modal
+            const storedSpecificId = localStorage.getItem(SELECTED_SPECIFIC_STATION_ID_KEY);
+            // Check if the stored specific ID is actually a valid 'W' station
+            const isValidSpecificId = allStations.some(s => s.station_id === storedSpecificId && s.line_type === 'W');
+
+            if (storedSpecificId && isValidSpecificId) {
+                setResolvedSpecificStationId(storedSpecificId);
+                setShowSpecificStationModal(false);
+            } else {
+                setResolvedSpecificStationId(null); // Clear resolved ID until a specific one is chosen
+                setShowSpecificStationModal(true); // Show the modal to select a specific W station
+            }
+        } else {
+            // If it's not the general panel line, it's assumed to be a specific station ID directly
+            setResolvedSpecificStationId(storedContext);
+            setShowSpecificStationModal(false);
+        }
     }, [user, allStations, isLoadingAllStations]); // Dependencies for this effect
 
     // Define fetchStationData using useCallback to stabilize its identity
@@ -71,7 +88,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     }, [fetchStationData]); // Depend on the stable fetchStationData function
 
     const handleSaveSpecificStation = (specificStationId) => {
-        localStorage.setItem(SELECTED_STATION_CONTEXT_KEY, specificStationId);
+        // Store the specific station ID in localStorage for future visits
+        localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
         setResolvedSpecificStationId(specificStationId); // Update resolved ID
         setShowSpecificStationModal(false);
         // fetchStationData will be triggered by the useEffect watching resolvedSpecificStationId
