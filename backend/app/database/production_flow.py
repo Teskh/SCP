@@ -125,7 +125,13 @@ def get_station_status_and_upcoming_modules():
     upcoming_cursor = db.execute(upcoming_query)
     upcoming_items = [dict(row) for row in upcoming_cursor.fetchall()]
 
-    return {
+    result = {
         'station_status': station_status,
         'upcoming_items': upcoming_items
     }
+    logging.info(f"Returning station status and upcoming modules: {json.dumps(result, indent=2)}")
+    return result
+
+
+
+
