@@ -6,6 +6,60 @@ from .connection import get_db
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def get_module_for_panel_production():
+    """
+    Finds the plan_id of the first module (ordered by planned_sequence)
+    in 'Planned' or 'Panels' status for which not all required panels
+    have been added to the PanelProductionPlan.
+    """
+    db = get_db()
+    
+    candidate_modules_cursor = db.execute("""
+        SELECT plan_id, house_type_id, module_number, sub_type_id
+        FROM ModuleProductionPlan
+        WHERE status IN ('Planned', 'Panels')
+        ORDER BY planned_sequence ASC
+    """)
+    candidate_modules = candidate_modules_cursor.fetchall()
+
+    for module_row in candidate_modules:
+        module = dict(module_row)
+        plan_id = module['plan_id']
+        house_type_id = module['house_type_id']
+        module_number = module['module_number'] # This corresponds to module_sequence_number in PanelDefinitions
+        module_sub_type_id = module['sub_type_id']
+
+        # Get required panel_definition_ids for this module
+        required_panel_ids_query = """
+            SELECT panel_definition_id FROM PanelDefinitions
+            WHERE house_type_id = ? AND module_sequence_number = ?
+        """
+        params = [house_type_id, module_number]
+
+        if module_sub_type_id is not None:
+            required_panel_ids_query += " AND (sub_type_id = ? OR sub_type_id IS NULL)"
+            params.append(module_sub_type_id)
+        else: # module_sub_type_id is NULL
+            required_panel_ids_query += " AND sub_type_id IS NULL"
+
+        required_panels_cursor = db.execute(required_panel_ids_query, tuple(params))
+        required_panel_ids = {row['panel_definition_id'] for row in required_panels_cursor.fetchall()}
+
+        # Get panel_definition_ids already in PanelProductionPlan for this plan_id
+        ppp_cursor = db.execute("""
+            SELECT panel_definition_id FROM PanelProductionPlan
+            WHERE plan_id = ?
+        """, (plan_id,))
+        panels_in_production_ids = {row['panel_definition_id'] for row in ppp_cursor.fetchall()}
+
+        # If not all required panels are in production, this is our module
+        if not required_panel_ids.issubset(panels_in_production_ids):
+            logging.info(f"Found plan_id {plan_id} for next panel production. Required: {required_panel_ids}, In PPP: {panels_in_production_ids}")
+            return plan_id
+            
+    logging.info("No suitable module found for starting new panel production.")
+    return None
+
 # === Station Status and Upcoming Modules ===
 
 def get_station_status_and_upcoming_modules():
