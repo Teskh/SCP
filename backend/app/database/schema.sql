@@ -54,7 +54,27 @@ CREATE TABLE Stations (
     sequence_order INTEGER NOT NULL -- For sorting/determining flow (e.g., W1=1, W5=5, M1=6, A1=7, B1=7, C1=7, A2=8, B2=8, C2=8 ...)
 );
 
--- ========= Production Plan =========
+-- =========Panel Production Plan =========
+
+CREATE TABLE PanelProductionPlan (
+                panel_production_plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_id INTEGER NOT NULL,
+                panel_definition_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Planned' CHECK (status IN ('Planned', 'In Progress', 'Completed', 'Consumed')),
+                current_station TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (plan_id) REFERENCES ModuleProductionPlan(plan_id) ON DELETE CASCADE,
+                FOREIGN KEY (panel_definition_id) REFERENCES PanelDefinitions(panel_definition_id) ON DELETE CASCADE,
+                UNIQUE(plan_id, panel_definition_id)
+            )
+
+CREATE INDEX idx_panel_production_plan_plan_id ON PanelProductionPlan (plan_id);
+CREATE INDEX idx_panel_production_plan_panel_definition_id ON PanelProductionPlan (panel_definition_id);
+CREATE INDEX idx_panel_production_plan_status ON PanelProductionPlan (status);
+CREATE INDEX idx_panel_production_plan_current_station ON PanelProductionPlan (current_station);
+
+-- =========Module Production Plan =========
 
 CREATE TABLE ModuleProductionPlan (
     plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
