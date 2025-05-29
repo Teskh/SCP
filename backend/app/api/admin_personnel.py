@@ -205,8 +205,8 @@ def update_worker(worker_id):
     first_name = data.get('first_name')
     last_name = data.get('last_name')
     pin = data.get('pin')
-    specialty_id = data.get('specialty_id') # Allow null
-    supervisor_id = data.get('supervisor_id') # Allow null
+    specialty_id = data.get('specialty_id')
+    supervisor_id = data.get('supervisor_id')
     is_active = data.get('is_active')
 
     if not isinstance(is_active, bool):
@@ -216,15 +216,12 @@ def update_worker(worker_id):
     if not pin or len(str(pin)) < 4:
          return jsonify(error="PIN must be at least 4 digits"), 400
 
-    # supervisor_id now refers to AdminTeam.admin_team_id, so the check for self-supervision is no longer applicable here.
-    # If an admin can also be a worker, further logic might be needed, but based on current schema, they are distinct.
-
     try:
         success = queries.update_worker(worker_id, first_name, last_name, pin, specialty_id, supervisor_id, is_active)
         if success:
             # Fetch updated worker data to include potentially changed names
             # Assuming a query like get_worker_by_id exists
-            updated_worker = queries.get_worker_by_id(worker_id) # This query needs to exist in queries.py
+            updated_worker = queries.get_worker_by_id(worker_id)
             if updated_worker:
                 return jsonify(updated_worker)
             else:
@@ -236,9 +233,7 @@ def update_worker(worker_id):
                  }
                  return jsonify(updated_worker_basic)
         else:
-            # Could be not found or DB error during update
-            # Check if worker exists first
-            existing = queries.get_worker_by_id(worker_id) # This query needs to exist in queries.py
+            existing = queries.get_worker_by_id(worker_id)
             if not existing:
                  return jsonify(error="Worker not found"), 404
             else:
@@ -265,17 +260,13 @@ def delete_worker(worker_id):
         if success:
             return jsonify(message="Worker deleted successfully"), 200 # Or 204 No Content
         else:
-            # Could be not found or DB error (e.g., foreign key constraint)
-            # Check if worker exists first
-            existing = queries.get_worker_by_id(worker_id) # This query needs to exist in queries.py
+            existing = queries.get_worker_by_id(worker_id)
             if not existing:
                  return jsonify(error="Worker not found"), 404
             else:
-                 # If delete failed but worker exists, likely a constraint issue
                  logger.warning(f"Delete failed for worker {worker_id}, possibly due to dependencies.")
                  return jsonify(error="Worker delete failed, check dependencies (e.g., task logs)"), 409 # Conflict
     except sqlite3.IntegrityError as ie:
-        # Catch foreign key constraint errors specifically if needed
         logger.warning(f"Integrity error deleting worker {worker_id}: {ie}")
         return jsonify(error="Cannot delete worker, check dependencies (e.g., task logs)."), 409 # Conflict
     except Exception as e:
@@ -326,7 +317,6 @@ def add_admin_team_member():
             return jsonify(new_member), 201
         else:
             # Check for specific errors if add_admin_team_member can return None without exception
-            # Assuming a query like get_admin_member_by_pin exists
             existing = queries.get_admin_member_by_pin(pin) # This query needs to exist in queries.py
             if existing:
                  return jsonify(error="Admin PIN already exists"), 409 # Conflict

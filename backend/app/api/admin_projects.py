@@ -2,9 +2,7 @@ from datetime import datetime # For datetime validation if needed
 import logging
 import sqlite3
 from flask import Blueprint, request, jsonify
-from ..database import queries # Assuming connection is handled within queries
-
-# Configure logging for this blueprint
+from ..database import queries, production_flow 
 logger = logging.getLogger(__name__)
 
 admin_projects_bp = Blueprint('admin_projects', __name__, url_prefix='/admin')
@@ -14,10 +12,6 @@ admin_projects_bp = Blueprint('admin_projects', __name__, url_prefix='/admin')
 def handle_exception(e):
     logger.error(f"Unhandled exception in admin_projects: {e}", exc_info=True)
     return jsonify(error="An internal server error occurred"), 500
-
-# === Projects Routes (REMOVED as per refactoring instructions) ===
-# All routes related to the old 'Projects' table are removed.
-# Project context is now managed via 'project_name' in ModuleProductionPlan.
 
 # === Module Production Plan Routes ===
 @admin_projects_bp.route('/module-production-plan', methods=['POST'])
@@ -49,8 +43,6 @@ def add_module_production_plan_entries():
             modules_per_house = int(modules_per_house)
 
 
-        # Call the refactored query function for generating plan items
-        # initial_sequence_offset might be useful if adding to an existing project's plan
         success = queries.generate_module_production_plan(
             project_name=project_name,
             house_type_id=house_type_id,
@@ -165,7 +157,6 @@ def delete_module_production_plan_item_route(plan_id):
         logger.error(f"Error deleting plan item {plan_id}: {e}", exc_info=True)
         return jsonify(error="Failed to delete module production plan item"), 500
 
-
 @admin_projects_bp.route('/module-production-plan/reorder', methods=['POST'])
 def reorder_module_production_plan():
     """Reorders module production plan items based on a list of plan_ids."""
@@ -193,7 +184,6 @@ def reorder_module_production_plan():
         logger.error(f"Error in reorder_module_production_plan: {e}", exc_info=True)
         return jsonify(error="Failed to reorder module production plan"), 500
 
-
 @admin_projects_bp.route('/module-production-plan/bulk-update-line', methods=['POST'])
 def change_module_production_plan_line_bulk():
     """Updates the planned assembly line for multiple module production plan items."""
@@ -215,16 +205,10 @@ def change_module_production_plan_line_bulk():
         return jsonify(message="No plan IDs provided, nothing updated"), 200
 
     try:
-        # Assuming update_production_plan_items_line_bulk is now update_module_production_plan_items_line_bulk
-        # This function is not explicitly defined in the provided queries.py, so we'll assume it needs to be created or this refers to individual updates.
-        # For now, let's simulate this by iterating, though a bulk query is preferred.
         updated_count = 0
         for plan_id in plan_ids:
             if queries.update_module_production_plan_item(plan_id, {'planned_assembly_line': new_line}):
                 updated_count +=1
-        # A proper bulk update function like `queries.update_module_production_plan_items_line_bulk(plan_ids, new_line)` would be better.
-        # If such a function existed and returned count:
-        # updated_count = queries.update_module_production_plan_items_line_bulk(plan_ids, new_line)
         return jsonify(message=f"Successfully updated line for {updated_count} items.", updated_count=updated_count), 200
     except ValueError as ve:
         return jsonify(error=str(ve)), 400
@@ -314,7 +298,7 @@ def set_module_production_plan_datetime_bulk():
 def get_station_status_overview_route():
     """Get current station status and all upcoming planned/magazine items."""
     try:
-        status_data = queries.get_station_status_and_upcoming_modules() # Updated query function name
+        status_data = production_flow.get_station_status_and_upcoming_modules() # Updated query function name
         return jsonify(status_data)
     except Exception as e:
         logger.error(f"Error in get_station_status_overview_route: {e}", exc_info=True)
