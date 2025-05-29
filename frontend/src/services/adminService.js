@@ -557,6 +557,16 @@ export const getStationStatusOverview = async () => {
     return handleResponse(response);
 };
 
+export const getInfoForNextModulePanels = async () => {
+    const response = await fetch(`${API_BASE_URL}/panel-production/info-for-next-module`);
+    return handleResponse(response);
+};
+
+export const getCurrentStationPanels = async (stationId) => {
+    const response = await fetch(`${API_BASE_URL}/stations/${stationId}/current-panels`);
+    return handleResponse(response);
+};
+
 
 export const startTask = async (planId, taskDefinitionId, workerId, stationStart) => {
     const payload = {

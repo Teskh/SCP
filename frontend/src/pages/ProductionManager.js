@@ -1,16 +1,26 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
-import { startTask, pauseTask, resumeTask, completeTask } from '../services/adminService'; // Import services
+import { 
+    // startTask, pauseTask, resumeTask, completeTask, // Task operations are currently disabled
+    getInfoForNextModulePanels, 
+    getCurrentStationPanels 
+} from '../services/adminService';
 
-const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext'; // New constant for the main key
+const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext';
 const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId'; // Key for localStorage, used by SpecificStationSelectorModal
 const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL'; // From StationContextSelector/StationManager
 
 const ProductionManager = ({ user, allStations, isLoadingAllStations, allStationsError }) => {
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
-    const [userSelectedStationContext, setUserSelectedStationContext] = useState(null); // New state for the main context from localStorage
-    const [resolvedSpecificStationId, setResolvedSpecificStationId] = useState(null); // The actual station_id to use for API calls
+    const [userSelectedStationContext, setUserSelectedStationContext] = useState(null);
+    const [resolvedSpecificStationId, setResolvedSpecificStationId] = useState(null);
+
+    // Panel Production Info State
+    const [panelProductionInfo, setPanelProductionInfo] = useState(null);
+    const [isLoadingPanelInfo, setIsLoadingPanelInfo] = useState(false);
+    const [panelInfoError, setPanelInfoError] = useState('');
+
 
     // Effect to determine the station context and specific station ID
     useEffect(() => {
@@ -46,10 +56,57 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             setResolvedSpecificStationId(storedContext);
             setShowSpecificStationModal(false);
         }
-    }, [user, allStations, isLoadingAllStations]); // Dependencies for this effect
+    }, [user, allStations, isLoadingAllStations]);
+
+    // Effect to fetch panel production information
+    useEffect(() => {
+        if (!resolvedSpecificStationId || !allStations || allStations.length === 0) {
+            setPanelProductionInfo(null);
+            setPanelInfoError('');
+            return;
+        }
+
+        const currentStation = allStations.find(s => s.station_id === resolvedSpecificStationId);
+
+        if (currentStation && currentStation.line_type === 'W') {
+            setIsLoadingPanelInfo(true);
+            setPanelInfoError('');
+            setPanelProductionInfo(null);
+
+            if (currentStation.station_id === 'W1') {
+                getInfoForNextModulePanels()
+                    .then(data => {
+                        // data might be { message: "..." } if no module is ready, or the full object
+                        if (data && data.plan_id) {
+                            setPanelProductionInfo({ type: 'nextModule', data });
+                        } else {
+                            setPanelProductionInfo({ type: 'nextModule', data: null, message: data.message || "No hay módulos listos para iniciar producción de paneles." });
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Error fetching next module panel info:", err);
+                        setPanelInfoError(`Error obteniendo información de paneles para el siguiente módulo: ${err.message}`);
+                    })
+                    .finally(() => setIsLoadingPanelInfo(false));
+            } else { // W2, W3, W4, W5
+                getCurrentStationPanels(resolvedSpecificStationId)
+                    .then(data => {
+                        setPanelProductionInfo({ type: 'currentStation', data });
+                    })
+                    .catch(err => {
+                        console.error(`Error fetching current panels for station ${resolvedSpecificStationId}:`, err);
+                        setPanelInfoError(`Error obteniendo paneles para la estación ${resolvedSpecificStationId}: ${err.message}`);
+                    })
+                    .finally(() => setIsLoadingPanelInfo(false));
+            }
+        } else {
+            setPanelProductionInfo(null); // Clear if not a W station or station not found
+            setPanelInfoError('');
+        }
+    }, [resolvedSpecificStationId, allStations, user]);
+
 
     const handleSaveSpecificStation = (specificStationId) => {
-        // Store the specific station ID in localStorage for future visits
         localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
         setResolvedSpecificStationId(specificStationId); // Update resolved ID
         setShowSpecificStationModal(false);
@@ -158,24 +215,86 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             </div>
             {allStationsError && <p style={{ color: 'red' }}>{allStationsError}</p>}
 
-            {!showSpecificStationModal && resolvedSpecificStationId ? (
-                <div>
-                    <p style={{ marginTop: '20px' }}>La funcionalidad de visualización de módulos y tareas está actualmente deshabilitada.</p>
-                    {/* The following sections are removed as their data source is no longer available */}
-                    {/* Display Current Module */}
-                    {/* Display Tasks for current module */}
+            {!showSpecificStationModal && resolvedSpecificStationId && (
+                <div style={{ marginTop: '20px' }}>
+                    {isLoadingPanelInfo && <p>Cargando información de producción de paneles...</p>}
+                    {panelInfoError && <p style={{ color: 'red' }}>{panelInfoError}</p>}
+                    
+                    {panelProductionInfo && !isLoadingPanelInfo && !panelInfoError && (
+                        <div style={panelProductionSectionStyle}>
+                            <h3>Paneles en Producción</h3>
+                            {panelProductionInfo.type === 'nextModule' && panelProductionInfo.data && (
+                                <>
+                                    <p><strong>Siguiente Módulo a Producir Paneles:</strong> {panelProductionInfo.data.module_name} (Plan ID: {panelProductionInfo.data.plan_id})</p>
+                                    {panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0 ? (
+                                        <ul style={listStyle}>
+                                            {panelProductionInfo.data.panels_to_produce.map(panel => (
+                                                <li key={panel.panel_definition_id} style={listItemStyle}>
+                                                    {panel.panel_code} ({panel.panel_group})
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p>No hay paneles específicos listados para iniciar producción para este módulo (o ya están todos en PanelProductionPlan).</p>
+                                    )}
+                                </>
+                            )}
+                             {panelProductionInfo.type === 'nextModule' && !panelProductionInfo.data && panelProductionInfo.message && (
+                                <p>{panelProductionInfo.message}</p>
+                            )}
+
+                            {panelProductionInfo.type === 'currentStation' && panelProductionInfo.data && panelProductionInfo.data.length > 0 && (
+                                <>
+                                    <p><strong>Paneles Actualmente en esta Estación ({resolvedSpecificStationId}):</strong></p>
+                                    <ul style={listStyle}>
+                                        {panelProductionInfo.data.map(panel => (
+                                            <li key={panel.panel_production_plan_id} style={listItemStyle}>
+                                                {panel.panel_name} (Módulo: {panel.module_name}, Plan ID: {panel.plan_id})
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </>
+                            )}
+                            {panelProductionInfo.type === 'currentStation' && (!panelProductionInfo.data || panelProductionInfo.data.length === 0) && (
+                                <p>No hay paneles "En Progreso" actualmente en esta estación.</p>
+                            )}
+                        </div>
+                    )}
+                     <p style={{ marginTop: '20px', fontStyle: 'italic' }}>La funcionalidad de visualización de tareas individuales está actualmente deshabilitada.</p>
                 </div>
-            ) : (
-                 !resolvedSpecificStationId && !showSpecificStationModal && <p>Configurando estación...</p>
             )}
-             {showSpecificStationModal && (
+            {!resolvedSpecificStationId && !showSpecificStationModal && <p>Configurando estación...</p>}
+            {showSpecificStationModal && (
                 <p>Por favor, seleccione su estación específica para continuar.</p>
             )}
         </div>
     );
 };
 
-// Some basic styles (consider moving to a separate CSS file or styled-components)
+// Basic styles (consider moving to a separate CSS file or styled-components)
+const panelProductionSectionStyle = {
+    marginTop: '20px',
+    padding: '15px',
+    border: '1px solid #ddd',
+    borderRadius: '5px',
+    backgroundColor: '#f9f9f9',
+    textAlign: 'left',
+};
+
+const listStyle = {
+    listStyleType: 'none',
+    paddingLeft: 0,
+};
+
+const listItemStyle = {
+    padding: '8px',
+    borderBottom: '1px solid #eee',
+};
+
+listItemStyle[':last-child'] = {
+    borderBottom: 'none',
+};
+
 const moduleInfoBoxStyle = {
     marginTop: '20px',
     padding: '15px',
