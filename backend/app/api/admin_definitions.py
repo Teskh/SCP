@@ -905,38 +905,39 @@ def get_stations_route():
     try:
         stations = queries.get_all_stations()
         return jsonify(stations)
-
-    @admin_definitions_bp.route('/panel-production/info-for-next-module', methods=['GET'])
-    def get_info_for_next_module_route():
-        """
-        Provides information about the next module for which panel production should start,
-        including the list of panels to be produced.
-        """
-        try:
-            data = production_flow.get_module_for_panel_production()
-            if data:
-                return jsonify(data)
-            else:
-                return jsonify(message="No module currently identified for starting panel production."), 200 # Or 404 if preferred
-        except Exception as e:
-            logger.error(f"Error in get_info_for_next_module_route: {e}", exc_info=True)
-            return jsonify(error="Failed to fetch info for next module panel production"), 500
-
-    @admin_definitions_bp.route('/stations/<string:station_id>/current-panels', methods=['GET'])
-    def get_current_panels_at_station_route(station_id):
-        """
-        Retrieves panels currently assigned to a specific station and in 'In Progress' status.
-        """
-        try:
-            # Validate station_id format or existence if necessary, though get_current_station_panels handles empty results
-            panels = production_flow.get_current_station_panels(station_id)
-            return jsonify(panels)
-        except Exception as e:
-            logger.error(f"Error getting current panels for station {station_id}: {e}", exc_info=True)
-            return jsonify(error=f"Failed to fetch current panels for station {station_id}"), 500
     except Exception as e:
         logger.error(f"Error in get_stations_route: {e}", exc_info=True)
         return jsonify(error="Failed to fetch stations"), 500
+
+
+@admin_definitions_bp.route('/panel-production/info-for-next-module', methods=['GET'])
+def get_info_for_next_module_route():
+    """
+    Provides information about the next module for which panel production should start,
+    including the list of panels to be produced.
+    """
+    try:
+        data = production_flow.get_module_for_panel_production()
+        if data:
+            return jsonify(data)
+        else:
+            return jsonify(message="No module currently identified for starting panel production."), 200 # Or 404 if preferred
+    except Exception as e:
+        logger.error(f"Error in get_info_for_next_module_route: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch info for next module panel production"), 500
+
+@admin_definitions_bp.route('/stations/<string:station_id>/current-panels', methods=['GET'])
+def get_current_panels_at_station_route(station_id):
+    """
+    Retrieves panels currently assigned to a specific station and in 'In Progress' status.
+    """
+    try:
+        # Validate station_id format or existence if necessary, though get_current_station_panels handles empty results
+        panels = production_flow.get_current_station_panels(station_id)
+        return jsonify(panels)
+    except Exception as e:
+        logger.error(f"Error getting current panels for station {station_id}: {e}", exc_info=True)
+        return jsonify(error=f"Failed to fetch current panels for station {station_id}"), 500
 
 
 # === Task Operations ===
