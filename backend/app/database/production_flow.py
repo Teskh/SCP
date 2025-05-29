@@ -16,8 +16,8 @@ def get_station_status_and_upcoming_modules():
     all_stations = [dict(row) for row in stations_cursor.fetchall()]
 
     # 2. Fetch relevant ModuleProductionPlan items for current station occupancy
-    # For 'Panels' status (typically one active for the whole W line)
-    panels_module_cursor = db.execute("""
+    # For 'Panels' status (potentially multiple, but the first by sequence is considered 'current' for the W line display)
+    panels_modules_cursor = db.execute("""
         SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
                mpp.house_identifier, mpp.module_number, ht.number_of_modules,
                mpp.status, mpp.sub_type_id, hst.name as sub_type_name
@@ -25,9 +25,9 @@ def get_station_status_and_upcoming_modules():
         JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
         LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
         WHERE mpp.status = 'Panels'
-        ORDER BY mpp.planned_sequence ASC LIMIT 1 
+        ORDER BY mpp.planned_sequence ASC
     """)
-    panels_active_module_row = panels_module_cursor.fetchone()
+    panels_active_modules_rows = [dict(row) for row in panels_modules_cursor.fetchall()]
 
     # For 'Magazine' status (for M1 station)
     magazine_modules_cursor = db.execute("""
@@ -69,8 +69,8 @@ def get_station_status_and_upcoming_modules():
         active_mpp_item_dict = None
 
         if station['line_type'] == 'W':
-            if panels_active_module_row:
-                active_mpp_item_dict = dict(panels_active_module_row)
+            if panels_active_modules_rows: # Check if there are any modules in 'Panels' status
+                active_mpp_item_dict = panels_active_modules_rows[0] # Take the first one by sequence
         elif station['line_type'] == 'M' and station['station_id'] == 'M1':
             if magazine_active_modules_rows: # Show the first 'Magazine' module by sequence
                 active_mpp_item_dict = magazine_active_modules_rows[0] 
