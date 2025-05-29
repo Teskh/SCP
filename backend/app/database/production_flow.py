@@ -9,6 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 def get_station_status_and_upcoming_modules():
     """Fetches current module at each station and all upcoming planned/scheduled/magazine items from ModuleProductionPlan."""
+    logging.info("Fetching station status and upcoming modules.")
     db = get_db()
 
     # 1. Fetch all stations
