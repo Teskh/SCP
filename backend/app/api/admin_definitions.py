@@ -130,7 +130,7 @@ def update_house_type_route(house_type_id):
                     st_description = st_data.get('description', '')
                     sub_type_id = queries.add_sub_type_to_house_type(house_type_id, st_name, st_description)
                     if not sub_type_id:
-                        raise Exception(f"Failed to add/update sub_type '{st_name}'.")
+                        raise Exception(f"Failed to add sub_type '{st_name}'.")
                     updated_sub_types.append({'sub_type_id': sub_type_id, 'name': st_name, 'description': st_description})
         
         final_house_type = queries.get_all_house_types_with_details()
@@ -1126,4 +1126,76 @@ def resume_task_route():
         return jsonify(error=f"An unexpected error occurred while resuming the task: {str(e)}"), 500
 
 
-@admin_definitions极
+@admin_definitions_bp.route('/tasks/complete', methods=['POST'])
+def complete_task_route():
+    """
+    Completes a task (either TaskLog or PanelTaskLog).
+    After completion, it checks if all tasks for the current station are complete
+    and updates the module's status and station if applicable.
+    """
+    data = request.get_json()
+    required_fields = ['plan_id', 'task_definition_id', 'station_finish']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    plan_id_req = data['plan_id']
+    task_definition_id_req = data['task_definition_id']
+    station_finish_req = data['station_finish']
+    notes = data.get('notes', '')
+
+    try:
+        plan_id = int(plan_id_req)
+        task_definition_id = int(task_definition_id_req)
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid ID format. IDs must be integers (except station_finish)."), 400
+
+    db = connection.get_db()
+    try:
+        with db:
+            task_def = queries.get_task_definition_by_id(task_definition_id)
+            if not task_def:
+                return jsonify(error=f"Task Definition ID {task_definition_id} not found."), 404
+            is_panel_task = task_def['is_panel_task']
+
+            if is_panel_task:
+                return jsonify(error="Panel tasks are no longer supported."), 400
+            else:
+                # Find the active module task log
+                task_log_cursor = db.execute(
+                    "SELECT task_log_id, status FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ? AND status IN ('In Progress', 'Paused')",
+                    (plan_id, task_definition_id))
+                task_log = task_log_cursor.fetchone()
+
+                if not task_log:
+                    return jsonify(error="No active or paused module task found to complete."), 404
+
+                success = queries.update_task_log_status(
+                    task_log['task_log_id'], 'Completed', station_finish_req, notes
+                )
+                log_type = "TaskLog"
+
+            if success:
+                # After completing a task, check if the module can transition to the next station
+                # Get the station sequence order for the current station_finish
+                station_info_cursor = db.execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (station_finish_req,))
+                station_info = station_info_cursor.fetchone()
+                if station_info:
+                    station_sequence_order = station_info['sequence_order']
+                    queries.check_and_update_module_station_completion(plan_id, station_sequence_order)
+                else:
+                    logger.warning(f"Station {station_finish_req} not found when checking module completion for plan {plan_id}.")
+
+                return jsonify(message=f"{log_type} completed successfully", plan_id=plan_id, log_type=log_type.lower()), 200
+            else:
+                raise Exception(f"Failed to complete {log_type}")
+
+    except ValueError as ve:
+        logger.warning(f"ValueError completing task for plan {plan_id}: {ve}")
+        return jsonify(error=str(ve)), 400
+    except sqlite3.IntegrityError as e:
+        logger.error(f"Integrity error completing task for plan {plan_id}: {e}", exc_info=True)
+        return jsonify(error="Database integrity error completing task."), 409
+    except Exception as e:
+        logger.error(f"Error completing task for plan {plan_id}: {e}", exc_info=True)
+        return jsonify(error=f"An unexpected error occurred while completing the task: {str(e)}"), 500
