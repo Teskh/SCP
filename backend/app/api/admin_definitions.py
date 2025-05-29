@@ -957,16 +957,11 @@ def start_task_route():
     task_definition_id_req = data['task_definition_id']
     worker_id_req = data['worker_id']
     station_start_req = data['station_start']
-    panel_definition_id_req = data.get('panel_definition_id')
 
     try:
         plan_id = int(plan_id_req)
         task_definition_id = int(task_definition_id_req)
         worker_id = int(worker_id_req)
-        if panel_definition_id_req is not None:
-            panel_definition_id = int(panel_definition_id_req)
-        else:
-            panel_definition_id = None
     except (ValueError, TypeError):
         return jsonify(error="Invalid ID format. IDs must be integers (except station_id)."), 400
 
@@ -991,22 +986,7 @@ def start_task_route():
             log_type = ""
 
             if is_panel_task:
-                if panel_definition_id is None:
-                    return jsonify(error="panel_definition_id is required for panel tasks."), 400
-                
-                existing_panel_log_cursor = db.execute(
-                    "SELECT status FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ?",
-                    (plan_id, panel_definition_id, task_definition_id))
-                existing_panel_log = existing_panel_log_cursor.fetchone()
-
-                if existing_panel_log and existing_panel_log['status'] in ['In Progress', 'Completed']:
-                     return jsonify(error=f"Panel task is already {existing_panel_log['status']} for this plan."), 409
-
-                new_log_id = queries.start_panel_task_log(
-                    plan_id=plan_id, panel_definition_id=panel_definition_id,
-                    task_definition_id=task_definition_id, worker_id=worker_id, station_start=station_start_req
-                )
-                log_type = "PanelTaskLog"
+                return jsonify(error="Panel tasks are no longer supported."), 400
             else:
                 existing_module_log_cursor = db.execute(
                     "SELECT status FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ?",
@@ -1052,76 +1032,39 @@ def pause_task_route():
     plan_id_req = data['plan_id']
     task_definition_id_req = data['task_definition_id']
     worker_id_req = data['worker_id']
-    panel_definition_id_req = data.get('panel_definition_id')
     reason = data.get('reason', 'Worker initiated pause')
 
     try:
         plan_id = int(plan_id_req)
         task_definition_id = int(task_definition_id_req)
         worker_id = int(worker_id_req)
-        if panel_definition_id_req is not None:
-            panel_definition_id = int(panel_definition_id_req)
-        else:
-            panel_definition_id = None
     except (ValueError, TypeError):
         return jsonify(error="Invalid ID format. IDs must be integers."), 400
 
     db = connection.get_db()
     try:
-        with db:
-            task_def = queries.get_task_definition_by_id(task_definition_id)
-            if not task_def:
-                return jsonify(error=f"Task Definition ID {task_definition_id} not found."), 404
-            is_panel_task = task_def['is_panel_task']
+        with db:            
+            # Find the active module task log
+            task_log_cursor = db.execute(
+                "SELECT task_log_id, status FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ? AND status = 'In Progress'",
+                (plan_id, task_definition_id))
+            task_log = task_log_cursor.fetchone()
 
-            if is_panel_task:
-                if panel_definition_id is None:
-                    return jsonify(error="panel_definition_id is required for panel tasks."), 400
-                
-                # Find the active panel task log
-                panel_log_cursor = db.execute(
-                    "SELECT panel_task_log_id, status FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ? AND status = 'In Progress'",
-                    (plan_id, panel_definition_id, task_definition_id))
-                panel_log = panel_log_cursor.fetchone()
+            if not task_log:
+                return jsonify(error="No active module task found to pause."), 404
 
-                if not panel_log:
-                    return jsonify(error="No active panel task found to pause."), 404
+            # Update status to Paused
+            db.execute(
+                "UPDATE TaskLogs SET status = 'Paused' WHERE task_log_id = ?",
+                (task_log['task_log_id'],))
 
-                # Update status to Paused
-                db.execute(
-                    "UPDATE PanelTaskLogs SET status = 'Paused' WHERE panel_task_log_id = ?",
-                    (panel_log['panel_task_log_id'],))
+            # Create pause record
+            pause_cursor = db.execute(
+                "INSERT INTO TaskPauses (task_log_id, paused_by_worker_id, paused_at, reason) VALUES (?, ?, datetime('now'), ?)",
+                (task_log['task_log_id'], worker_id, reason))
+            pause_id = pause_cursor.lastrowid
 
-                # Create pause record
-                pause_cursor = db.execute(
-                    "INSERT INTO TaskPauses (panel_task_log_id, paused_by_worker_id, paused_at, reason) VALUES (?, ?, datetime('now'), ?)",
-                    (panel_log['panel_task_log_id'], worker_id, reason))
-                pause_id = pause_cursor.lastrowid
-
-                return jsonify(message="Panel task paused successfully", pause_id=pause_id, log_type="panel_task_log"), 200
-
-            else:
-                # Find the active module task log
-                task_log_cursor = db.execute(
-                    "SELECT task_log_id, status FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ? AND status = 'In Progress'",
-                    (plan_id, task_definition_id))
-                task_log = task_log_cursor.fetchone()
-
-                if not task_log:
-                    return jsonify(error="No active module task found to pause."), 404
-
-                # Update status to Paused
-                db.execute(
-                    "UPDATE TaskLogs SET status = 'Paused' WHERE task_log_id = ?",
-                    (task_log['task_log_id'],))
-
-                # Create pause record
-                pause_cursor = db.execute(
-                    "INSERT INTO TaskPauses (task_log_id, paused_by_worker_id, paused_at, reason) VALUES (?, ?, datetime('now'), ?)",
-                    (task_log['task_log_id'], worker_id, reason))
-                pause_id = pause_cursor.lastrowid
-
-                return jsonify(message="Module task paused successfully", pause_id=pause_id, log_type="task_log"), 200
+            return jsonify(message="Module task paused successfully", pause_id=pause_id, log_type="task_log"), 200
 
     except sqlite3.IntegrityError as e:
         logger.error(f"Integrity error pausing task for plan {plan_id}: {e}", exc_info=True)
@@ -1144,72 +1087,36 @@ def resume_task_route():
 
     plan_id_req = data['plan_id']
     task_definition_id_req = data['task_definition_id']
-    panel_definition_id_req = data.get('panel_definition_id')
 
     try:
         plan_id = int(plan_id_req)
         task_definition_id = int(task_definition_id_req)
-        if panel_definition_id_req is not None:
-            panel_definition_id = int(panel_definition_id_req)
-        else:
-            panel_definition_id = None
     except (ValueError, TypeError):
         return jsonify(error="Invalid ID format. IDs must be integers."), 400
 
     db = connection.get_db()
     try:
         with db:
-            task_def = queries.get_task_definition_by_id(task_definition_id)
-            if not task_def:
-                return jsonify(error=f"Task Definition ID {task_definition_id} not found."), 404
-            is_panel_task = task_def['is_panel_task']
+            # Find the paused module task log
+            task_log_cursor = db.execute(
+                "SELECT task_log_id FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ? AND status = 'Paused'",
+                (plan_id, task_definition_id))
+            task_log = task_log_cursor.fetchone()
 
-            if is_panel_task:
-                if panel_definition_id is None:
-                    return jsonify(error="panel_definition_id is required for panel tasks."), 400
-                
-                # Find the paused panel task log
-                panel_log_cursor = db.execute(
-                    "SELECT panel_task_log_id FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ? AND status = 'Paused'",
-                    (plan_id, panel_definition_id, task_definition_id))
-                panel_log = panel_log_cursor.fetchone()
+            if not task_log:
+                return jsonify(error="No paused module task found to resume."), 404
 
-                if not panel_log:
-                    return jsonify(error="No paused panel task found to resume."), 404
+            # Update status to In Progress
+            db.execute(
+                "UPDATE TaskLogs SET status = 'In Progress' WHERE task_log_id = ?",
+                (task_log['task_log_id'],))
 
-                # Update status to In Progress
-                db.execute(
-                    "UPDATE PanelTaskLogs SET status = 'In Progress' WHERE panel_task_log_id = ?",
-                    (panel_log['panel_task_log_id'],))
+            # Update pause record with resumed_at
+            db.execute(
+                "UPDATE TaskPauses SET resumed_at = datetime('now') WHERE task_log_id = ? AND resumed_at IS NULL",
+                (task_log['task_log_id'],))
 
-                # Update pause record with resumed_at
-                db.execute(
-                    "UPDATE TaskPauses SET resumed_at = datetime('now') WHERE panel_task_log_id = ? AND resumed_at IS NULL",
-                    (panel_log['panel_task_log_id'],))
-
-                return jsonify(message="Panel task resumed successfully", log_type="panel_task_log"), 200
-
-            else:
-                # Find the paused module task log
-                task_log_cursor = db.execute(
-                    "SELECT task_log_id FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ? AND status = 'Paused'",
-                    (plan_id, task_definition_id))
-                task_log = task_log_cursor.fetchone()
-
-                if not task_log:
-                    return jsonify(error="No paused module task found to resume."), 404
-
-                # Update status to In Progress
-                db.execute(
-                    "UPDATE TaskLogs SET status = 'In Progress' WHERE task_log_id = ?",
-                    (task_log['task_log_id'],))
-
-                # Update pause record with resumed_at
-                db.execute(
-                    "UPDATE TaskPauses SET resumed_at = datetime('now') WHERE task_log_id = ? AND resumed_at IS NULL",
-                    (task_log['task_log_id'],))
-
-                return jsonify(message="Module task resumed successfully", log_type="task_log"), 200
+            return jsonify(message="Module task resumed successfully", log_type="task_log"), 200
 
     except sqlite3.IntegrityError as e:
         logger.error(f"Integrity error resuming task for plan {plan_id}: {e}", exc_info=True)
@@ -1219,101 +1126,4 @@ def resume_task_route():
         return jsonify(error=f"An unexpected error occurred while resuming the task: {str(e)}"), 500
 
 
-@admin_definitions_bp.route('/tasks/complete', methods=['POST'])
-def complete_task_route():
-    """
-    Completes a task and implements automatic station transitions and status updates.
-    """
-    data = request.get_json()
-    required_fields = ['plan_id', 'task_definition_id', 'station_finish']
-    if not data or not all(field in data for field in required_fields):
-        missing = [field for field in required_fields if field not in data]
-        return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
-
-    plan_id_req = data['plan_id']
-    task_definition_id_req = data['task_definition_id']
-    station_finish_req = data['station_finish']
-    panel_definition_id_req = data.get('panel_definition_id')
-    notes = data.get('notes', '')
-
-    try:
-        plan_id = int(plan_id_req)
-        task_definition_id = int(task_definition_id_req)
-        if panel_definition_id_req is not None:
-            panel_definition_id = int(panel_definition_id_req)
-        else:
-            panel_definition_id = None
-    except (ValueError, TypeError):
-        return jsonify(error="Invalid ID format. IDs must be integers."), 400
-
-    db = connection.get_db()
-    try:
-        with db:
-            task_def = queries.get_task_definition_by_id(task_definition_id)
-            if not task_def:
-                return jsonify(error=f"Task Definition ID {task_definition_id} not found."), 404
-            is_panel_task = task_def['is_panel_task']
-
-            plan_item = queries.get_module_production_plan_item_by_id(plan_id)
-            if not plan_item:
-                return jsonify(error=f"Production Plan ID {plan_id} not found."), 404
-
-            if is_panel_task:
-                if panel_definition_id is None:
-                    return jsonify(error="panel_definition_id is required for panel tasks."), 400
-                
-                # Find the active panel task log
-                panel_log_cursor = db.execute(
-                    "SELECT panel_task_log_id, status FROM PanelTaskLogs WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ? AND status IN ('In Progress', 'Paused')",
-                    (plan_id, panel_definition_id, task_definition_id))
-                panel_log = panel_log_cursor.fetchone()
-
-                if not panel_log:
-                    return jsonify(error="No active panel task found to complete."), 404
-
-                # Update panel task to completed
-                db.execute(
-                    "UPDATE PanelTaskLogs SET status = 'Completed', completed_at = datetime('now'), station_finish = ?, notes = ? WHERE panel_task_log_id = ?",
-                    (station_finish_req, notes, panel_log['panel_task_log_id']))
-
-                # Close any open pause records
-                db.execute(
-                    "UPDATE TaskPauses SET resumed_at = datetime('now') WHERE panel_task_log_id = ? AND resumed_at IS NULL",
-                    (panel_log['panel_task_log_id'],))
-
-                # Check if all panel tasks for this station are complete for this plan
-                queries.check_and_update_module_station_completion(plan_id, task_def['station_sequence_order'])
-
-                return jsonify(message="Panel task completed successfully", log_type="panel_task_log"), 200
-
-            else:
-                # Find the active module task log
-                task_log_cursor = db.execute(
-                    "SELECT task_log_id, status FROM TaskLogs WHERE plan_id = ? AND task_definition_id = ? AND status IN ('In Progress', 'Paused')",
-                    (plan_id, task_definition_id))
-                task_log = task_log_cursor.fetchone()
-
-                if not task_log:
-                    return jsonify(error="No active module task found to complete."), 404
-
-                # Update module task to completed
-                db.execute(
-                    "UPDATE TaskLogs SET status = 'Completed', completed_at = datetime('now'), station_finish = ?, notes = ? WHERE task_log_id = ?",
-                    (station_finish_req, notes, task_log['task_log_id']))
-
-                # Close any open pause records
-                db.execute(
-                    "UPDATE TaskPauses SET resumed_at = datetime('now') WHERE task_log_id = ? AND resumed_at IS NULL",
-                    (task_log['task_log_id'],))
-
-                # Check if all module tasks for this station are complete for this plan
-                queries.check_and_update_module_station_completion(plan_id, task_def['station_sequence_order'])
-
-                return jsonify(message="Module task completed successfully", log_type="task_log"), 200
-
-    except sqlite3.IntegrityError as e:
-        logger.error(f"Integrity error completing task for plan {plan_id}: {e}", exc_info=True)
-        return jsonify(error="Database integrity error completing task."), 409
-    except Exception as e:
-        logger.error(f"Error completing task for plan {plan_id}: {e}", exc_info=True)
-        return jsonify(error=f"An unexpected error occurred while completing the task: {str(e)}"), 500
+@admin_definitions极

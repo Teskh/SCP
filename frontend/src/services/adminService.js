@@ -29,72 +29,6 @@ export const addSpecialty = async (specialtyData) => {
     return handleResponse(response);
 };
 
-// === Station Context & Task Management (for StationContextSelector.js) ===
-
-export const getStationContext = async (stationId) => {
-    const response = await fetch(`${API_BASE_URL}/station-context/${stationId}`);
-    return handleResponse(response); // Expects { module: {...} or null, panels: [...] }
-};
-
-
-// The panelId parameter should correspond to panel_definition_id.
-// The moduleId parameter should correspond to the module_id of the currently active module.
-// The stationId is the current station context.
-
-export const startOrResumePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    const payload = {
-        plan_id: planId,
-        task_definition_id: taskDefinitionId,
-        worker_id: workerId,
-        station_start: stationId,
-        panel_definition_id: panelDefinitionId 
-    };
-    
-    try {
-        const result = await startTask(planId, taskDefinitionId, workerId, stationId, panelDefinitionId);
-        return { 
-            success: true,
-            message: result.message || `Panel ${panelDefinitionId} task action processed.`, 
-            panel_id: panelDefinitionId,
-            new_status: result.new_status || "in_progress",
-            log_id: result.log_id 
-        };
-    } catch (error) {
-        throw error; 
-    }
-};
-
-export const pausePanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return { success: true, message: `Panel ${panelDefinitionId} task paused (mocked)`, panel_id: panelDefinitionId, new_status: "paused" };
-};
-
-export const finishPanelTask = async (planId, taskDefinitionId, workerId, stationId, panelDefinitionId) => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-     return { success: true, message: `Panel ${panelDefinitionId} task finished (mocked)`, panel_id: panelDefinitionId, new_status: "completed" };
-};
-
-
-export const updatePlanStatus = async (planId, newStatus, newLine = null) => {
-    
-    const updateData = { status: newStatus };
-    if (newLine !== null) {
-        updateData.planned_assembly_line = newLine;
-    }
-
-    try {
-        const updatedItem = await updateModuleProductionPlanItem(planId, updateData);
-        return { 
-            success: true, 
-            message: `Plan ${planId} status updated to ${newStatus}` + (newLine ? ` and line to ${newLine}.` : '.'),
-            plan_id: planId,
-            new_status: updatedItem.status,
-        };
-    } catch (error) {
-        throw error; 
-    }
-};
-
 export const updateSpecialty = async (id, specialtyData) => {
     const response = await fetch(`${API_BASE_URL}/specialties/${id}`, {
         method: 'PUT',
@@ -623,15 +557,13 @@ export const getStationStatusOverview = async () => {
     return handleResponse(response);
 };
 
-export const getStationOverviewData = async (stationId, specialtyId, panelDefinitionId = null) => {
+export const getStationOverviewData = async (stationId, specialtyId) => {
     let url = `${API_BASE_URL}/station-context/${stationId}`;
 
     const params = new URLSearchParams();
     if (specialtyId !== undefined && specialtyId !== null) {
         params.append('specialty_id', specialtyId);
     }
-    // panelDefinitionId is not used by the /station-context endpoint directly for fetching the main context.
-    // It might be used by other specific calls if needed.
 
     const queryString = params.toString();
     if (queryString) {
@@ -641,13 +573,12 @@ export const getStationOverviewData = async (stationId, specialtyId, panelDefini
     return handleResponse(response);
 };
 
-export const startTask = async (planId, taskDefinitionId, workerId, stationStart, panelDefinitionId = null) => {
+export const startTask = async (planId, taskDefinitionId, workerId, stationStart) => {
     const payload = {
         plan_id: planId,
         task_definition_id: taskDefinitionId,
         worker_id: workerId,
         station_start: stationStart,
-        panel_definition_id: panelDefinitionId,
     };
 
     const response = await fetch(`${API_BASE_URL}/tasks/start`, {
@@ -660,12 +591,11 @@ export const startTask = async (planId, taskDefinitionId, workerId, stationStart
     return handleResponse(response);
 };
 
-export const pauseTask = async (planId, taskDefinitionId, workerId, panelDefinitionId = null, reason = '') => {
+export const pauseTask = async (planId, taskDefinitionId, workerId, reason = '') => {
     const payload = {
         plan_id: planId,
         task_definition_id: taskDefinitionId,
         worker_id: workerId,
-        panel_definition_id: panelDefinitionId,
         reason: reason,
     };
 
@@ -679,11 +609,10 @@ export const pauseTask = async (planId, taskDefinitionId, workerId, panelDefinit
     return handleResponse(response);
 };
 
-export const resumeTask = async (planId, taskDefinitionId, panelDefinitionId = null) => {
+export const resumeTask = async (planId, taskDefinitionId) => {
     const payload = {
         plan_id: planId,
         task_definition_id: taskDefinitionId,
-        panel_definition_id: panelDefinitionId,
     };
 
     const response = await fetch(`${API_BASE_URL}/tasks/resume`, {
@@ -696,12 +625,11 @@ export const resumeTask = async (planId, taskDefinitionId, panelDefinitionId = n
     return handleResponse(response);
 };
 
-export const completeTask = async (planId, taskDefinitionId, stationFinish, panelDefinitionId = null, notes = '') => {
+export const completeTask = async (planId, taskDefinitionId, stationFinish, notes = '') => {
     const payload = {
         plan_id: planId,
         task_definition_id: taskDefinitionId,
         station_finish: stationFinish,
-        panel_definition_id: panelDefinitionId,
         notes: notes,
     };
 

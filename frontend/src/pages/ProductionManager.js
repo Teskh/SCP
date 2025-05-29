@@ -3,28 +3,7 @@ import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
 import { getStationOverviewData, startTask, pauseTask, resumeTask, completeTask } from '../services/adminService'; // Import services
 
-const PANEL_LINE_GENERAL_VALUE = 'PANEL_LINE_GENERAL';
-const PANEL_LINE_GENERAL_LABEL = 'Línea de Paneles (General)';
-const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId';
 const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext'; // New constant for the main key
-
-// Helper function to check if a specific station ID is valid for the ambiguous context
-const checkSpecificIdValidity = (specificId, ambiguousContextValue, allStations) => {
-    if (!specificId || !allStations || allStations.length === 0) return false;
-    const station = allStations.find(s => s.station_id === specificId);
-    if (!station) return false;
-
-    if (ambiguousContextValue === PANEL_LINE_GENERAL_VALUE) {
-        // For 'PANEL_LINE_GENERAL', the specific ID must be a 'W' type station
-        return station.line_type === 'W';
-    } else {
-        // For numeric assembly sequences (7-12), the specific ID must match that sequence order
-        const numericAmbiguousSeq = parseInt(ambiguousContextValue, 10);
-        if (isNaN(numericAmbiguousSeq)) return false;
-        return station.sequence_order === numericAmbiguousSeq;
-    }
-};
-
 
 const ProductionManager = ({ user, allStations, isLoadingAllStations, allStationsError }) => {
     const [showSpecificStationModal, setShowSpecificStationModal] = useState(false);
@@ -34,16 +13,10 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     // State for station overview data (current module, tasks, panels)
     const [moduleData, setModuleData] = useState(null); // Module currently at station
     const [tasks, setTasks] = useState([]);
-    const [availablePanels, setAvailablePanels] = useState([]); // State for panels
     const [isLoadingStationData, setIsLoadingStationData] = useState(false);
     const [stationDataError, setStationDataError] = useState('');
     const [taskActionLoading, setTaskActionLoading] = useState(null); // Track loading state per task
     const [taskActionError, setTaskActionError] = useState(null); // Track error state per task
-
-    // State for panel selection UI
-    const [selectingPanelForTask, setSelectingPanelForTask] = useState(null); // task_definition_id
-    const [selectedPanelId, setSelectedPanelId] = useState('');
-
 
     // Effect to determine the station context and specific station ID
     useEffect(() => {
@@ -61,33 +34,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             return;
         }
 
-        const specificIdFromStorage = localStorage.getItem(SELECTED_SPECIFIC_STATION_ID_KEY);
-
-        const isAmbiguousContext =
-            storedContext === PANEL_LINE_GENERAL_VALUE ||
-            (typeof storedContext === 'string' && parseInt(storedContext, 10) >= 7 && parseInt(storedContext, 10) <= 12);
-
-        if (isAmbiguousContext) {
-            const isValidSpecificId = checkSpecificIdValidity(specificIdFromStorage, storedContext, allStations);
-            if (!isValidSpecificId) {
-                // Ambiguous context, but no valid specific ID chosen yet or it's invalid
-                setResolvedSpecificStationId(null); // Clear invalid specific ID
-                setShowSpecificStationModal(true); // Prompt user to select specific station
-            } else {
-                // Ambiguous context, and a valid specific ID is already chosen
-                setResolvedSpecificStationId(specificIdFromStorage);
-                setShowSpecificStationModal(false);
-            }
-        } else {
-            // Not an ambiguous context (it's a direct station ID like 'W1', 'A1A', etc.)
-            // In this case, the 'selectedStationContext' IS the specific station ID.
-            setResolvedSpecificStationId(storedContext);
-            setShowSpecificStationModal(false);
-            // Clear any lingering specific ID from previous ambiguous selections, as it's not relevant now
-            if (specificIdFromStorage) {
-                localStorage.removeItem(SELECTED_SPECIFIC_STATION_ID_KEY);
-            }
-        }
+        // In this case, the 'selectedStationContext' IS the specific station ID.
+        setResolvedSpecificStationId(storedContext);
+        setShowSpecificStationModal(false);
     }, [user, allStations, isLoadingAllStations]); // Dependencies for this effect
 
     // Define fetchStationData using useCallback to stabilize its identity
@@ -97,7 +46,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             // Clear data if station or user/specialty is not set
             setModuleData(null);
             setTasks([]);
-            setAvailablePanels([]);
             return;
         }
 
@@ -105,12 +53,10 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         setStationDataError('');
         setModuleData(null);
         setTasks([]);
-        setAvailablePanels([]); // Clear panels before fetch
         try {
             const data = await getStationOverviewData(resolvedSpecificStationId, user.specialty_id); // Use resolvedSpecificStationId
             setModuleData(data.module); // Will be null if no module at station
             setTasks(data.tasks || []); // Ensure tasks is an array
-            setAvailablePanels(data.panels || []); // Store panels if returned
         } catch (error) {
             console.error("Error fetching station data:", error);
             setStationDataError(error.message || 'Error al cargar datos de la estación.');
@@ -125,47 +71,20 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     }, [fetchStationData]); // Depend on the stable fetchStationData function
 
     const handleSaveSpecificStation = (specificStationId) => {
-        localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
+        localStorage.setItem(SELECTED_STATION_CONTEXT_KEY, specificStationId);
         setResolvedSpecificStationId(specificStationId); // Update resolved ID
         setShowSpecificStationModal(false);
         // fetchStationData will be triggered by the useEffect watching resolvedSpecificStationId
     };
 
-    const isPanelLineStation = useMemo(() => {
-        if (!resolvedSpecificStationId || !allStations || allStations.length === 0) return false;
-        const station = allStations.find(s => s.station_id === resolvedSpecificStationId);
-        return station && station.line_type === 'W'; // Check line_type 'W' for panel line stations
-    }, [resolvedSpecificStationId, allStations]);
-
     // --- Task Action Handlers ---
 
     const handleStartTaskClick = (taskDefinitionId) => {
         setTaskActionError(null); // Clear previous errors
-        if (isPanelLineStation) {
-            // Show panel selector for this task
-            setSelectingPanelForTask(taskDefinitionId);
-            setSelectedPanelId(''); // Reset selection
-        } else {
-            // Start task directly (no panel needed)
-            startTaskApiCall(taskDefinitionId, null);
-        }
+        startTaskApiCall(taskDefinitionId);
     };
 
-    const handleCancelPanelSelection = () => {
-        setSelectingPanelForTask(null);
-        setSelectedPanelId('');
-        setTaskActionError(null);
-    };
-
-    const handleConfirmPanelAndStart = (taskDefinitionId) => {
-        if (!selectedPanelId) {
-            setTaskActionError({ taskId: taskDefinitionId, message: "Por favor, seleccione un panel." });
-            return;
-        }
-        startTaskApiCall(taskDefinitionId, selectedPanelId);
-    };
-
-    const startTaskApiCall = async (taskDefinitionId, panelId) => {
+    const startTaskApiCall = async (taskDefinitionId) => {
         // We are only working with the current module (if exists)
         if (!moduleData || !moduleData.plan_id || !user || !user.id || !resolvedSpecificStationId) {
             console.error("Missing data needed to start task:", { moduleData, user, resolvedSpecificStationId });
@@ -177,18 +96,14 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         setTaskActionError(null);
 
         try {
-            // Send plan_id instead of module_id and use stationStart parameter name
             await startTask(
                 moduleData.plan_id, // Use plan_id from current module
                 taskDefinitionId,
                 user.id, // worker_id
-                resolvedSpecificStationId, // stationStart
-                panelId // house_type_panel_id (will be null if not panel line or not selected)
+                resolvedSpecificStationId // stationStart
             );
             // Success! Refresh data to show updated task status
             fetchStationData(); // Re-fetch all station data
-            setSelectingPanelForTask(null); // Close panel selector if open
-            setSelectedPanelId('');
         } catch (error) {
             console.error("Error starting task:", error);
             setTaskActionError({ taskId: taskDefinitionId, message: error.message || 'Error al iniciar la tarea.' });
@@ -197,7 +112,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
     };
 
-    const handlePauseTaskClick = async (taskDefinitionId, panelId = null) => {
+    const handlePauseTaskClick = async (taskDefinitionId) => {
         if (!moduleData || !moduleData.plan_id || !user || !user.id) {
             console.error("Missing data needed to pause task:", { moduleData, user });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para pausar la tarea." });
@@ -212,7 +127,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                 moduleData.plan_id,
                 taskDefinitionId,
                 user.id,
-                panelId,
                 'Worker initiated pause'
             );
             fetchStationData(); // Refresh data to show updated task status
@@ -224,7 +138,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
     };
 
-    const handleResumeTaskClick = async (taskDefinitionId, panelId = null) => {
+    const handleResumeTaskClick = async (taskDefinitionId) => {
         if (!moduleData || !moduleData.plan_id) {
             console.error("Missing data needed to resume task:", { moduleData });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para reanudar la tarea." });
@@ -237,8 +151,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         try {
             await resumeTask(
                 moduleData.plan_id,
-                taskDefinitionId,
-                panelId
+                taskDefinitionId
             );
             fetchStationData(); // Refresh data to show updated task status
         } catch (error) {
@@ -249,7 +162,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
     };
 
-    const handleCompleteTaskClick = async (taskDefinitionId, panelId = null) => {
+    const handleCompleteTaskClick = async (taskDefinitionId) => {
         if (!moduleData || !moduleData.plan_id || !resolvedSpecificStationId) {
             console.error("Missing data needed to complete task:", { moduleData, resolvedSpecificStationId });
             setTaskActionError({ taskId: taskDefinitionId, message: "Error: Faltan datos para completar la tarea." });
@@ -264,7 +177,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                 moduleData.plan_id,
                 taskDefinitionId,
                 resolvedSpecificStationId, // station_finish
-                panelId,
                 '' // notes - could be enhanced to ask user for notes
             );
             fetchStationData(); // Refresh data to show updated task status
@@ -296,24 +208,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             return "Esperando selección de estación específica...";
         }
 
-        // If userSelectedStationContext is set but no specific station resolved yet (e.g., just loaded page with ambiguous context)
-        if (userSelectedStationContext === PANEL_LINE_GENERAL_VALUE) {
-            return PANEL_LINE_GENERAL_LABEL;
-        }
-
-        // Handle assembly sequence numbers (7-12)
-        if (userSelectedStationContext && allStations && allStations.length > 0) {
-            const numericSequence = parseInt(userSelectedStationContext, 10);
-            if (!isNaN(numericSequence) && numericSequence >= 7 && numericSequence <= 12) {
-                // Find any station with this sequence order to get the general assembly name
-                const sampleStation = allStations.find(s => s.sequence_order === numericSequence);
-                if (sampleStation) {
-                    const assemblyNumber = numericSequence - 6;
-                    return `Estación de Ensamblaje ${assemblyNumber} (Secuencia ${numericSequence})`;
-                }
-            }
-        }
-        
         // Fallback if nothing matches
         return userSelectedStationContext ? `Contexto: ${userSelectedStationContext}` : "Estación No Configurada";
 
@@ -397,7 +291,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                             <h3>Tareas Pendientes/En Progreso</h3>
                             <ul style={{ listStyleType: 'none', padding: 0 }}>
                                 {tasks.map(task => {
-                                    const isSelectingPanel = selectingPanelForTask === task.task_definition_id;
                                     const isLoading = taskActionLoading === task.task_definition_id;
                                     const error = taskActionError?.taskId === task.task_definition_id ? taskActionError.message : null;
 
@@ -407,10 +300,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                 <h4>{task.task_name}</h4>
                                                 <p>{task.task_description}</p>
                                                 <p><strong>Estado:</strong> {task.task_status}</p>
-                                                {task.house_type_panel_id && <p><em>Panel ID: {task.house_type_panel_id}</em></p>}
                                             </div>
                                             <div style={taskActionsStyle}>
-                                                {task.task_status === 'Not Started' && !isSelectingPanel && (
+                                                {task.task_status === 'Not Started' && (
                                                     <button
                                                         onClick={() => handleStartTaskClick(task.task_definition_id)}
                                                         disabled={isLoading}
@@ -419,48 +311,17 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                         {isLoading ? 'Iniciando...' : 'Iniciar'}
                                                     </button>
                                                 )}
-                                                {isSelectingPanel && (
-                                                    <div style={panelSelectorContainerStyle}>
-                                                        <select
-                                                            value={selectedPanelId}
-                                                            onChange={(e) => setSelectedPanelId(e.target.value)}
-                                                            style={selectStyle}
-                                                            disabled={isLoading}
-                                                        >
-                                                            <option value="">-- Seleccione Panel --</option>
-                                                            {availablePanels.map(panel => (
-                                                                <option key={panel.panel_definition_id} value={panel.panel_definition_id}>
-                                                                    {panel.panel_code} ({panel.panel_group}{panel.multiwall_code ? ` / ${panel.multiwall_code}` : ''})
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <button
-                                                            onClick={() => handleConfirmPanelAndStart(task.task_definition_id)}
-                                                            disabled={isLoading || !selectedPanelId}
-                                                            style={{...buttonStyle, marginLeft: '10px'}}
-                                                        >
-                                                            {isLoading ? 'Iniciando...' : 'Confirmar Inicio'}
-                                                        </button>
-                                                        <button
-                                                            onClick={handleCancelPanelSelection}
-                                                            disabled={isLoading}
-                                                            style={{...buttonStyle, marginLeft: '5px', backgroundColor: '#6c757d'}} // Secondary color
-                                                        >
-                                                            Cancelar
-                                                        </button>
-                                                    </div>
-                                                )}
-                                                {task.task_status === 'In Progress' && !isSelectingPanel && (
+                                                {task.task_status === 'In Progress' && (
                                                     <>
                                                         <button
-                                                            onClick={() => handlePauseTaskClick(task.task_definition_id, task.house_type_panel_id)}
+                                                            onClick={() => handlePauseTaskClick(task.task_definition_id)}
                                                             disabled={isLoading}
                                                             style={{...buttonStyle, backgroundColor: '#ffc107', marginBottom: '5px'}}
                                                         >
                                                             {isLoading ? 'Pausando...' : 'Pausar'}
                                                         </button>
                                                         <button
-                                                            onClick={() => handleCompleteTaskClick(task.task_definition_id, task.house_type_panel_id)}
+                                                            onClick={() => handleCompleteTaskClick(task.task_definition_id)}
                                                             disabled={isLoading}
                                                             style={{...buttonStyle, backgroundColor: '#28a745'}}
                                                         >
@@ -468,9 +329,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                         </button>
                                                     </>
                                                 )}
-                                                {task.task_status === 'Paused' && !isSelectingPanel && (
+                                                {task.task_status === 'Paused' && (
                                                     <button
-                                                        onClick={() => handleResumeTaskClick(task.task_definition_id, task.house_type_panel_id)}
+                                                        onClick={() => handleResumeTaskClick(task.task_definition_id)}
                                                         disabled={isLoading}
                                                         style={{...buttonStyle, backgroundColor: '#17a2b8'}}
                                                     >
@@ -532,20 +393,6 @@ const taskActionsStyle = {
     flexDirection: 'column', // Stack actions vertically
     alignItems: 'flex-end', // Align actions to the right
     minWidth: '200px', // Ensure actions have some minimum width
-};
-
-const panelSelectorContainerStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    marginTop: '10px',
-    flexWrap: 'wrap', // Allow buttons to wrap below select
-};
-
-const selectStyle = {
-    padding: '8px',
-    marginRight: '10px', // Space between select and button
-    minWidth: '150px',
-    flexGrow: 1, // Allow select to grow
 };
 
 const buttonStyle = {
