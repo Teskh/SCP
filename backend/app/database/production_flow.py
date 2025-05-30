@@ -342,8 +342,12 @@ def _resume_panel_task_logic(db, panel_task_log_id: int, worker_id: int):
         # Update the latest TaskPauses entry for this panel_task_log_id
         cursor = db.execute(
             """UPDATE TaskPauses SET resumed_at = ?
-               WHERE panel_task_log_id = ? AND resumed_at IS NULL
-               ORDER BY paused_at DESC LIMIT 1""",
+               WHERE rowid = (
+                   SELECT rowid FROM TaskPauses
+                   WHERE panel_task_log_id = ? AND resumed_at IS NULL
+                   ORDER BY paused_at DESC
+                   LIMIT 1
+               )""",
             (now_utc, panel_task_log_id)
         )
         if cursor.rowcount == 0:
