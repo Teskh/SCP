@@ -670,6 +670,12 @@ def finish_panel_task(panel_task_log_id: int, worker_id: int, station_id: str, n
                     ppp_update_fields["current_station"] = None # Or some other indicator like 'MagazineGate' if needed
                     ppp_update_fields["status"] = 'Completed' # Panel production itself is done
                     logging.info(f"Panel {current_panel_definition_id} (plan {current_plan_id}) completed W line production.")
+                    # Update ModuleProductionPlan status to 'Magazine' when all panels for module are done
+                    db.execute(
+                        "UPDATE ModuleProductionPlan SET status = 'Magazine', updated_at = ? WHERE plan_id = ?",
+                        (now_utc_str, current_plan_id)
+                    )
+                    logging.info(f"ModuleProductionPlan {current_plan_id} status updated to 'Magazine' after completing all panels.")
 
                 set_clauses = ", ".join([f"{key} = ?" for key in ppp_update_fields.keys()])
                 params = list(ppp_update_fields.values()) + [current_plan_id, current_panel_definition_id]
