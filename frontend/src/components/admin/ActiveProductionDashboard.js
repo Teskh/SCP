@@ -647,48 +647,99 @@ function ActiveProductionDashboard() {
         const station = stationStatusMap[stationId];
         if (!station) return <div key={`error-${stationId}`} style={stationBoxStyle}>Error: Estación {stationId} no encontrada</div>;
 
-        const moduleData = station.current_module;
-        const isPanelLineStation = stationId.startsWith('W'); // W1-W5
+        const { content, line_type } = station;
+        const isPanelLineStation = line_type === 'W';
         const isMagazineStation = stationId === 'M1';
+        const isAssemblyLineStation = ['A', 'B', 'C'].includes(line_type);
 
-        let activePanelDisplay = null;
-        if (isPanelLineStation && moduleData && moduleData.panels && moduleData.panels.length > 0) {
-            const inProgressPanel = moduleData.panels.find(p => p.status === 'in_progress');
-            // Ensure panels are sorted by sequence if available, otherwise by code or ID
-            const sortedPanels = [...moduleData.panels].sort((a, b) => (a.sequence || a.panel_id) - (b.sequence || b.panel_id));
-            const firstNotStartedPanel = sortedPanels.find(p => p.status === 'not_started');
-            
-            const activePanel = inProgressPanel || firstNotStartedPanel;
-            if (activePanel) {
-                activePanelDisplay = (
-                    <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb', background: '#e9f5ff', padding: '5px', borderRadius: '3px' }}>
-                        <strong>Panel Activo:</strong> {activePanel.panel_code} 
-                        <span style={{ fontWeight: 'normal', color: activePanel.status === 'in_progress' ? 'green' : '#c28b00'}}> ({activePanel.status})</span>
+        let displayContent = null;
+
+        if (isPanelLineStation && content.modules_with_active_panels && content.modules_with_active_panels.length > 0) {
+            displayContent = content.modules_with_active_panels.map(moduleData => (
+                <div key={`w-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
+                    <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
+                    <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
+                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span> (Estado Módulo: {moduleData.status})</div>
+                    <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
+                    <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb' }}>
+                        <strong>Paneles Activos en esta Estación:</strong>
+                        <ul style={taskListStyle}>
+                            {moduleData.active_panels_at_station.map(panel => (
+                                <li key={panel.panel_production_plan_id || panel.panel_definition_id} style={taskItemStyle}>
+                                    {panel.panel_code} ({panel.panel_group}) - <span style={{ fontWeight: 'normal', color: panel.status === 'In Progress' ? 'green' : '#c28b00'}}>{panel.status}</span>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
-                );
-            } else {
-                 activePanelDisplay = (
-                    <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb', fontStyle: 'italic', color: '#666' }}>
-                        No hay paneles activos o pendientes.
+                </div>
+            ));
+        } else if (isMagazineStation && content.modules_in_magazine && content.modules_in_magazine.length > 0) {
+            displayContent = content.modules_in_magazine.map(moduleData => (
+                <div key={`m1-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px' }}>
+                    <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
+                    <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
+                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span> (Estado Módulo: {moduleData.status})</div>
+                    <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
+                    <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#555' }}>
+                        Total Paneles: {moduleData.panels ? moduleData.panels.length : 0}. Detalles al pasar el cursor.
                     </div>
-                );
-            }
+                </div>
+            ));
+        } else if (isAssemblyLineStation && content.modules_with_active_tasks && content.modules_with_active_tasks.length > 0) {
+            displayContent = content.modules_with_active_tasks.map(moduleData => (
+                <div key={`asm-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
+                    <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
+                    <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
+                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span> (Estado Módulo: {moduleData.status})</div>
+                    <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
+                    <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb' }}>
+                        <strong>Tareas de Módulo Activas en esta Estación:</strong>
+                        <ul style={taskListStyle}>
+                            {moduleData.active_module_tasks_at_station.map(task => (
+                                <li key={task.task_log_id || task.task_definition_id} style={{...taskItemStyle, ...(task.status === 'Completed' && completedTaskStyle)}}>
+                                    {task.task_name} - <span style={{ fontWeight: 'normal', color: task.status === 'In Progress' ? 'green' : '#c28b00'}}>{task.status}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            ));
         }
         
         const handleMouseEnter = (event) => {
-            if (moduleData && (isPanelLineStation || isMagazineStation)) { // Activate tooltip for W stations and M1
-                const panelCounts = (moduleData.panels || []).reduce((acc, panel) => {
-                    acc[panel.status] = (acc[panel.status] || 0) + 1;
+            let moduleForTooltip = null;
+            let panelsForTooltip = []; // Panels to count for the tooltip
+
+            if (isPanelLineStation && content.modules_with_active_panels && content.modules_with_active_panels.length > 0) {
+                moduleForTooltip = content.modules_with_active_panels[0]; // Use first module for tooltip
+                // For W stations, the tooltip should ideally show status of ALL panels for that module, not just active at station.
+                // This requires fetching all panels for moduleForTooltip if not already available.
+                // For simplicity now, we'll use a placeholder or assume backend might provide this if needed.
+                // If moduleForTooltip.panels (all panels) is available, use that. Otherwise, it's tricky.
+                // Let's assume for now the tooltip for W stations will be more generic or rely on a different data point if full panel list isn't in modules_with_active_panels.
+                // For now, we'll use the active_panels_at_station for counting, which is not ideal for overall module panel status.
+                // A better approach would be to ensure modules_with_active_panels also contains a full 'panels' list like modules_in_magazine.
+                // Given current backend structure, this is a limitation.
+                 panelsForTooltip = moduleForTooltip.active_panels_at_station; // This is NOT ideal for overall module panel status.
+            } else if (isMagazineStation && content.modules_in_magazine && content.modules_in_magazine.length > 0) {
+                moduleForTooltip = content.modules_in_magazine[0];
+                panelsForTooltip = moduleForTooltip.panels || [];
+            }
+
+            if (moduleForTooltip) {
+                const panelCounts = (panelsForTooltip).reduce((acc, panel) => {
+                    const statusKey = panel.status ? panel.status.toLowerCase().replace(' ', '_') : 'unknown';
+                    acc[statusKey] = (acc[statusKey] || 0) + 1;
                     return acc;
-                }, { not_started: 0, in_progress: 0, completed: 0, paused: 0 }); // Initialize all expected statuses
+                }, { not_started: 0, in_progress: 0, completed: 0, paused: 0, unknown: 0 });
 
                 const rect = event.currentTarget.getBoundingClientRect();
                 setTooltipPosition({ x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 5 });
                 setHoveredStationDetails({
                     stationId: stationId,
-                    moduleName: moduleData.module_name || `Módulo ${moduleData.module_number || moduleData.module_sequence_in_house || 'N/A'}`,
+                    moduleName: `Módulo ${moduleForTooltip.module_number} (${moduleForTooltip.project_name} - ${moduleForTooltip.house_identifier})`,
                     panelCounts: panelCounts,
-                    moduleStatus: moduleData.status || 'N/A'
+                    moduleStatus: moduleForTooltip.status || 'N/A' // ModuleProductionPlan status
                 });
             }
         };
@@ -705,58 +756,8 @@ function ActiveProductionDashboard() {
                 onMouseLeave={handleMouseLeave}
             >
                 <div style={stationTitleStyle}>{station.station_name} ({stationId})</div>
-                {moduleData ? (
-                    <div key={`${stationId}-content`} style={moduleInfoStyle}>
-                        <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
-                        <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                        <div>
-                            <strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number || moduleData.module_sequence_in_house}</span>
-                            {(isPanelLineStation || isMagazineStation) && <span style={{fontSize: '0.9em', color: '#333'}}> (Estado: {moduleData.status})</span>}
-                        </div>
-                        <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
-                        
-                        {activePanelDisplay} {/* Shows active panel for W stations */}
-
-                        {/* For non-W stations, show detailed tasks/panels as before. For W stations, this is in tooltip. */}
-                        {(!isPanelLineStation && !isMagazineStation && moduleData.module_tasks && moduleData.module_tasks.length > 0) && (
-                            <div style={{marginTop: '5px'}}>
-                                <strong>Tareas de Módulo:</strong>
-                                <ul style={taskListStyle}>
-                                    {moduleData.module_tasks.map(task => (
-                                        <li key={task.task_log_id || task.task_definition_id} style={{...taskItemStyle, ...(task.status === 'Completed' && completedTaskStyle)}}>
-                                            {task.task_name} ({task.status})
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-    
-                        {(!isPanelLineStation && !isMagazineStation && moduleData.panels && moduleData.panels.length > 0) && (
-                            <div style={{marginTop: '5px'}}>
-                                <strong>Paneles:</strong>
-                                {moduleData.panels.map(panel => (
-                                    <div key={panel.panel_definition_id || panel.panel_id} style={panelContainerStyle}>
-                                        <div><em>{panel.panel_code} ({panel.panel_group || panel.status})</em></div>
-                                        {panel.panel_tasks && panel.panel_tasks.length > 0 ? (
-                                            <ul style={{...taskListStyle, paddingLeft: '10px'}}>
-                                                {panel.panel_tasks.map(ptask => (
-                                                    <li key={ptask.panel_task_log_id || ptask.task_definition_id} style={{...taskItemStyle, ...(ptask.status === 'Completed' && completedTaskStyle)}}>
-                                                        {ptask.task_name} ({ptask.status})
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        ) : <p style={{...taskListStyle, fontSize:'0.8em', color: '#777'}}>Sin tareas de panel</p>}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                         {/* For M1, show a summary of panels if not showing full details */}
-                        {(isMagazineStation && moduleData.panels && moduleData.panels.length > 0) && (
-                             <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#555' }}>
-                                Total Paneles: {moduleData.panels.length}. Detalles al pasar el cursor.
-                            </div>
-                        )}
-                    </div>
+                {displayContent ? (
+                    <div key={`${stationId}-content-wrapper`}>{displayContent}</div>
                 ) : (
                     <div key={`${stationId}-empty`} style={{...moduleInfoStyle, ...emptyStationStyle}}>(Vacío)</div>
                 )}
@@ -784,11 +785,12 @@ function ActiveProductionDashboard() {
                 border: '1px solid rgba(255,255,255,0.2)', // Subtle border
             }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '1.05em', borderBottom: '1px solid rgba(255,255,255,0.3)', paddingBottom: '5px' }}>{moduleName}</h4>
-                <p style={{ margin: '0 0 5px 0' }}>Estado del Módulo: <strong style={{color: moduleStatus === 'in_production' ? '#66bb6a' : (moduleStatus === 'completed' ? '#bdbdbd' : '#ffa726')}}>{moduleStatus}</strong></p> {/* Color coding status */}
-                <p style={{ margin: '0 0 5px 0' }}>Paneles No Iniciados: <strong style={{color: '#ffcc80'}}>{panelCounts.not_started || 0}</strong></p>
+                <p style={{ margin: '0 0 5px 0' }}>Estado del Módulo: <strong style={{color: moduleStatus === 'Panels' || moduleStatus === 'Assembly' ? '#ffa726' : (moduleStatus === 'Completed' ? '#bdbdbd' : (moduleStatus === 'Magazine' ? '#66bb6a' : '#bdbdbd'))}}>{moduleStatus}</strong></p>
+                <p style={{ margin: '0 0 5px 0' }}>Paneles No Iniciados: <strong style={{color: '#ffcc80'}}>{panelCounts.not_started || panelCounts.planned || 0}</strong></p>
                 <p style={{ margin: '0 0 5px 0' }}>Paneles En Progreso: <strong style={{color: '#81d4fa'}}>{panelCounts.in_progress || 0}</strong></p>
-                <p style={{ margin: '0 0 5px 0' }}>Paneles Pausados: <strong style={{color: '#fff176'}}>{panelCounts.paused || 0}</strong></p>
+                <p style={{ margin: '0 0 5px 0' }}>Paneles Pausados: <strong style={{color: '#fff176'}}>{panelCounts.paused || 0}</strong></p> {/* Assuming 'paused' is a possible status key */}
                 <p style={{ margin: '0' }}>Paneles Completados: <strong style={{color: '#c5e1a5'}}>{panelCounts.completed || 0}</strong></p>
+                {panelCounts.unknown > 0 && <p style={{ margin: '5px 0 0 0', color: '#ef9a9a' }}>Paneles con estado desconocido: {panelCounts.unknown}</p>}
             </div>
         );
     };

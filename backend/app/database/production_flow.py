@@ -143,105 +143,159 @@ def _get_panels_with_status_for_plan(db, plan_id, house_type_id, module_number, 
 # === Station Status and Upcoming Modules ===
 
 def get_station_status_and_upcoming_modules():
-    """Fetches current module at each station and all upcoming planned/scheduled/magazine items from ModuleProductionPlan."""
+    """
+    Fetches the specific content for each station (modules with active panels/tasks)
+    and all upcoming planned/scheduled items from ModuleProductionPlan.
+    """
     db = get_db()
 
     # 1. Fetch all stations
     stations_cursor = db.execute("SELECT station_id, name as station_name, line_type, sequence_order FROM Stations ORDER BY sequence_order, line_type")
-    all_stations = [dict(row) for row in stations_cursor.fetchall()]
-
-    # 2. Fetch relevant ModuleProductionPlan items for current station occupancy
-    # For 'Panels' status (potentially multiple, but the first by sequence is considered 'current' for the W line display)
-    panels_modules_cursor = db.execute("""
-        SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
-               mpp.house_identifier, mpp.module_number, ht.number_of_modules,
-               mpp.status, mpp.sub_type_id, hst.name as sub_type_name
-        FROM ModuleProductionPlan mpp
-        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE mpp.status = 'Panels'
-        ORDER BY mpp.planned_sequence ASC
-    """)
-    panels_active_modules_rows = [dict(row) for row in panels_modules_cursor.fetchall()]
-
-    # For 'Magazine' status (for M1 station)
-    magazine_modules_cursor = db.execute("""
-        SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
-               mpp.house_identifier, mpp.module_number, ht.number_of_modules,
-               mpp.status, mpp.sub_type_id, hst.name as sub_type_name
-        FROM ModuleProductionPlan mpp
-        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE mpp.status = 'Magazine'
-        ORDER BY mpp.planned_sequence ASC
-    """)
-    magazine_active_modules_rows = [dict(row) for row in magazine_modules_cursor.fetchall()]
-
-    # For 'Assembly' status (for A, B, C lines)
-    assembly_modules_cursor = db.execute("""
-        SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
-               mpp.house_identifier, mpp.module_number, ht.number_of_modules,
-               mpp.status, mpp.planned_assembly_line, mpp.sub_type_id, hst.name as sub_type_name
-        FROM ModuleProductionPlan mpp
-        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
-        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-        WHERE mpp.status = 'Assembly'
-        ORDER BY mpp.planned_assembly_line, mpp.planned_sequence ASC
-    """)
-    assembly_active_modules_rows = [dict(row) for row in assembly_modules_cursor.fetchall()]
+    all_stations_info = [dict(row) for row in stations_cursor.fetchall()]
 
     station_status_list = []
 
-    for station in all_stations:
-        station_data = {
-            'station_id': station['station_id'],
-            'station_name': station['station_name'],
-            'line_type': station['line_type'],
-            'sequence_order': station['sequence_order'],
-            'current_module': None 
-        }
+    for station_info in all_stations_info:
+        station_id = station_info['station_id']
+        line_type = station_info['line_type']
         
-        active_mpp_item_dict = None
-
-        if station['line_type'] == 'W':
-            if panels_active_modules_rows: # Check if there are any modules in 'Panels' status
-                active_mpp_item_dict = panels_active_modules_rows[0] # Take the first one by sequence
-        elif station['line_type'] == 'M' and station['station_id'] == 'M1':
-            if magazine_active_modules_rows: # Show the first 'Magazine' module by sequence
-                active_mpp_item_dict = magazine_active_modules_rows[0] 
-        elif station['line_type'] in ['A', 'B', 'C']:
-            for mod_row in assembly_active_modules_rows:
-                if mod_row['planned_assembly_line'] == station['line_type']:
-                    active_mpp_item_dict = mod_row
-                    break 
-
-        if active_mpp_item_dict:
-            panels = _get_panels_with_status_for_plan(
-                db, 
-                active_mpp_item_dict['plan_id'], 
-                active_mpp_item_dict['house_type_id'],
-                active_mpp_item_dict['module_number'],
-                active_mpp_item_dict['sub_type_id']
-            )
-            
-            station_data['current_module'] = {
-                'plan_id': active_mpp_item_dict['plan_id'],
-                'project_name': active_mpp_item_dict['project_name'],
-                'house_identifier': active_mpp_item_dict['house_identifier'],
-                'module_number': active_mpp_item_dict['module_number'],
-                'module_sequence_in_house': active_mpp_item_dict['module_number'],
-                'status': active_mpp_item_dict['status'],
-                'house_type_name': active_mpp_item_dict['house_type_name'],
-                'house_type_id': active_mpp_item_dict['house_type_id'],
-                'number_of_modules': active_mpp_item_dict['number_of_modules'],
-                'sub_type_name': active_mpp_item_dict.get('sub_type_name'),
-                'sub_type_id': active_mpp_item_dict.get('sub_type_id'),
-                'panels': panels
+        station_data = {
+            'station_id': station_id,
+            'station_name': station_info['station_name'],
+            'line_type': line_type,
+            'sequence_order': station_info['sequence_order'],
+            'content': {
+                'modules_with_active_panels': [], # For W stations
+                'modules_in_magazine': [],        # For M1 station
+                'modules_with_active_tasks': []   # For A, B, C stations
             }
-        station_status_list.append(station_data)
-    
-    station_status = station_status_list
+        }
 
+        if line_type == 'W':
+            # Find modules that have panels currently active at this W station
+            w_station_panels_cursor = db.execute("""
+                SELECT
+                    mpp.plan_id, mpp.project_name, mpp.house_identifier, mpp.module_number,
+                    mpp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
+                    mpp.sub_type_id, hst.name as sub_type_name, mpp.status as module_status,
+                    pd.panel_definition_id, pd.panel_code, pd.panel_group,
+                    ppp.panel_production_plan_id, ppp.status as panel_status
+                FROM PanelProductionPlan ppp
+                JOIN ModuleProductionPlan mpp ON ppp.plan_id = mpp.plan_id
+                JOIN PanelDefinitions pd ON ppp.panel_definition_id = pd.panel_definition_id
+                JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+                LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+                WHERE ppp.current_station = ? AND ppp.status = 'In Progress'
+                ORDER BY mpp.planned_sequence, pd.panel_code
+            """, (station_id,))
+            
+            modules_at_w_station = {}
+            for row_data in w_station_panels_cursor.fetchall():
+                row = dict(row_data)
+                if row['plan_id'] not in modules_at_w_station:
+                    modules_at_w_station[row['plan_id']] = {
+                        'plan_id': row['plan_id'],
+                        'project_name': row['project_name'],
+                        'house_identifier': row['house_identifier'],
+                        'module_number': row['module_number'],
+                        'module_sequence_in_house': row['module_number'], # Assuming module_number is the sequence in house
+                        'status': row['module_status'], # This is the ModuleProductionPlan status
+                        'house_type_name': row['house_type_name'],
+                        'house_type_id': row['house_type_id'],
+                        'number_of_modules': row['number_of_modules'],
+                        'sub_type_name': row.get('sub_type_name'),
+                        'sub_type_id': row.get('sub_type_id'),
+                        'active_panels_at_station': []
+                    }
+                modules_at_w_station[row['plan_id']]['active_panels_at_station'].append({
+                    'panel_production_plan_id': row['panel_production_plan_id'],
+                    'panel_definition_id': row['panel_definition_id'],
+                    'panel_code': row['panel_code'],
+                    'panel_group': row['panel_group'],
+                    'status': row['panel_status'] # This is the PanelProductionPlan status
+                })
+            station_data['content']['modules_with_active_panels'] = list(modules_at_w_station.values())
+
+        elif station_id == 'M1': # Magazine station
+            magazine_modules_cursor = db.execute("""
+                SELECT mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
+                       mpp.house_identifier, mpp.module_number, ht.number_of_modules,
+                       mpp.status, mpp.sub_type_id, hst.name as sub_type_name
+                FROM ModuleProductionPlan mpp
+                JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+                LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+                WHERE mpp.status = 'Magazine'
+                ORDER BY mpp.planned_sequence ASC
+            """)
+            for mod_row_data in magazine_modules_cursor.fetchall():
+                mod_row = dict(mod_row_data)
+                panels = _get_panels_with_status_for_plan(
+                    db, mod_row['plan_id'], mod_row['house_type_id'],
+                    mod_row['module_number'], mod_row['sub_type_id']
+                )
+                station_data['content']['modules_in_magazine'].append({
+                    'plan_id': mod_row['plan_id'],
+                    'project_name': mod_row['project_name'],
+                    'house_identifier': mod_row['house_identifier'],
+                    'module_number': mod_row['module_number'],
+                    'module_sequence_in_house': mod_row['module_number'],
+                    'status': mod_row['status'],
+                    'house_type_name': mod_row['house_type_name'],
+                    'house_type_id': mod_row['house_type_id'],
+                    'number_of_modules': mod_row['number_of_modules'],
+                    'sub_type_name': mod_row.get('sub_type_name'),
+                    'sub_type_id': mod_row.get('sub_type_id'),
+                    'panels': panels # All panels for this module
+                })
+
+        elif line_type in ['A', 'B', 'C']: # Assembly lines
+            assembly_tasks_cursor = db.execute("""
+                SELECT
+                    mpp.plan_id, mpp.project_name, mpp.house_identifier, mpp.module_number,
+                    mpp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
+                    mpp.sub_type_id, hst.name as sub_type_name, mpp.status as module_status,
+                    td.task_definition_id, td.name as task_name, td.description as task_description,
+                    tl.task_log_id, tl.status as task_status, tl.started_at
+                FROM TaskLogs tl
+                JOIN ModuleProductionPlan mpp ON tl.plan_id = mpp.plan_id
+                JOIN TaskDefinitions td ON tl.task_definition_id = td.task_definition_id
+                JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+                LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+                WHERE tl.station_start = ? AND tl.status = 'In Progress' AND td.is_panel_task = 0
+                ORDER BY mpp.planned_sequence, td.name
+            """, (station_id,))
+
+            modules_at_assembly_station = {}
+            for row_data in assembly_tasks_cursor.fetchall():
+                row = dict(row_data)
+                if row['plan_id'] not in modules_at_assembly_station:
+                    modules_at_assembly_station[row['plan_id']] = {
+                        'plan_id': row['plan_id'],
+                        'project_name': row['project_name'],
+                        'house_identifier': row['house_identifier'],
+                        'module_number': row['module_number'],
+                        'module_sequence_in_house': row['module_number'],
+                        'status': row['module_status'],
+                        'house_type_name': row['house_type_name'],
+                        'house_type_id': row['house_type_id'],
+                        'number_of_modules': row['number_of_modules'],
+                        'sub_type_name': row.get('sub_type_name'),
+                        'sub_type_id': row.get('sub_type_id'),
+                        'active_module_tasks_at_station': []
+                    }
+                modules_at_assembly_station[row['plan_id']]['active_module_tasks_at_station'].append({
+                    'task_log_id': row['task_log_id'],
+                    'task_definition_id': row['task_definition_id'],
+                    'task_name': row['task_name'],
+                    'task_description': row['task_description'],
+                    'status': row['task_status'],
+                    'started_at': row['started_at']
+                })
+            station_data['content']['modules_with_active_tasks'] = list(modules_at_assembly_station.values())
+        
+        station_status_list.append(station_data)
+
+    # 3. Fetch upcoming items (remains the same)
     upcoming_query = """
         SELECT
             mpp.plan_id, mpp.project_name,
