@@ -314,7 +314,7 @@ def get_station_status_and_upcoming_modules():
     upcoming_items = [dict(row) for row in upcoming_cursor.fetchall()]
 
     result = {
-        'station_status': station_status,
+        'station_status': station_status_list,
         'upcoming_items': upcoming_items
     }
     logging.info(f"Returning station status and upcoming modules: {json.dumps(result, indent=2)}")
