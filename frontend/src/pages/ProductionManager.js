@@ -82,7 +82,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
 
             if (currentStation.station_id === 'W1') {
-                getInfoForNextModulePanels()
+                adminService.getInfoForNextModulePanels()
                     .then(data => {
                         // data might be { message: "..." } if no module is ready, or the full object
                         if (data && data.plan_id) {
@@ -97,7 +97,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     })
                     .finally(() => setIsLoadingPanelInfo(false));
             } else { // W2, W3, W4, W5
-                getCurrentStationPanels(resolvedSpecificStationId)
+                adminService.getCurrentStationPanels(resolvedSpecificStationId)
                     .then(data => {
                         setPanelProductionInfo({ type: 'currentStation', data });
                     })
@@ -128,7 +128,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
         setIsLoadingPanelTasks(true);
         setPanelTasksError('');
-        getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, workerSpecialtyId)
+        adminService.getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, workerSpecialtyId)
             .then(tasksData => {
                 // Sort tasks: 1. In Progress, 2. Paused, 3. Not Started,
                 // 4. Completed (not at current station), 5. Completed (at current station)
