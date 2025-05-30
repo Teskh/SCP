@@ -85,6 +85,61 @@ def get_module_for_panel_production():
     logging.info("No suitable module found for starting new panel production.")
     return None
 
+def _get_panels_with_status_for_plan(db, plan_id, house_type_id, module_number, module_sub_type_id):
+    """
+    Retrieves all defined panels for a given module and their current production status.
+    """
+    panels_with_status = []
+
+    # 1. Get all panel definitions for the module (considering sub_type)
+    # PanelDefinitions.module_sequence_number corresponds to ModuleProductionPlan.module_number
+    panel_defs_query = """
+        SELECT pd.panel_definition_id, pd.panel_code, pd.panel_group
+        FROM PanelDefinitions pd
+        WHERE pd.house_type_id = ? AND pd.module_sequence_number = ?
+    """
+    params = [house_type_id, module_number]
+
+    if module_sub_type_id is not None:
+        # Fetch panels specific to this sub_type OR common panels (sub_type_id IS NULL in PanelDefinitions)
+        panel_defs_query += " AND (pd.sub_type_id = ? OR pd.sub_type_id IS NULL)"
+        params.append(module_sub_type_id)
+    else:
+        # Fetch only common panels if the module itself has no sub_type
+        panel_defs_query += " AND pd.sub_type_id IS NULL"
+    
+    panel_defs_query += " ORDER BY pd.panel_group, pd.panel_code"
+
+    defined_panels_cursor = db.execute(panel_defs_query, tuple(params))
+    defined_panels = [dict(row) for row in defined_panels_cursor.fetchall()]
+
+    for panel_def in defined_panels:
+        panel_definition_id = panel_def['panel_definition_id']
+        
+        # 2. Get status from PanelProductionPlan
+        ppp_cursor = db.execute(
+            "SELECT status, panel_production_plan_id FROM PanelProductionPlan WHERE plan_id = ? AND panel_definition_id = ?",
+            (plan_id, panel_definition_id)
+        )
+        ppp_entry = ppp_cursor.fetchone()
+
+        status = 'Not Started' # Default if not in PanelProductionPlan
+        panel_production_plan_id = None
+        if ppp_entry:
+            status = ppp_entry['status']
+            panel_production_plan_id = ppp_entry['panel_production_plan_id']
+
+        panels_with_status.append({
+            'panel_definition_id': panel_definition_id,
+            'panel_id': panel_production_plan_id, # Frontend might use this as 'panel_id'
+            'panel_code': panel_def['panel_code'],
+            'panel_group': panel_def['panel_group'],
+            'status': status,
+            # 'sequence': panel_def.get('sequence_in_module') # Include if PanelDefinitions has such a column
+        })
+        
+    return panels_with_status
+
 # === Station Status and Upcoming Modules ===
 
 def get_station_status_and_upcoming_modules():
