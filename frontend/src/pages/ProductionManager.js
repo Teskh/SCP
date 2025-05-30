@@ -1,12 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import SpecificStationSelectorModal from '../components/station/SpecificStationSelectorModal'; // Import the modal
-import { 
-    // startTask, pauseTask, resumeTask, completeTask, // Task operations are currently disabled
-    getInfoForNextModulePanels, 
-    getCurrentStationPanels,
-    getTasksForPanel
-} from '../services/adminService';
+import * as adminService from '../services/adminService';
 
 const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext';
 const SELECTED_SPECIFIC_STATION_ID_KEY = 'selectedSpecificStationId'; // Key for localStorage, used by SpecificStationSelectorModal
