@@ -659,7 +659,7 @@ function ActiveProductionDashboard() {
                 <div key={`w-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
                     <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
                     <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span> (Estado Módulo: {moduleData.status})</div>
+                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span></div>
                     <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
                     <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb' }}>
                         <strong>Paneles Activos en esta Estación:</strong>
@@ -678,7 +678,7 @@ function ActiveProductionDashboard() {
                 <div key={`m1-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px' }}>
                     <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
                     <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span> (Estado Módulo: {moduleData.status})</div>
+                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span></div>
                     <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
                     <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#555' }}>
                         Total Paneles: {moduleData.panels ? moduleData.panels.length : 0}. Detalles al pasar el cursor.
@@ -690,7 +690,7 @@ function ActiveProductionDashboard() {
                 <div key={`asm-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
                     <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
                     <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span> (Estado Módulo: {moduleData.status})</div>
+                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span></div>
                     <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
                     <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb' }}>
                         <strong>Tareas de Módulo Activas en esta Estación:</strong>
