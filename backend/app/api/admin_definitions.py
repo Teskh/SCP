@@ -962,3 +962,141 @@ def get_panel_tasks_route(plan_id, panel_definition_id):
     except Exception as e:
         logger.error(f"Error getting tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}, station {station_id}, specialty {specialty_id}: {e}", exc_info=True)
         return jsonify(error="Failed to fetch tasks for the specified panel"), 500
+
+
+# === Panel Task Management Endpoints ===
+
+@admin_definitions_bp.route('/panel-tasks/start', methods=['POST'])
+def start_panel_task_route():
+    """Starts a new panel task or resumes a paused one."""
+    data = request.get_json()
+    required_fields = ['plan_id', 'panel_definition_id', 'task_definition_id', 'worker_id', 'station_id']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data or data[field] is None]
+        if missing:
+            return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    try:
+        plan_id = int(data['plan_id'])
+        panel_definition_id = int(data['panel_definition_id'])
+        task_definition_id = int(data['task_definition_id'])
+        worker_id = int(data['worker_id'])
+        station_id = str(data['station_id'])
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Invalid data types for start_panel_task: {e}. Data: {data}")
+        return jsonify(error="Invalid data type for one or more fields."), 400
+
+    try:
+        result = production_flow.start_panel_task(
+            plan_id, panel_definition_id, task_definition_id, worker_id, station_id
+        )
+        if result.get("error"):
+            status_code = 400
+            if "already In Progress" in result["error"] or "already Completed" in result["error"]:
+                status_code = 409 # Conflict
+            elif "not found" in result["error"].lower():
+                status_code = 404 # Not found
+            logger.warning(f"start_panel_task failed: {result['error']} for data: {data}")
+            return jsonify(error=result["error"]), status_code
+        
+        logger.info(f"Panel task started/resumed successfully: {result.get('panel_task_log')}")
+        return jsonify(result), 200 # 200 if updated, could be 201 if always new and we return location
+    except Exception as e:
+        logger.error(f"Exception in start_panel_task_route: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while starting the task."), 500
+
+
+@admin_definitions_bp.route('/panel-tasks/<int:panel_task_log_id>/pause', methods=['POST'])
+def pause_panel_task_route(panel_task_log_id):
+    """Pauses a panel task."""
+    data = request.get_json()
+    if not data or 'worker_id' not in data:
+        return jsonify(error="Missing required field 'worker_id'"), 400
+
+    try:
+        worker_id = int(data['worker_id'])
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid data type for 'worker_id'."), 400
+        
+    reason = data.get('reason', '') # Optional
+
+    try:
+        result = production_flow.pause_panel_task(panel_task_log_id, worker_id, reason)
+        if result.get("error"):
+            status_code = 400
+            if "not found" in result["error"].lower():
+                status_code = 404
+            elif "not 'In Progress'" in result["error"]:
+                status_code = 409 # Conflict - task not in a pausable state
+            logger.warning(f"pause_panel_task failed for log_id {panel_task_log_id}: {result['error']}")
+            return jsonify(error=result["error"]), status_code
+        
+        logger.info(f"Panel task {panel_task_log_id} paused successfully by worker {worker_id}.")
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Exception in pause_panel_task_route for log_id {panel_task_log_id}: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while pausing the task."), 500
+
+
+@admin_definitions_bp.route('/panel-tasks/<int:panel_task_log_id>/resume', methods=['POST'])
+def resume_panel_task_route(panel_task_log_id):
+    """Resumes a paused panel task."""
+    data = request.get_json()
+    if not data or 'worker_id' not in data:
+        return jsonify(error="Missing required field 'worker_id'"), 400
+
+    try:
+        worker_id = int(data['worker_id'])
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid data type for 'worker_id'."), 400
+
+    try:
+        result = production_flow.resume_panel_task(panel_task_log_id, worker_id)
+        if result.get("error"):
+            status_code = 400
+            if "not found" in result["error"].lower():
+                status_code = 404
+            elif "not 'Paused'" in result["error"]:
+                 status_code = 409 # Conflict - task not in a resumable state
+            logger.warning(f"resume_panel_task failed for log_id {panel_task_log_id}: {result['error']}")
+            return jsonify(error=result["error"]), status_code
+        
+        logger.info(f"Panel task {panel_task_log_id} resumed successfully by worker {worker_id}.")
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Exception in resume_panel_task_route for log_id {panel_task_log_id}: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while resuming the task."), 500
+
+
+@admin_definitions_bp.route('/panel-tasks/<int:panel_task_log_id>/finish', methods=['POST'])
+def finish_panel_task_route(panel_task_log_id):
+    """Marks a panel task as completed and handles potential panel progression."""
+    data = request.get_json()
+    required_fields = ['worker_id', 'station_id']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data or data[field] is None]
+        if missing:
+            return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    try:
+        worker_id = int(data['worker_id'])
+        station_id = str(data['station_id'])
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid data type for 'worker_id' or 'station_id'."), 400
+
+    notes = data.get('notes') # Optional
+
+    try:
+        result = production_flow.finish_panel_task(panel_task_log_id, worker_id, station_id, notes)
+        if result.get("error"):
+            status_code = 400
+            if "not found" in result["error"].lower():
+                status_code = 404
+            logger.warning(f"finish_panel_task failed for log_id {panel_task_log_id}: {result['error']}")
+            return jsonify(error=result["error"]), status_code
+        
+        logger.info(f"Panel task {panel_task_log_id} finished successfully by worker {worker_id} at station {station_id}.")
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Exception in finish_panel_task_route for log_id {panel_task_log_id}: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while finishing the task."), 500

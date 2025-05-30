@@ -43,6 +43,49 @@ export const addSpecialty = async (specialtyData) => {
     return handleResponse(response);
 };
 
+
+// === Panel Task Management ===
+
+export const startPanelTask = async (taskData) => {
+    // taskData: { plan_id, panel_definition_id, task_definition_id, worker_id, station_id }
+    const response = await fetch(`${API_BASE_URL}/panel-tasks/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData),
+    });
+    return handleResponse(response);
+};
+
+export const pausePanelTask = async (panelTaskLogId, taskData) => {
+    // taskData: { worker_id, reason }
+    const response = await fetch(`${API_BASE_URL}/panel-tasks/${panelTaskLogId}/pause`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData),
+    });
+    return handleResponse(response);
+};
+
+export const resumePanelTask = async (panelTaskLogId, taskData) => {
+    // taskData: { worker_id }
+    const response = await fetch(`${API_BASE_URL}/panel-tasks/${panelTaskLogId}/resume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData),
+    });
+    return handleResponse(response);
+};
+
+export const finishPanelTask = async (panelTaskLogId, taskData) => {
+    // taskData: { worker_id, station_id, notes }
+    const response = await fetch(`${API_BASE_URL}/panel-tasks/${panelTaskLogId}/finish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData),
+    });
+    return handleResponse(response);
+};
+
 export const updateSpecialty = async (id, specialtyData) => {
     const response = await fetch(`${API_BASE_URL}/specialties/${id}`, {
         method: 'PUT',

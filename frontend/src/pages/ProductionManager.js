@@ -27,6 +27,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     const [panelTasks, setPanelTasks] = useState([]);
     const [isLoadingPanelTasks, setIsLoadingPanelTasks] = useState(false);
     const [panelTasksError, setPanelTasksError] = useState('');
+    const [taskActionMessage, setTaskActionMessage] = useState({ type: '', content: '' }); // type: 'success' or 'error'
 
 
     // Effect to determine the station context and specific station ID
@@ -181,24 +182,162 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     // They are kept as placeholders but will likely need significant refactoring
     // if task operations are to be re-implemented with a different data flow.
 
-    const handleStartTaskClick = (taskDefinitionId) => {
-        console.warn("Start Task functionality is currently disabled due to backend changes.");
-        // Placeholder for future implementation
+    const clearTaskActionMessage = () => {
+        setTimeout(() => setTaskActionMessage({ type: '', content: '' }), 3000);
+    };
+    
+    const refreshTasks = () => {
+        if (selectedPanelIdentifier && resolvedSpecificStationId && user) {
+            // Use the imported adminService directly
+            adminService.getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, user.specialty_id)
+                .then(tasksData => {
+                     const getTaskSortScore = (task, currentStationId) => {
+                        if (task.status === 'In Progress') return 1;
+                        if (task.status === 'Paused') return 2;
+                        if (task.status === 'Not Started') return 3;
+                        if (task.status === 'Completed') {
+                            return task.station_finish === currentStationId ? 5 : 4;
+                        }
+                        return 6; 
+                    };
+                    const sortedTasks = tasksData.sort((a, b) => {
+                        const scoreA = getTaskSortScore(a, resolvedSpecificStationId);
+                        const scoreB = getTaskSortScore(b, resolvedSpecificStationId);
+                        if (scoreA !== scoreB) return scoreA - scoreB;
+                        return a.name.localeCompare(b.name);
+                    });
+                    setPanelTasks(sortedTasks);
+                })
+                .catch(err => {
+                    console.error("Error refreshing panel tasks:", err);
+                    setTaskActionMessage({ type: 'error', content: `Error actualizando tareas: ${err.message}` });
+                    clearTaskActionMessage();
+                });
+        }
     };
 
-    const handlePauseTaskClick = async (taskDefinitionId) => {
-        console.warn("Pause Task functionality is currently disabled due to backend changes.");
-        // Placeholder for future implementation
+    const handleStartTaskClick = async (task) => {
+        if (!user || !user.worker_id) {
+            setTaskActionMessage({ type: 'error', content: 'Usuario no identificado. No se puede iniciar la tarea.' });
+            clearTaskActionMessage();
+            return;
+        }
+        if (!selectedPanelIdentifier || !resolvedSpecificStationId) {
+            setTaskActionMessage({ type: 'error', content: 'Panel o estación no seleccionados. No se puede iniciar la tarea.' });
+            clearTaskActionMessage();
+            return;
+        }
+
+        setTaskActionMessage({ type: '', content: '' }); // Clear previous messages
+
+        try {
+            let response;
+            if (task.status === 'Not Started') {
+                response = await adminService.startPanelTask({
+                    plan_id: selectedPanelIdentifier.plan_id,
+                    panel_definition_id: selectedPanelIdentifier.panel_definition_id,
+                    task_definition_id: task.task_definition_id,
+                    worker_id: user.worker_id,
+                    station_id: resolvedSpecificStationId
+                });
+                setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" iniciada.` });
+            } else if (task.status === 'Paused') {
+                if (!task.panel_task_log_id) {
+                     setTaskActionMessage({ type: 'error', content: 'Error: Falta ID de registro de tarea para reanudar.' });
+                     clearTaskActionMessage();
+                     return;
+                }
+                response = await adminService.resumePanelTask(task.panel_task_log_id, { worker_id: user.worker_id });
+                setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" reanudada.` });
+            } else {
+                setTaskActionMessage({ type: 'error', content: `La tarea "${task.name}" no está en un estado válido para iniciar/reanudar.` });
+                clearTaskActionMessage();
+                return;
+            }
+            console.log("Start/Resume task response:", response);
+            refreshTasks();
+        } catch (error) {
+            console.error("Error starting/resuming task:", error);
+            setTaskActionMessage({ type: 'error', content: `Error iniciando/reanudando tarea "${task.name}": ${error.message}` });
+        }
+        clearTaskActionMessage();
     };
 
-    const handleResumeTaskClick = async (taskDefinitionId) => {
-        console.warn("Resume Task functionality is currently disabled due to backend changes.");
-        // Placeholder for future implementation
-    };
+    const handlePauseTaskClick = async (task) => {
+        if (!user || !user.worker_id) {
+            setTaskActionMessage({ type: 'error', content: 'Usuario no identificado.' });
+            clearTaskActionMessage();
+            return;
+        }
+        if (task.status !== 'In Progress' || !task.panel_task_log_id) {
+            setTaskActionMessage({ type: 'error', content: 'La tarea no está en progreso o falta ID de registro.' });
+            clearTaskActionMessage();
+            return;
+        }
+        
+        const reason = window.prompt("Motivo de la pausa (opcional):");
+        // If user clicks cancel, prompt returns null. If OK with empty, it's "".
+        if (reason === null) { // User cancelled
+            return;
+        }
 
-    const handleCompleteTaskClick = async (taskDefinitionId) => {
-        console.warn("Complete Task functionality is currently disabled due to backend changes.");
-        // Placeholder for future implementation
+        setTaskActionMessage({ type: '', content: '' });
+        try {
+            const response = await adminService.pausePanelTask(task.panel_task_log_id, { worker_id: user.worker_id, reason: reason || '' });
+            console.log("Pause task response:", response);
+            setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" pausada.` });
+            refreshTasks();
+        } catch (error) {
+            console.error("Error pausing task:", error);
+            setTaskActionMessage({ type: 'error', content: `Error pausando tarea "${task.name}": ${error.message}` });
+        }
+        clearTaskActionMessage();
+    };
+    
+    const handleCompleteTaskClick = async (task) => {
+        if (!user || !user.worker_id) {
+            setTaskActionMessage({ type: 'error', content: 'Usuario no identificado.' });
+            clearTaskActionMessage();
+            return;
+        }
+         if (task.status !== 'In Progress' || !task.panel_task_log_id) {
+            setTaskActionMessage({ type: 'error', content: 'La tarea no está en progreso o falta ID de registro.' });
+            clearTaskActionMessage();
+            return;
+        }
+        if (!resolvedSpecificStationId) {
+            setTaskActionMessage({ type: 'error', content: 'Estación no resuelta. No se puede completar la tarea.' });
+            clearTaskActionMessage();
+            return;
+        }
+
+        const notes = window.prompt("Notas para completar la tarea (opcional):");
+        if (notes === null) { // User cancelled
+            return;
+        }
+        
+        setTaskActionMessage({ type: '', content: '' });
+        try {
+            const response = await adminService.finishPanelTask(task.panel_task_log_id, {
+                worker_id: user.worker_id,
+                station_id: resolvedSpecificStationId,
+                notes: notes || ''
+            });
+            console.log("Complete task response:", response);
+            setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" completada.` });
+            refreshTasks();
+            // If response.panel_production_plan_update exists, may need to update panel list or selection
+            if (response && response.panel_production_plan_update) {
+                console.log("Panel production plan updated:", response.panel_production_plan_update);
+                // Potentially refresh the list of panels for the station if it's not W1
+                // Or clear selection if the panel moved from the current station
+                // For now, refreshTasks should handle tasks disappearing if they are no longer relevant
+            }
+        } catch (error) {
+            console.error("Error completing task:", error);
+            setTaskActionMessage({ type: 'error', content: `Error completando tarea "${task.name}": ${error.message}` });
+        }
+        clearTaskActionMessage();
     };
 
     // --- End Task Action Handlers ---
@@ -360,9 +499,33 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                     </div>
                                                     {/* Placeholder for task actions, currently disabled */}
                                                     <div style={taskActionsStyle}>
-                                                        <button style={{...buttonStyle, opacity: 0.5, marginBottom: '5px'}} disabled>Iniciar</button>
-                                                        <button style={{...buttonStyle, opacity: 0.5, marginBottom: '5px'}} disabled>Pausar</button>
-                                                        <button style={{...buttonStyle, opacity: 0.5}} disabled>Completar</button>
+                                                        {(task.status === 'Not Started' || task.status === 'Paused') && (
+                                                            <button 
+                                                                style={buttonStyle}
+                                                                onClick={() => handleStartTaskClick(task)}
+                                                            >
+                                                                {task.status === 'Not Started' ? 'Iniciar' : 'Reanudar'}
+                                                            </button>
+                                                        )}
+                                                        {task.status === 'In Progress' && (
+                                                            <>
+                                                                <button 
+                                                                    style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black', marginBottom: '5px'}}
+                                                                    onClick={() => handlePauseTaskClick(task)}
+                                                                >
+                                                                    Pausar
+                                                                </button>
+                                                                <button 
+                                                                    style={{...buttonStyle, backgroundColor: '#28a745'}}
+                                                                    onClick={() => handleCompleteTaskClick(task)}
+                                                                >
+                                                                    Completar
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {task.status === 'Completed' && (
+                                                            <span style={{color: 'green', fontSize: '0.9em'}}>Completada</span>
+                                                        )}
                                                     </div>
                                                 </li>
                                             ))}
@@ -371,14 +534,24 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                     {!isLoadingPanelTasks && !panelTasksError && panelTasks.length === 0 && (
                                         <p>No hay tareas definidas o encontradas para este panel.</p>
                                     )}
+                                    {taskActionMessage.content && (
+                                        <p style={taskActionMessage.type === 'error' ? errorStyle : successStyle}>
+                                            {taskActionMessage.content}
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>
                     )}
-                    {!selectedPanelIdentifier && <p style={{ marginTop: '20px', fontStyle: 'italic' }}>La funcionalidad de visualización de tareas individuales está actualmente deshabilitada hasta que se seleccione un panel.</p>}
+                    {/* Message when no panel is selected, kept as is */}
+                    {!selectedPanelIdentifier && resolvedSpecificStationId && panelProductionInfo && !isLoadingPanelInfo && (
+                         <p style={{ marginTop: '20px', fontStyle: 'italic' }}>
+                            Seleccione un panel de la lista de arriba para ver y gestionar sus tareas.
+                         </p>
+                    )}
                 </div>
             )}
-            {!resolvedSpecificStationId && !showSpecificStationModal && <p>Configurando estación...</p>}
+            {!resolvedSpecificStationId && !showSpecificStationModal && !isLoadingAllStations && <p>Estación no configurada o inválida. Por favor, configure una estación válida desde el selector de contexto.</p>}
             {showSpecificStationModal && (
                 <p>Por favor, seleccione su estación específica para continuar.</p>
             )}
@@ -452,7 +625,9 @@ const buttonStyle = {
     cursor: 'pointer',
     fontSize: '14px',
     opacity: 1,
-    transition: 'opacity 0.2s ease-in-out',
+    transition: 'opacity 0.2s ease-in-out, background-color 0.2s ease-in-out',
+    minWidth: '100px', 
+    textAlign: 'center',
 };
 
 // Add disabled style directly here for simplicity
@@ -467,9 +642,18 @@ const errorStyle = {
     color: 'red',
     fontSize: '0.9em',
     marginTop: '5px',
-    width: '100%', // Ensure error message takes full width in the actions container
+    width: '100%', 
     textAlign: 'right',
+    paddingTop: '5px',
 };
 
+const successStyle = {
+    color: 'green',
+    fontSize: '0.9em',
+    marginTop: '5px',
+    width: '100%',
+    textAlign: 'right',
+    paddingTop: '5px',
+};
 
 export default ProductionManager;

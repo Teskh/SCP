@@ -330,3 +330,372 @@ def get_tasks_for_panel_production_item(plan_id: int, panel_definition_id: int, 
     logging.info(f"Found {len(tasks)} tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}, station_id '{station_id}', specialty_id {specialty_id}: {json.dumps(tasks, indent=2)}")
     return tasks
 
+# === Panel Task Management ===
+
+def _resume_panel_task_logic(db, panel_task_log_id: int, worker_id: int):
+    """
+    Helper function to resume a paused panel task.
+    Updates TaskPauses and PanelTaskLog.
+    """
+    now_utc = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        # Update the latest TaskPauses entry for this panel_task_log_id
+        cursor = db.execute(
+            """UPDATE TaskPauses SET resumed_at = ?
+               WHERE panel_task_log_id = ? AND resumed_at IS NULL
+               ORDER BY paused_at DESC LIMIT 1""",
+            (now_utc, panel_task_log_id)
+        )
+        if cursor.rowcount == 0:
+            # This might happen if the task was not actually paused or if there's a data inconsistency.
+            logging.warning(f"Resume panel task: No open pause entry found for panel_task_log_id {panel_task_log_id}.")
+            # Depending on desired strictness, could raise an error here.
+
+        # Update PanelTaskLog status
+        db.execute(
+            "UPDATE PanelTaskLogs SET status = 'In Progress', worker_id = ? WHERE panel_task_log_id = ?",
+            (worker_id, panel_task_log_id)
+        )
+        db.commit()
+        logging.info(f"Panel task {panel_task_log_id} resumed by worker {worker_id}.")
+        return True
+    except sqlite3.Error as e:
+        db.rollback()
+        logging.error(f"Error in _resume_panel_task_logic for panel_task_log_id {panel_task_log_id}: {e}", exc_info=True)
+        raise
+
+
+def start_panel_task(plan_id: int, panel_definition_id: int, task_definition_id: int, worker_id: int, station_id: str):
+    """
+    Starts a new panel task or resumes a paused one.
+    Handles W1 station specific logic for PanelProductionPlan and ModuleProductionPlan.
+    """
+    db = get_db()
+    now_utc_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+    try:
+        # Check for existing PanelTaskLog for this specific task on this panel
+        existing_log_cursor = db.execute(
+            """SELECT panel_task_log_id, status FROM PanelTaskLogs
+               WHERE plan_id = ? AND panel_definition_id = ? AND task_definition_id = ?""",
+            (plan_id, panel_definition_id, task_definition_id)
+        )
+        existing_log_row = existing_log_cursor.fetchone()
+
+        panel_task_log_data = None
+
+        if existing_log_row:
+            existing_log = dict(existing_log_row)
+            log_id = existing_log['panel_task_log_id']
+            status = existing_log['status']
+
+            if status == 'Paused':
+                logging.info(f"Resuming panel task for log_id {log_id} by worker {worker_id} at station {station_id}.")
+                _resume_panel_task_logic(db, log_id, worker_id)
+                # Fetch the updated log to return
+                updated_log_cursor = db.execute("SELECT * FROM PanelTaskLogs WHERE panel_task_log_id = ?", (log_id,))
+                panel_task_log_data = dict(updated_log_cursor.fetchone())
+            elif status in ['In Progress', 'Completed']:
+                logging.warning(f"Panel task for plan_id {plan_id}, panel_def_id {panel_definition_id}, task_def_id {task_definition_id} is already '{status}'.")
+                return {"error": f"Task is already {status}."}
+            else: # Not Started or other states - treat as new start for this context
+                logging.info(f"Panel task log {log_id} found with status '{status}'. Updating to 'In Progress'.")
+                db.execute(
+                    """UPDATE PanelTaskLogs 
+                       SET status = 'In Progress', worker_id = ?, started_at = ?, station_start = ?
+                       WHERE panel_task_log_id = ?""",
+                    ('In Progress', worker_id, now_utc_str, station_id, log_id)
+                )
+                db.commit()
+                updated_log_cursor = db.execute("SELECT * FROM PanelTaskLogs WHERE panel_task_log_id = ?", (log_id,))
+                panel_task_log_data = dict(updated_log_cursor.fetchone())
+
+        else: # No existing log for this specific task on this panel, create a new one
+            logging.info(f"Creating new PanelTaskLog for plan_id {plan_id}, panel_def_id {panel_definition_id}, task_def_id {task_definition_id} by worker {worker_id} at station {station_id}.")
+            cursor = db.execute(
+                """INSERT INTO PanelTaskLogs 
+                   (plan_id, panel_definition_id, task_definition_id, worker_id, status, started_at, station_start)
+                   VALUES (?, ?, ?, ?, 'In Progress', ?, ?)""",
+                (plan_id, panel_definition_id, task_definition_id, worker_id, now_utc_str, station_id)
+            )
+            new_log_id = cursor.lastrowid
+            db.commit() # Commit early to get the ID and for W1 logic to see this task if needed
+            
+            created_log_cursor = db.execute("SELECT * FROM PanelTaskLogs WHERE panel_task_log_id = ?", (new_log_id,))
+            panel_task_log_data = dict(created_log_cursor.fetchone())
+
+        # W1 Logic
+        if station_id == 'W1':
+            # Ensure PanelProductionPlan entry exists and is 'In Progress'
+            ppp_cursor = db.execute(
+                "SELECT panel_production_plan_id, status FROM PanelProductionPlan WHERE plan_id = ? AND panel_definition_id = ?",
+                (plan_id, panel_definition_id)
+            )
+            ppp_row = ppp_cursor.fetchone()
+
+            if ppp_row:
+                ppp = dict(ppp_row)
+                if ppp['status'] != 'In Progress':
+                    db.execute(
+                        "UPDATE PanelProductionPlan SET status = 'In Progress', current_station = 'W1', updated_at = ? WHERE panel_production_plan_id = ?",
+                        (now_utc_str, ppp['panel_production_plan_id'])
+                    )
+                    logging.info(f"PPP entry {ppp['panel_production_plan_id']} for plan_id {plan_id}, panel_def_id {panel_definition_id} updated to 'In Progress' at W1.")
+            else:
+                db.execute(
+                    """INSERT INTO PanelProductionPlan (plan_id, panel_definition_id, status, current_station, created_at, updated_at)
+                       VALUES (?, ?, 'In Progress', 'W1', ?, ?)""",
+                    (plan_id, panel_definition_id, now_utc_str, now_utc_str)
+                )
+                logging.info(f"New PPP entry created for plan_id {plan_id}, panel_def_id {panel_definition_id}, status 'In Progress' at W1.")
+
+            # Ensure ModuleProductionPlan.status for plan_id is 'Panels'
+            mpp_cursor = db.execute("SELECT status FROM ModuleProductionPlan WHERE plan_id = ?", (plan_id,))
+            mpp_row = mpp_cursor.fetchone()
+            if mpp_row and mpp_row['status'] == 'Planned':
+                db.execute("UPDATE ModuleProductionPlan SET status = 'Panels', updated_at = ? WHERE plan_id = ?", (now_utc_str, plan_id))
+                logging.info(f"ModuleProductionPlan {plan_id} status updated from 'Planned' to 'Panels'.")
+            elif not mpp_row:
+                 logging.error(f"W1 Logic: ModuleProductionPlan item not found for plan_id {plan_id}")
+                 # This implies a data integrity issue if a panel task is started for a non-existent plan.
+                 # Depending on desired behavior, could raise an error or return a specific error message.
+                 db.rollback() # Rollback W1 changes if MPP doesn't exist
+                 return {"error": f"ModuleProductionPlan item not found for plan_id {plan_id} during W1 logic."}
+
+
+            db.commit() # Commit changes from W1 logic
+
+        if not panel_task_log_data: # Should have been set if new or resumed
+             # Refetch if it wasn't set, e.g. after resuming and not explicitly re-querying before W1 logic
+            log_id_to_fetch = existing_log_row['panel_task_log_id'] if existing_log_row else new_log_id
+            refetched_log_cursor = db.execute("SELECT * FROM PanelTaskLogs WHERE panel_task_log_id = ?", (log_id_to_fetch,))
+            panel_task_log_data = dict(refetched_log_cursor.fetchone())
+
+        logging.info(f"start_panel_task successful for plan_id {plan_id}, panel_def_id {panel_definition_id}, task_def_id {task_definition_id}. Log data: {panel_task_log_data}")
+        return {"success": True, "panel_task_log": panel_task_log_data}
+
+    except sqlite3.Error as e:
+        db.rollback()
+        logging.error(f"Database error in start_panel_task for plan_id {plan_id}, panel_def_id {panel_definition_id}, task_def_id {task_definition_id}: {e}", exc_info=True)
+        return {"error": f"Database error: {e}"}
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Unexpected error in start_panel_task for plan_id {plan_id}, panel_def_id {panel_definition_id}, task_def_id {task_definition_id}: {e}", exc_info=True)
+        return {"error": f"Unexpected error: {e}"}
+
+
+def pause_panel_task(panel_task_log_id: int, worker_id: int, reason: str):
+    """
+    Pauses a panel task.
+    Updates PanelTaskLog status and creates a TaskPauses entry.
+    """
+    db = get_db()
+    now_utc_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        # Check if the task is actually in a pausable state
+        log_cursor = db.execute("SELECT status FROM PanelTaskLogs WHERE panel_task_log_id = ?", (panel_task_log_id,))
+        log_row = log_cursor.fetchone()
+
+        if not log_row:
+            return {"error": f"PanelTaskLog with id {panel_task_log_id} not found."}
+        
+        current_status = log_row['status']
+        if current_status != 'In Progress':
+            return {"error": f"Task {panel_task_log_id} is not 'In Progress' (current status: {current_status}). Cannot pause."}
+
+        # Update PanelTaskLog status to 'Paused'
+        db.execute(
+            "UPDATE PanelTaskLogs SET status = 'Paused' WHERE panel_task_log_id = ?",
+            (panel_task_log_id,)
+        )
+
+        # Create TaskPauses entry
+        db.execute(
+            """INSERT INTO TaskPauses (panel_task_log_id, paused_by_worker_id, paused_at, reason)
+               VALUES (?, ?, ?, ?)""",
+            (panel_task_log_id, worker_id, now_utc_str, reason)
+        )
+        db.commit()
+        logging.info(f"Panel task {panel_task_log_id} paused by worker {worker_id}. Reason: {reason}")
+        return {"success": True, "message": f"Task {panel_task_log_id} paused successfully."}
+    except sqlite3.Error as e:
+        db.rollback()
+        logging.error(f"Database error in pause_panel_task for panel_task_log_id {panel_task_log_id}: {e}", exc_info=True)
+        return {"error": f"Database error: {e}"}
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Unexpected error in pause_panel_task for panel_task_log_id {panel_task_log_id}: {e}", exc_info=True)
+        return {"error": f"Unexpected error: {e}"}
+
+
+def resume_panel_task(panel_task_log_id: int, worker_id: int):
+    """
+    Resumes a paused panel task using the helper logic.
+    """
+    db = get_db()
+    try:
+        # Check if the task is actually paused
+        log_cursor = db.execute("SELECT status FROM PanelTaskLogs WHERE panel_task_log_id = ?", (panel_task_log_id,))
+        log_row = log_cursor.fetchone()
+
+        if not log_row:
+            return {"error": f"PanelTaskLog with id {panel_task_log_id} not found."}
+        
+        current_status = log_row['status']
+        if current_status != 'Paused':
+            return {"error": f"Task {panel_task_log_id} is not 'Paused' (current status: {current_status}). Cannot resume directly (should be handled by start_panel_task if starting)."}
+
+        if _resume_panel_task_logic(db, panel_task_log_id, worker_id):
+            return {"success": True, "message": f"Task {panel_task_log_id} resumed successfully."}
+        else:
+            # _resume_panel_task_logic raises errors, so this path might not be hit often
+            return {"error": "Failed to resume task for unspecified reason."} 
+            
+    except sqlite3.Error as e:
+        # db.rollback() is handled by _resume_panel_task_logic if it's the source
+        logging.error(f"Database error in resume_panel_task for panel_task_log_id {panel_task_log_id}: {e}", exc_info=True)
+        return {"error": f"Database error: {e}"}
+    except Exception as e:
+        # db.rollback() is handled by _resume_panel_task_logic if it's the source
+        logging.error(f"Unexpected error in resume_panel_task for panel_task_log_id {panel_task_log_id}: {e}", exc_info=True)
+        return {"error": f"Unexpected error: {e}"}
+
+
+def finish_panel_task(panel_task_log_id: int, worker_id: int, station_id: str, notes: str = None):
+    """
+    Marks a panel task as completed.
+    Checks if all tasks for the panel at the current station are done.
+    If so, and if it's a 'W' line station, advances the panel to the next 'W' station
+    or marks PanelProductionPlan as 'Completed'.
+    """
+    db = get_db()
+    now_utc_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    updated_ppp_details = None
+
+    try:
+        # Update PanelTaskLog to 'Completed'
+        cursor = db.execute(
+            """UPDATE PanelTaskLogs 
+               SET status = 'Completed', completed_at = ?, worker_id = ?, station_finish = ?, notes = ?
+               WHERE panel_task_log_id = ?""",
+            (now_utc_str, worker_id, station_id, notes, panel_task_log_id)
+        )
+        if cursor.rowcount == 0:
+            return {"error": f"PanelTaskLog with id {panel_task_log_id} not found or not updated."}
+
+        # Get plan_id and panel_definition_id from the completed task log
+        log_info_cursor = db.execute(
+            "SELECT plan_id, panel_definition_id FROM PanelTaskLogs WHERE panel_task_log_id = ?",
+            (panel_task_log_id,)
+        )
+        log_info = log_info_cursor.fetchone()
+        if not log_info:
+            # Should not happen if update above was successful
+            db.rollback()
+            return {"error": "Failed to retrieve log info after update."}
+        
+        current_plan_id = log_info['plan_id']
+        current_panel_definition_id = log_info['panel_definition_id']
+
+        # Check if all tasks for this panel at this station are completed
+        # 1. Get house_type_id from ModuleProductionPlan
+        mpp_cursor = db.execute("SELECT house_type_id FROM ModuleProductionPlan WHERE plan_id = ?", (current_plan_id,))
+        mpp_info = mpp_cursor.fetchone()
+        if not mpp_info:
+            db.rollback()
+            return {"error": f"ModuleProductionPlan not found for plan_id {current_plan_id}."}
+        house_type_id = mpp_info['house_type_id']
+
+        # 2. Get current station's sequence_order
+        current_station_info_cursor = db.execute("SELECT sequence_order, line_type FROM Stations WHERE station_id = ?", (station_id,))
+        current_station_info = current_station_info_cursor.fetchone()
+        if not current_station_info:
+            db.rollback()
+            return {"error": f"Station {station_id} not found."}
+        current_station_sequence = current_station_info['sequence_order']
+        current_station_line_type = current_station_info['line_type']
+
+        # 3. Get all relevant task definitions for this panel type at this station sequence
+        # Tasks can be generic (house_type_id IS NULL) or specific to the house_type_id.
+        # Tasks can be generic (station_sequence_order IS NULL - less common for station-based flow) or specific to the station_sequence_order.
+        required_tasks_cursor = db.execute(
+            """SELECT td.task_definition_id FROM TaskDefinitions td
+               WHERE (td.house_type_id = ? OR td.house_type_id IS NULL)
+                 AND td.is_panel_task = 1
+                 AND td.station_sequence_order = ?""",
+            (house_type_id, current_station_sequence)
+        )
+        required_task_defs = required_tasks_cursor.fetchall()
+        
+        if not required_task_defs:
+            logging.info(f"No specific panel tasks defined for house_type {house_type_id} at station sequence {current_station_sequence}. Proceeding as if all tasks are complete for this station.")
+            all_tasks_completed_at_station = True
+        else:
+            required_task_def_ids = [row['task_definition_id'] for row in required_task_defs]
+            placeholders = ','.join('?' for _ in required_task_def_ids)
+
+            # 4. Check status of these tasks in PanelTaskLogs
+            completed_tasks_cursor = db.execute(
+                f"""SELECT COUNT(DISTINCT task_definition_id) as completed_count FROM PanelTaskLogs
+                   WHERE plan_id = ? AND panel_definition_id = ?
+                     AND task_definition_id IN ({placeholders})
+                     AND status = 'Completed'""",
+                [current_plan_id, current_panel_definition_id] + required_task_def_ids
+            )
+            completed_count = completed_tasks_cursor.fetchone()['completed_count']
+            all_tasks_completed_at_station = (completed_count == len(required_task_def_ids))
+
+        if all_tasks_completed_at_station:
+            logging.info(f"All tasks for panel {current_panel_definition_id} (plan {current_plan_id}) at station {station_id} (seq {current_station_sequence}) are completed.")
+            
+            if current_station_line_type == 'W':
+                # Find next station in 'W' line
+                next_station_cursor = db.execute(
+                    """SELECT station_id FROM Stations
+                       WHERE line_type = 'W' AND sequence_order > ?
+                       ORDER BY sequence_order ASC LIMIT 1""",
+                    (current_station_sequence,)
+                )
+                next_w_station = next_station_cursor.fetchone()
+
+                ppp_update_fields = {"updated_at": now_utc_str}
+                if next_w_station:
+                    ppp_update_fields["current_station"] = next_w_station['station_id']
+                    logging.info(f"Panel {current_panel_definition_id} (plan {current_plan_id}) moved to next W station: {next_w_station['station_id']}.")
+                else: # No next 'W' station, it was W5 (or last W station in sequence)
+                    ppp_update_fields["current_station"] = None # Or some other indicator like 'MagazineGate' if needed
+                    ppp_update_fields["status"] = 'Completed' # Panel production itself is done
+                    logging.info(f"Panel {current_panel_definition_id} (plan {current_plan_id}) completed W line production.")
+
+                set_clauses = ", ".join([f"{key} = ?" for key in ppp_update_fields.keys()])
+                params = list(ppp_update_fields.values()) + [current_plan_id, current_panel_definition_id]
+                
+                db.execute(
+                    f"UPDATE PanelProductionPlan SET {set_clauses} WHERE plan_id = ? AND panel_definition_id = ?",
+                    params
+                )
+                
+                # Fetch updated PPP details to return
+                updated_ppp_cursor = db.execute(
+                    "SELECT * FROM PanelProductionPlan WHERE plan_id = ? AND panel_definition_id = ?",
+                    (current_plan_id, current_panel_definition_id)
+                )
+                updated_ppp_details = dict(updated_ppp_cursor.fetchone())
+
+        db.commit()
+        logging.info(f"Panel task {panel_task_log_id} finished by worker {worker_id} at station {station_id}. Notes: {notes}")
+        response = {"success": True, "message": f"Task {panel_task_log_id} completed."}
+        if updated_ppp_details:
+            response["panel_production_plan_update"] = updated_ppp_details
+        return response
+
+    except sqlite3.Error as e:
+        db.rollback()
+        logging.error(f"Database error in finish_panel_task for PTL_id {panel_task_log_id}: {e}", exc_info=True)
+        return {"error": f"Database error: {e}"}
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Unexpected error in finish_panel_task for PTL_id {panel_task_log_id}: {e}", exc_info=True)
+        return {"error": f"Unexpected error: {e}"}
+
+
