@@ -657,10 +657,12 @@ function ActiveProductionDashboard() {
         if (isPanelLineStation && content.modules_with_active_panels && content.modules_with_active_panels.length > 0) {
             displayContent = content.modules_with_active_panels.map(moduleData => (
                 <div key={`w-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
-                    <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
-                    <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span></div>
-                    <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
+                    <div>
+                        <span style={{ fontWeight: 'bold', color: '#333' }}>[{moduleData.project_name}]</span>
+                        {` #${moduleData.house_identifier} `}
+                        <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span>
+                        <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span>
+                    </div>
                     <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb' }}>
                         <strong>Paneles Activos en esta Estación:</strong>
                         <ul style={taskListStyle}>
@@ -676,10 +678,12 @@ function ActiveProductionDashboard() {
         } else if (isMagazineStation && content.modules_in_magazine && content.modules_in_magazine.length > 0) {
             displayContent = content.modules_in_magazine.map(moduleData => (
                 <div key={`m1-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px' }}>
-                    <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
-                    <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span></div>
-                    <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
+                    <div>
+                        <span style={{ fontWeight: 'bold', color: '#333' }}>[{moduleData.project_name}]</span>
+                        {` #${moduleData.house_identifier} `}
+                        <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span>
+                        <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span>
+                    </div>
                     <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#555' }}>
                         Total Paneles: {moduleData.panels ? moduleData.panels.length : 0}. Detalles al pasar el cursor.
                     </div>
@@ -688,10 +692,12 @@ function ActiveProductionDashboard() {
         } else if (isAssemblyLineStation && content.modules_with_active_tasks && content.modules_with_active_tasks.length > 0) {
             displayContent = content.modules_with_active_tasks.map(moduleData => (
                 <div key={`asm-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
-                    <div><strong>Proyecto:</strong> {moduleData.project_name}</div>
-                    <div><strong>ID Casa:</strong> {moduleData.house_identifier}</div>
-                    <div><strong>Módulo:</strong> <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span></div>
-                    <div><strong>Tipo:</strong> <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span></div>
+                    <div>
+                        <span style={{ fontWeight: 'bold', color: '#333' }}>[{moduleData.project_name}]</span>
+                        {` #${moduleData.house_identifier} `}
+                        <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span>
+                        <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span>
+                    </div>
                     <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb' }}>
                         <strong>Tareas de Módulo Activas en esta Estación:</strong>
                         <ul style={taskListStyle}>
