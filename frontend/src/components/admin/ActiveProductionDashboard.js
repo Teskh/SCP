@@ -658,7 +658,7 @@ function ActiveProductionDashboard() {
             displayContent = content.modules_with_active_panels.map(moduleData => (
                 <div key={`w-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
                     <div>
-                        <span style={{ fontWeight: 'bold', color: '#333' }}>[{moduleData.project_name}]</span>
+                        <span style={{ fontWeight: 'bold', color: '#333' }}>{moduleData.project_name}</span>
                         {` #${moduleData.house_identifier} `}
                         <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span>
                         <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span>
@@ -679,7 +679,7 @@ function ActiveProductionDashboard() {
             displayContent = content.modules_in_magazine.map(moduleData => (
                 <div key={`m1-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px' }}>
                     <div>
-                        <span style={{ fontWeight: 'bold', color: '#333' }}>[{moduleData.project_name}]</span>
+                        <span style={{ fontWeight: 'bold', color: '#333' }}>{moduleData.project_name}</span>
                         {` #${moduleData.house_identifier} `}
                         <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span>
                         <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span>
@@ -693,7 +693,7 @@ function ActiveProductionDashboard() {
             displayContent = content.modules_with_active_tasks.map(moduleData => (
                 <div key={`asm-mod-${moduleData.plan_id}`} style={{ ...moduleInfoStyle, marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
                     <div>
-                        <span style={{ fontWeight: 'bold', color: '#333' }}>[{moduleData.project_name}]</span>
+                        <span style={{ fontWeight: 'bold', color: '#333' }}>{moduleData.project_name}</span>
                         {` #${moduleData.house_identifier} `}
                         <span style={moduleBadgeStyle}>MD{moduleData.module_number}</span>
                         <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span>
