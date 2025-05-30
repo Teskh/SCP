@@ -4,7 +4,8 @@ import SpecificStationSelectorModal from '../components/station/SpecificStationS
 import { 
     // startTask, pauseTask, resumeTask, completeTask, // Task operations are currently disabled
     getInfoForNextModulePanels, 
-    getCurrentStationPanels 
+    getCurrentStationPanels,
+    getTasksForPanel
 } from '../services/adminService';
 
 const SELECTED_STATION_CONTEXT_KEY = 'selectedStationContext';
@@ -20,6 +21,12 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     const [panelProductionInfo, setPanelProductionInfo] = useState(null);
     const [isLoadingPanelInfo, setIsLoadingPanelInfo] = useState(false);
     const [panelInfoError, setPanelInfoError] = useState('');
+
+    // Selected Panel and its Tasks State
+    const [selectedPanelIdentifier, setSelectedPanelIdentifier] = useState(null); // { plan_id, panel_definition_id, panel_name, module_name }
+    const [panelTasks, setPanelTasks] = useState([]);
+    const [isLoadingPanelTasks, setIsLoadingPanelTasks] = useState(false);
+    const [panelTasksError, setPanelTasksError] = useState('');
 
 
     // Effect to determine the station context and specific station ID
@@ -63,6 +70,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         if (!resolvedSpecificStationId || !allStations || allStations.length === 0) {
             setPanelProductionInfo(null);
             setPanelInfoError('');
+            setSelectedPanelIdentifier(null); // Clear selected panel if station changes
+            setPanelTasks([]);
             return;
         }
 
@@ -72,6 +81,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             setIsLoadingPanelInfo(true);
             setPanelInfoError('');
             setPanelProductionInfo(null);
+            setSelectedPanelIdentifier(null); // Clear selected panel when station info reloads
+            setPanelTasks([]);
+
 
             if (currentStation.station_id === 'W1') {
                 getInfoForNextModulePanels()
@@ -102,9 +114,57 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         } else {
             setPanelProductionInfo(null); // Clear if not a W station or station not found
             setPanelInfoError('');
+            setSelectedPanelIdentifier(null);
+            setPanelTasks([]);
         }
     }, [resolvedSpecificStationId, allStations, user]);
 
+    // Effect to fetch tasks for the selected panel
+    useEffect(() => {
+        if (!selectedPanelIdentifier || !selectedPanelIdentifier.plan_id || !selectedPanelIdentifier.panel_definition_id) {
+            setPanelTasks([]);
+            setPanelTasksError('');
+            return;
+        }
+
+        setIsLoadingPanelTasks(true);
+        setPanelTasksError('');
+        getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id)
+            .then(tasksData => {
+                // Sort tasks: 1. In Progress, 2. Paused, 3. Not Started, 
+                // 4. Completed (not at current station), 5. Completed (at current station)
+                const getTaskSortScore = (task, currentStationId) => {
+                    if (task.status === 'In Progress') return 1;
+                    if (task.status === 'Paused') return 2;
+                    if (task.status === 'Not Started') return 3;
+                    if (task.status === 'Completed') {
+                        return task.station_finish === currentStationId ? 5 : 4;
+                    }
+                    return 6; // Should not happen
+                };
+
+                const sortedTasks = tasksData.sort((a, b) => {
+                    const scoreA = getTaskSortScore(a, resolvedSpecificStationId);
+                    const scoreB = getTaskSortScore(b, resolvedSpecificStationId);
+                    if (scoreA !== scoreB) {
+                        return scoreA - scoreB;
+                    }
+                    return a.name.localeCompare(b.name); // Secondary sort by name
+                });
+                setPanelTasks(sortedTasks);
+            })
+            .catch(err => {
+                console.error("Error fetching panel tasks:", err);
+                setPanelTasksError(`Error obteniendo tareas del panel: ${err.message}`);
+                setPanelTasks([]);
+            })
+            .finally(() => setIsLoadingPanelTasks(false));
+
+    }, [selectedPanelIdentifier, resolvedSpecificStationId]);
+
+    const handlePanelSelect = (panelData) => {
+        setSelectedPanelIdentifier(panelData);
+    };
 
     const handleSaveSpecificStation = (specificStationId) => {
         localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
@@ -222,45 +282,97 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     
                     {panelProductionInfo && !isLoadingPanelInfo && !panelInfoError && (
                         <div style={panelProductionSectionStyle}>
-                            <h3>Paneles en Producción</h3>
-                            {panelProductionInfo.type === 'nextModule' && panelProductionInfo.data && (
+                            <h3>Información de Paneles</h3>
+                            {!selectedPanelIdentifier ? (
                                 <>
-                                    <p><strong>Siguiente Módulo a Producir Paneles:</strong> {panelProductionInfo.data.module_name} (Plan ID: {panelProductionInfo.data.plan_id})</p>
-                                    {panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0 ? (
+                                    {/* Panel Selection for W1 */}
+                                    {panelProductionInfo.type === 'nextModule' && panelProductionInfo.data && (
+                                        <>
+                                            <p><strong>Módulo:</strong> {panelProductionInfo.data.module_name} (Plan ID: {panelProductionInfo.data.plan_id})</p>
+                                            {panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0 ? (
+                                                <>
+                                                    <p><strong>Seleccione un panel para ver sus tareas:</strong></p>
+                                                    <ul style={listStyle}>
+                                                        {panelProductionInfo.data.panels_to_produce.map(panel => (
+                                                            <li key={panel.panel_definition_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
+                                                                plan_id: panelProductionInfo.data.plan_id,
+                                                                panel_definition_id: panel.panel_definition_id,
+                                                                panel_name: `${panel.panel_code} (${panel.panel_group})`,
+                                                                module_name: panelProductionInfo.data.module_name
+                                                            })}>
+                                                                {panel.panel_code} ({panel.panel_group})
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </>
+                                            ) : (
+                                                <p>No hay paneles específicos listados para iniciar producción para este módulo.</p>
+                                            )}
+                                        </>
+                                    )}
+                                    {panelProductionInfo.type === 'nextModule' && !panelProductionInfo.data && panelProductionInfo.message && (
+                                        <p>{panelProductionInfo.message}</p>
+                                    )}
+
+                                    {/* Panel Selection for W2-W5 */}
+                                    {panelProductionInfo.type === 'currentStation' && panelProductionInfo.data && panelProductionInfo.data.length > 0 && (
+                                        <>
+                                            <p><strong>Paneles en esta Estación ({resolvedSpecificStationId}). Seleccione uno para ver sus tareas:</strong></p>
+                                            <ul style={listStyle}>
+                                                {panelProductionInfo.data.map(panel => (
+                                                    <li key={panel.panel_production_plan_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
+                                                        plan_id: panel.plan_id,
+                                                        panel_definition_id: panel.panel_definition_id,
+                                                        panel_name: panel.panel_name,
+                                                        module_name: panel.module_name
+                                                    })}>
+                                                        {panel.panel_name} (Módulo: {panel.module_name})
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </>
+                                    )}
+                                    {panelProductionInfo.type === 'currentStation' && (!panelProductionInfo.data || panelProductionInfo.data.length === 0) && (
+                                        <p>No hay paneles "En Progreso" actualmente en esta estación.</p>
+                                    )}
+                                </>
+                            ) : (
+                                // Display tasks for selectedPanelIdentifier
+                                <div style={{ marginTop: '20px' }}>
+                                    <button onClick={() => setSelectedPanelIdentifier(null)} style={{ ...buttonStyle, backgroundColor: '#6c757d', marginBottom: '10px' }}>Volver a selección de panel</button>
+                                    <h4>Tareas para Panel: {selectedPanelIdentifier.panel_name}</h4>
+                                    <p>(Módulo: {selectedPanelIdentifier.module_name}, Plan ID: {selectedPanelIdentifier.plan_id}, Panel Def ID: {selectedPanelIdentifier.panel_definition_id})</p>
+                                    {isLoadingPanelTasks && <p>Cargando tareas del panel...</p>}
+                                    {panelTasksError && <p style={{ color: 'red' }}>{panelTasksError}</p>}
+                                    {!isLoadingPanelTasks && !panelTasksError && panelTasks.length > 0 && (
                                         <ul style={listStyle}>
-                                            {panelProductionInfo.data.panels_to_produce.map(panel => (
-                                                <li key={panel.panel_definition_id} style={listItemStyle}>
-                                                    {panel.panel_code} ({panel.panel_group})
+                                            {panelTasks.map(task => (
+                                                <li key={task.task_definition_id} style={taskListItemStyle}>
+                                                    <div style={taskInfoStyle}>
+                                                        <strong>{task.name}</strong> (ID: {task.task_definition_id})<br />
+                                                        Estado: {task.status} <br/>
+                                                        {task.description && <small>Desc: {task.description}<br/></small>}
+                                                        {task.station_finish && <small>Finalizada en Estación: {task.station_finish}<br/></small>}
+                                                        {task.completed_at && <small>Completada: {new Date(task.completed_at).toLocaleString()}<br/></small>}
+                                                    </div>
+                                                    {/* Placeholder for task actions, currently disabled */}
+                                                    <div style={taskActionsStyle}>
+                                                        <button style={{...buttonStyle, opacity: 0.5, marginBottom: '5px'}} disabled>Iniciar</button>
+                                                        <button style={{...buttonStyle, opacity: 0.5, marginBottom: '5px'}} disabled>Pausar</button>
+                                                        <button style={{...buttonStyle, opacity: 0.5}} disabled>Completar</button>
+                                                    </div>
                                                 </li>
                                             ))}
                                         </ul>
-                                    ) : (
-                                        <p>No hay paneles específicos listados para iniciar producción para este módulo (o ya están todos en PanelProductionPlan).</p>
                                     )}
-                                </>
-                            )}
-                             {panelProductionInfo.type === 'nextModule' && !panelProductionInfo.data && panelProductionInfo.message && (
-                                <p>{panelProductionInfo.message}</p>
-                            )}
-
-                            {panelProductionInfo.type === 'currentStation' && panelProductionInfo.data && panelProductionInfo.data.length > 0 && (
-                                <>
-                                    <p><strong>Paneles Actualmente en esta Estación ({resolvedSpecificStationId}):</strong></p>
-                                    <ul style={listStyle}>
-                                        {panelProductionInfo.data.map(panel => (
-                                            <li key={panel.panel_production_plan_id} style={listItemStyle}>
-                                                {panel.panel_name} (Módulo: {panel.module_name}, Plan ID: {panel.plan_id})
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </>
-                            )}
-                            {panelProductionInfo.type === 'currentStation' && (!panelProductionInfo.data || panelProductionInfo.data.length === 0) && (
-                                <p>No hay paneles "En Progreso" actualmente en esta estación.</p>
+                                    {!isLoadingPanelTasks && !panelTasksError && panelTasks.length === 0 && (
+                                        <p>No hay tareas definidas o encontradas para este panel.</p>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}
-                     <p style={{ marginTop: '20px', fontStyle: 'italic' }}>La funcionalidad de visualización de tareas individuales está actualmente deshabilitada.</p>
+                    {!selectedPanelIdentifier && <p style={{ marginTop: '20px', fontStyle: 'italic' }}>La funcionalidad de visualización de tareas individuales está actualmente deshabilitada hasta que se seleccione un panel.</p>}
                 </div>
             )}
             {!resolvedSpecificStationId && !showSpecificStationModal && <p>Configurando estación...</p>}

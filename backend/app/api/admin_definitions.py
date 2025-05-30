@@ -938,3 +938,16 @@ def get_current_panels_at_station_route(station_id):
     except Exception as e:
         logger.error(f"Error getting current panels for station {station_id}: {e}", exc_info=True)
         return jsonify(error=f"Failed to fetch current panels for station {station_id}"), 500
+
+@admin_definitions_bp.route('/module-production-plan/<int:plan_id>/panel/<int:panel_definition_id>/tasks', methods=['GET'])
+def get_panel_tasks_route(plan_id, panel_definition_id):
+    """
+    Retrieves all panel tasks for a specific panel within a module production plan item,
+    including their current status.
+    """
+    try:
+        tasks = production_flow.get_tasks_for_panel_production_item(plan_id, panel_definition_id)
+        return jsonify(tasks)
+    except Exception as e:
+        logger.error(f"Error getting tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch tasks for the specified panel"), 500

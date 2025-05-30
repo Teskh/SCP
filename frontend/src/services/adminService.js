@@ -20,6 +20,12 @@ export const getSpecialties = async () => {
     return handleResponse(response);
 };
 
+
+export const getTasksForPanel = async (planId, panelDefinitionId) => {
+    const response = await fetch(`${API_BASE_URL}/module-production-plan/${planId}/panel/${panelDefinitionId}/tasks`);
+    return handleResponse(response);
+};
+
 export const addSpecialty = async (specialtyData) => {
     const response = await fetch(`${API_BASE_URL}/specialties`, {
         method: 'POST',

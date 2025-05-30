@@ -257,5 +257,51 @@ def get_current_station_panels(station_id):
     return panels_at_station
 
 
+def get_tasks_for_panel_production_item(plan_id: int, panel_definition_id: int):
+    """
+    Retrieves all relevant panel tasks for a specific panel_definition_id within a given plan_id,
+    along with their current status from PanelTaskLogs.
+    Tasks are filtered by the house_type_id of the module in the plan or generic tasks.
+    """
+    db = get_db()
+    
+    # Get house_type_id from ModuleProductionPlan for filtering tasks
+    module_info_cursor = db.execute("SELECT house_type_id FROM ModuleProductionPlan WHERE plan_id = ?", (plan_id,))
+    module_info = module_info_cursor.fetchone()
+    if not module_info:
+        logging.warning(f"get_tasks_for_panel_production_item: ModuleProductionPlan item not found for plan_id {plan_id}")
+        return [] # Or raise an error
 
+    # module_house_type_id = module_info['house_type_id'] # Not directly used in this version of the query structure
+
+    query = """
+        SELECT
+            td.task_definition_id,
+            td.name,
+            td.description,
+            td.station_sequence_order,
+            td.is_panel_task,
+            COALESCE(ptl.status, 'Not Started') as status,
+            ptl.started_at,
+            ptl.completed_at,
+            ptl.station_start,
+            ptl.station_finish,
+            ptl.panel_task_log_id,
+            ptl.notes
+        FROM ModuleProductionPlan mpp
+        JOIN TaskDefinitions td ON (td.house_type_id = mpp.house_type_id OR td.house_type_id IS NULL)
+        LEFT JOIN PanelTaskLogs ptl ON td.task_definition_id = ptl.task_definition_id
+            AND ptl.plan_id = mpp.plan_id
+            AND ptl.panel_definition_id = ? -- Input panel_definition_id for the specific panel instance
+        WHERE
+            mpp.plan_id = ? -- Input plan_id
+            AND td.is_panel_task = 1
+        ORDER BY td.name; -- Default sort, frontend will re-sort based on status
+    """
+    
+    tasks_cursor = db.execute(query, (panel_definition_id, plan_id))
+    tasks = [dict(row) for row in tasks_cursor.fetchall()]
+    
+    logging.info(f"Found {len(tasks)} tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}: {json.dumps(tasks, indent=2)}")
+    return tasks
 
