@@ -212,7 +212,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     };
 
     const handleStartTaskClick = async (task) => {
-        if (!user || !user.worker_id) {
+        if (!user || typeof user.id !== 'number') {
             setTaskActionMessage({ type: 'error', content: 'Usuario no identificado. No se puede iniciar la tarea.' });
             clearTaskActionMessage();
             return;
@@ -259,7 +259,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     };
 
     const handlePauseTaskClick = async (task) => {
-        if (!user || !user.worker_id) {
+        if (!user || typeof user.id !== 'number') {
             setTaskActionMessage({ type: 'error', content: 'Usuario no identificado.' });
             clearTaskActionMessage();
             return;
@@ -290,7 +290,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     };
     
     const handleCompleteTaskClick = async (task) => {
-        if (!user || !user.worker_id) {
+        if (!user || typeof user.id !== 'number') {
             setTaskActionMessage({ type: 'error', content: 'Usuario no identificado.' });
             clearTaskActionMessage();
             return;
