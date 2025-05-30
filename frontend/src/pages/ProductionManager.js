@@ -82,17 +82,30 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
 
             if (currentStation.station_id === 'W1') {
-                adminService.getInfoForNextModulePanels()
-                    .then(data => {
-                        // data might be { message: "..." } if no module is ready, or the full object
-                        if (data && data.plan_id) {
-                            setPanelProductionInfo({ type: 'nextModule', data });
+                setIsLoadingPanelInfo(true);
+                setPanelInfoError('');
+                setPanelProductionInfo(null);
+                setSelectedPanelIdentifier(null);
+                setPanelTasks([]);
+                Promise.all([
+                    adminService.getInfoForNextModulePanels(),
+                    adminService.getCurrentStationPanels('W1')
+                ])
+                    .then(([infoData, inProgressPanels]) => {
+                        const combinedData = { ...infoData, in_progress_panels: inProgressPanels };
+                        if (infoData && infoData.plan_id) {
+                            setPanelProductionInfo({ type: 'nextModule', data: combinedData });
                         } else {
-                            setPanelProductionInfo({ type: 'nextModule', data: null, message: data.message || "No hay módulos listos para iniciar producción de paneles." });
+                            setPanelProductionInfo({
+                                type: 'nextModule',
+                                data: null,
+                                message: infoData.message || "No hay módulos listos para iniciar producción de paneles.",
+                                in_progress_panels: inProgressPanels
+                            });
                         }
                     })
                     .catch(err => {
-                        console.error("Error fetching next module panel info:", err);
+                        console.error("Error fetching panel info for next module or in-progress panels:", err);
                         setPanelInfoError(`Error obteniendo información de paneles para el siguiente módulo: ${err.message}`);
                     })
                     .finally(() => setIsLoadingPanelInfo(false));
@@ -426,21 +439,43 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                     {panelProductionInfo.type === 'nextModule' && panelProductionInfo.data && (
                                         <>
                                             <p><strong>Módulo:</strong> {panelProductionInfo.data.module_name} (Plan ID: {panelProductionInfo.data.plan_id})</p>
-                                            {panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0 ? (
+                                            {(panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0) ||
+                                             (panelProductionInfo.data.in_progress_panels && panelProductionInfo.data.in_progress_panels.length > 0) ? (
                                                 <>
-                                                    <p><strong>Seleccione un panel para ver sus tareas:</strong></p>
-                                                    <ul style={listStyle}>
-                                                        {panelProductionInfo.data.panels_to_produce.map(panel => (
-                                                            <li key={panel.panel_definition_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
-                                                                plan_id: panelProductionInfo.data.plan_id,
-                                                                panel_definition_id: panel.panel_definition_id,
-                                                                panel_name: `${panel.panel_code} (${panel.panel_group})`,
-                                                                module_name: panelProductionInfo.data.module_name
-                                                            })}>
-                                                                {panel.panel_code} ({panel.panel_group})
-                                                            </li>
-                                                        ))}
-                                                    </ul>
+                                                    {panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0 && (
+                                                        <>
+                                                            <p><strong>Paneles nuevos para producción:</strong></p>
+                                                            <ul style={listStyle}>
+                                                                {panelProductionInfo.data.panels_to_produce.map(panel => (
+                                                                    <li key={panel.panel_definition_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
+                                                                        plan_id: panelProductionInfo.data.plan_id,
+                                                                        panel_definition_id: panel.panel_definition_id,
+                                                                        panel_name: `${panel.panel_code} (${panel.panel_group})`,
+                                                                        module_name: panel.module_name
+                                                                    })}>
+                                                                        {panel.panel_code} ({panel.panel_group})
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </>
+                                                    )}
+                                                    {panelProductionInfo.data.in_progress_panels && panelProductionInfo.data.in_progress_panels.length > 0 && (
+                                                        <>
+                                                            <p><strong>Paneles en progreso:</strong></p>
+                                                            <ul style={listStyle}>
+                                                                {panelProductionInfo.data.in_progress_panels.map(panel => (
+                                                                    <li key={panel.panel_production_plan_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
+                                                                        plan_id: panel.plan_id,
+                                                                        panel_definition_id: panel.panel_definition_id,
+                                                                        panel_name: panel.panel_name,
+                                                                        module_name: panel.module_name
+                                                                    })}>
+                                                                        {panel.panel_name} (Módulo: {panel.module_name})
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </>
+                                                    )}
                                                 </>
                                             ) : (
                                                 <p>No hay paneles específicos listados para iniciar producción para este módulo.</p>
