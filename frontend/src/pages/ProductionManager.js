@@ -232,7 +232,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     plan_id: selectedPanelIdentifier.plan_id,
                     panel_definition_id: selectedPanelIdentifier.panel_definition_id,
                     task_definition_id: task.task_definition_id,
-                    worker_id: user.worker_id,
+                    worker_id: user.id,
                     station_id: resolvedSpecificStationId
                 });
                 setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" iniciada.` });
@@ -242,7 +242,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                      clearTaskActionMessage();
                      return;
                 }
-                response = await adminService.resumePanelTask(task.panel_task_log_id, { worker_id: user.worker_id });
+                response = await adminService.resumePanelTask(task.panel_task_log_id, { worker_id: user.id });
                 setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" reanudada.` });
             } else {
                 setTaskActionMessage({ type: 'error', content: `La tarea "${task.name}" no está en un estado válido para iniciar/reanudar.` });
@@ -278,7 +278,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
         setTaskActionMessage({ type: '', content: '' });
         try {
-            const response = await adminService.pausePanelTask(task.panel_task_log_id, { worker_id: user.worker_id, reason: reason || '' });
+            const response = await adminService.pausePanelTask(task.panel_task_log_id, { worker_id: user.id, reason: reason || '' });
             console.log("Pause task response:", response);
             setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" pausada.` });
             refreshTasks();
@@ -314,7 +314,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         setTaskActionMessage({ type: '', content: '' });
         try {
             const response = await adminService.finishPanelTask(task.panel_task_log_id, {
-                worker_id: user.worker_id,
+                worker_id: user.id,
                 station_id: resolvedSpecificStationId,
                 notes: notes || ''
             });
