@@ -21,8 +21,16 @@ export const getSpecialties = async () => {
 };
 
 
-export const getTasksForPanel = async (planId, panelDefinitionId) => {
-    const response = await fetch(`${API_BASE_URL}/module-production-plan/${planId}/panel/${panelDefinitionId}/tasks`);
+export const getTasksForPanel = async (planId, panelDefinitionId, stationId, specialtyId) => {
+    const params = new URLSearchParams();
+    if (stationId) {
+        params.append('station_id', stationId);
+    }
+    // Append specialty_id if it's a valid number (including 0)
+    if (specialtyId !== null && specialtyId !== undefined && !isNaN(parseInt(specialtyId))) {
+        params.append('specialty_id', specialtyId);
+    }
+    const response = await fetch(`${API_BASE_URL}/module-production-plan/${planId}/panel/${panelDefinitionId}/tasks?${params.toString()}`);
     return handleResponse(response);
 };
 

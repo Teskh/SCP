@@ -127,11 +127,14 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             return;
         }
 
+        // Ensure user object and specialty_id are accessed safely for the API call
+        const workerSpecialtyId = user && user.specialty_id !== undefined ? user.specialty_id : null;
+
         setIsLoadingPanelTasks(true);
         setPanelTasksError('');
-        getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id)
+        getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, workerSpecialtyId)
             .then(tasksData => {
-                // Sort tasks: 1. In Progress, 2. Paused, 3. Not Started, 
+                // Sort tasks: 1. In Progress, 2. Paused, 3. Not Started,
                 // 4. Completed (not at current station), 5. Completed (at current station)
                 const getTaskSortScore = (task, currentStationId) => {
                     if (task.status === 'In Progress') return 1;
@@ -160,7 +163,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             })
             .finally(() => setIsLoadingPanelTasks(false));
 
-    }, [selectedPanelIdentifier, resolvedSpecificStationId]);
+    }, [selectedPanelIdentifier, resolvedSpecificStationId, user]);
 
     const handlePanelSelect = (panelData) => {
         setSelectedPanelIdentifier(panelData);

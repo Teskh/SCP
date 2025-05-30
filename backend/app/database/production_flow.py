@@ -257,29 +257,29 @@ def get_current_station_panels(station_id):
     return panels_at_station
 
 
-def get_tasks_for_panel_production_item(plan_id: int, panel_definition_id: int):
+def get_tasks_for_panel_production_item(plan_id: int, panel_definition_id: int, station_id: str = None, specialty_id: int = None):
     """
-    Retrieves all relevant panel tasks for a specific panel_definition_id within a given plan_id,
-    along with their current status from PanelTaskLogs.
-    Tasks are filtered by the house_type_id of the module in the plan or generic tasks.
+    Retrieves relevant panel tasks for a specific panel_definition_id within a given plan_id,
+    filtered by station and worker's specialty, along with their status from PanelTaskLogs.
     """
     db = get_db()
-    
-    # Get house_type_id from ModuleProductionPlan for filtering tasks
+
+    # Validate plan_id
     module_info_cursor = db.execute("SELECT house_type_id FROM ModuleProductionPlan WHERE plan_id = ?", (plan_id,))
     module_info = module_info_cursor.fetchone()
     if not module_info:
         logging.warning(f"get_tasks_for_panel_production_item: ModuleProductionPlan item not found for plan_id {plan_id}")
-        return [] # Or raise an error
+        return []
 
-    # module_house_type_id = module_info['house_type_id'] # Not directly used in this version of the query structure
+    query_params = []
 
-    query = """
+    base_query_select_from = """
         SELECT
             td.task_definition_id,
             td.name,
             td.description,
             td.station_sequence_order,
+            td.specialty_id AS task_specialty_id,
             td.is_panel_task,
             COALESCE(ptl.status, 'Not Started') as status,
             ptl.started_at,
@@ -292,16 +292,41 @@ def get_tasks_for_panel_production_item(plan_id: int, panel_definition_id: int):
         JOIN TaskDefinitions td ON (td.house_type_id = mpp.house_type_id OR td.house_type_id IS NULL)
         LEFT JOIN PanelTaskLogs ptl ON td.task_definition_id = ptl.task_definition_id
             AND ptl.plan_id = mpp.plan_id
-            AND ptl.panel_definition_id = ? -- Input panel_definition_id for the specific panel instance
-        WHERE
-            mpp.plan_id = ? -- Input plan_id
-            AND td.is_panel_task = 1
-        ORDER BY td.name; -- Default sort, frontend will re-sort based on status
+            AND ptl.panel_definition_id = ?
     """
+    query_params.append(panel_definition_id)
+
+    where_clauses = ["mpp.plan_id = ?", "td.is_panel_task = 1"]
+    query_params.append(plan_id)
+
+    # Station filtering
+    if station_id:
+        station_info_cursor = db.execute("SELECT sequence_order FROM Stations WHERE station_id = ?", (station_id,))
+        station_info = station_info_cursor.fetchone()
+        if station_info:
+            station_sequence_order_val = station_info['sequence_order']
+            where_clauses.append("(td.station_sequence_order = ? OR td.station_sequence_order IS NULL)")
+            query_params.append(station_sequence_order_val)
+        else:
+            logging.warning(f"get_tasks_for_panel_production_item: Station '{station_id}' not found. Returning no tasks.")
+            return [] 
+    else:
+        # No station_id provided, only match tasks not specific to any station sequence
+        where_clauses.append("td.station_sequence_order IS NULL")
+
+    # Specialty filtering
+    if specialty_id is not None:
+        where_clauses.append("(td.specialty_id = ? OR td.specialty_id IS NULL)")
+        query_params.append(specialty_id)
+    else:
+        # No specialty_id provided, only match tasks not specific to any specialty
+        where_clauses.append("td.specialty_id IS NULL")
+
+    full_query = base_query_select_from + " WHERE " + " AND ".join(where_clauses) + " ORDER BY td.name;"
     
-    tasks_cursor = db.execute(query, (panel_definition_id, plan_id))
+    tasks_cursor = db.execute(full_query, tuple(query_params))
     tasks = [dict(row) for row in tasks_cursor.fetchall()]
     
-    logging.info(f"Found {len(tasks)} tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}: {json.dumps(tasks, indent=2)}")
+    logging.info(f"Found {len(tasks)} tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}, station_id '{station_id}', specialty_id {specialty_id}: {json.dumps(tasks, indent=2)}")
     return tasks
 

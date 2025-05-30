@@ -943,11 +943,22 @@ def get_current_panels_at_station_route(station_id):
 def get_panel_tasks_route(plan_id, panel_definition_id):
     """
     Retrieves all panel tasks for a specific panel within a module production plan item,
-    including their current status.
+    including their current status, filtered by station and specialty.
     """
+    station_id = request.args.get('station_id')
+    specialty_id_str = request.args.get('specialty_id')
+    
+    specialty_id = None
+    if specialty_id_str is not None:
+        try:
+            specialty_id = int(specialty_id_str)
+        except ValueError:
+            logger.warning(f"Invalid specialty_id format: {specialty_id_str}. Proceeding without specialty filter.")
+            # Or return 400 error: return jsonify(error="Invalid specialty_id format"), 400
+
     try:
-        tasks = production_flow.get_tasks_for_panel_production_item(plan_id, panel_definition_id)
+        tasks = production_flow.get_tasks_for_panel_production_item(plan_id, panel_definition_id, station_id, specialty_id)
         return jsonify(tasks)
     except Exception as e:
-        logger.error(f"Error getting tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}: {e}", exc_info=True)
+        logger.error(f"Error getting tasks for plan_id {plan_id}, panel_definition_id {panel_definition_id}, station {station_id}, specialty {specialty_id}: {e}", exc_info=True)
         return jsonify(error="Failed to fetch tasks for the specified panel"), 500
