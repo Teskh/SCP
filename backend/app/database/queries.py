@@ -771,7 +771,6 @@ def get_all_stations():
     return [dict(row) for row in cursor.fetchall()]
 
 
-
 # === House Types ===
 
 def get_all_house_types():
