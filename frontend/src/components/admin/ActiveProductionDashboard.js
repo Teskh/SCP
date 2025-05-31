@@ -165,7 +165,7 @@ const generateDeterministicColor = (projectName) => {
     return `hsl(${hue}, 70%, 40%)`;
 };
 
-function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick, onDeleteItem }) {
+function SortableItem({ id, item, index, isSelected, onClick, onChangeLine, showProjectSeparator, projectColor, disabled, formatPlannedDate, onHouseTypeBadgeClick, onDateTimeBadgeClick, onDeleteItem }) {
     const { attributes, listeners: dndListeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
     const { onPointerDown: dndOnPointerDown, ...listeners } = dndListeners;
     const [isDeleteHovered, setIsDeleteHovered] = useState(false);
@@ -202,7 +202,7 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: upcomingItemStyle.marginBottom }}>
             <div ref={setNodeRef} style={draggableElementStyle} {...attributes} {...listeners}
                 onPointerDown={(e) => { if (e.nativeEvent.shiftKey && e.nativeEvent.button === 0) { onClick(e, id); } if (dndOnPointerDown) { dndOnPointerDown(e); } }}>
-                <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{item.planned_sequence}:</span>
+                <span style={{ fontWeight: 'bold', marginRight: '10px', color: '#666' }}>#{index + 1}:</span>
                 <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <span style={{ color: projectColor, fontWeight: 'bold' }}>[{item.project_name}]</span>
                     {` ${item.house_identifier} `}
@@ -878,7 +878,7 @@ function ActiveProductionDashboard() {
                                     const showProjectSeparator = !prevItem || prevItem.project_name !== item.project_name; // Use project_name
                                     return (
                                         <SortableItem
-                                            key={item.plan_id} id={item.plan_id} item={item}
+                                            key={item.plan_id} id={item.plan_id} item={item} index={index}
                                             isSelected={selectedItemIds.has(item.plan_id)} onClick={handleItemClick}
                                             onChangeLine={handleChangeAssemblyLine} showProjectSeparator={showProjectSeparator}
                                             projectColor={projectColorMap.get(item.project_name) || '#000000'} // Use project_name
