@@ -117,7 +117,16 @@ const selectedListItemStyle = { backgroundColor: '#d6eaff', borderLeft: '3px sol
 const draggingListItemStyle = { backgroundColor: '#e6f7ff', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', opacity: 0.9, cursor: 'grabbing', zIndex: 100 };
 const moduleBadgeStyle = { display: 'inline-block', padding: '2px 5px', borderRadius: '3px', backgroundColor: '#6c757d', color: 'white', fontSize: '0.8em', fontWeight: 'bold', marginRight: '5px', verticalAlign: 'middle' };
 const houseTypeBadgeStyle = { display: 'inline-block', padding: '2px 5px', borderRadius: '3px', backgroundColor: '#007bff', color: 'white', fontSize: '0.8em', fontWeight: 'bold', marginRight: '5px', verticalAlign: 'middle' };
+const statusBadgeStyleBase = { display: 'inline-block', padding: '2px 6px', borderRadius: '3px', color: 'black', fontSize: '0.8em', fontWeight: 'bold', marginRight: '5px', verticalAlign: 'middle', border: '1px solid #ccc' };
 
+const statusDisplayConfig = {
+    Planned: { text: 'Planificado', color: '#eeeeee' }, // Light Grey
+    Panels: { text: 'Paneles', color: '#bbdefb' },    // Light Blue
+    Magazine: { text: 'Magazine', color: '#c8e6c9' }, // Light Green
+    Assembly: { text: 'Terminaciones', color: '#ffcc80' }, // Light Orange
+    // Add other statuses if they can appear in upcomingItems
+    default: { text: 'Desconocido', color: '#f5f5f5'} // Default fallback
+};
 
 const LineIndicator = ({ line, isActive, isClickable, onClick }) => {
     const baseStyle = { display: 'inline-block', padding: '3px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.8em', minWidth: '20px', textAlign: 'center', margin: '0 2px', border: '1px solid transparent' };
@@ -201,6 +210,12 @@ function SortableItem({ id, item, isSelected, onClick, onChangeLine, showProject
                     <span style={houseTypeBadgeStyle} data-house-type-badge="true" onPointerDown={e => e.stopPropagation()} onClick={e => onHouseTypeBadgeClick(item.house_type_id, item.house_type_name, item.plan_id, item.sub_type_id)}>
                         [{item.house_type_name}]
                         {item.sub_type_name && ` [${item.sub_type_name}]`} {/* Changed from tipologia_name */}
+                    </span>
+                    <span style={{
+                        ...statusBadgeStyleBase,
+                        backgroundColor: (statusDisplayConfig[item.status] || statusDisplayConfig.default).color
+                        }}>
+                        {(statusDisplayConfig[item.status] || statusDisplayConfig.default).text}
                     </span>
                     <span style={{ cursor: 'pointer', textDecoration: 'underline', marginLeft: '5px' }} data-datetime-badge="true" onPointerDown={e => e.stopPropagation()} onClick={e => onDateTimeBadgeClick(item.plan_id, item.planned_start_datetime)}>
                         {formatPlannedDate(item.planned_start_datetime)}
