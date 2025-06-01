@@ -16,20 +16,6 @@ import ActiveProductionDashboard from './components/admin/ActiveProductionDashbo
 import StationManager from './components/admin/StationManager'; // Import StationManager
 // Import other pages/components as needed
 
-// Basic Nav styling
-const navStyle = {
-    padding: '10px',
-    background: '#f0f0f0',
-    marginBottom: '20px',
-    borderBottom: '1px solid #ccc'
-};
-
-const linkStyle = {
-    margin: '0 10px',
-    textDecoration: 'none',
-    color: '#333'
-};
-
 // Key for localStorage, same as in StationContextSelector.js
 const STATION_CONTEXT_STORAGE_KEY = 'currentStationSequenceOrder';
 
@@ -110,19 +96,22 @@ function App() {
     // For now, the requirement is visibility.
     return (
         <div className="App">
-            <nav style={navStyle}>
-                <Link to="/" style={linkStyle}>Inicio</Link>
-                <Link to="/admin" style={linkStyle}>Panel de Administración</Link>
+            <nav className="app-nav">
+                <div className="app-nav-links">
+                    <Link to="/">Inicio</Link>
+                    <Link to="/admin">Panel de Administración</Link>
+                </div>
                 {currentUser && (
-                    <button onClick={handleLogout} style={{ ...linkStyle, background: 'none', border: 'none', cursor: 'pointer', color: '#333' }}>
+                    <button onClick={handleLogout} className="app-nav-logout-button">
                         Cerrar Sesión
                     </button>
                 )}
             </nav>
 
-            <Routes>
-                <Route
-                    path="/"
+            <main className="app-content"> {/* Added main wrapper for content */}
+                <Routes>
+                    <Route
+                        path="/"
                     element={
                         currentUser ? (
                             <Navigate to="/station" replace />
@@ -173,7 +162,8 @@ function App() {
                         <Link to="/">Ir a Inicio</Link>
                     </div>
                 } />
-            </Routes>
+                </Routes>
+            </main>
         </div>
     );
 }

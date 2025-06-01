@@ -1,0 +1,101 @@
+/* AdminDashboard.css */
+
+.admin-dashboard {
+    display: flex;
+    height: 100%; /* Fill the parent .app-content */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    background-color: #fff; /* White background for the admin area itself */
+    border-radius: 8px; /* Slightly rounded corners for the container */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05); /* A bit more shadow for elevation */
+    overflow: hidden; /* To contain the rounded corners and children */
+}
+
+.admin-nav {
+    width: 240px; /* Slightly wider nav */
+    background-color: var(--light-color); /* Use variable for consistency */
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.admin-nav-header {
+    font-size: 1.4rem;
+    color: var(--dark-color);
+    margin-top: 0;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.admin-nav-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.admin-nav-section-title {
+    display: block;
+    padding: 12px 15px; /* More padding */
+    color: var(--secondary-color); /* Use secondary color for section titles */
+    font-weight: bold;
+    font-size: 0.9rem; /* Slightly smaller */
+    text-transform: uppercase; /* Uppercase for distinction */
+    letter-spacing: 0.5px;
+    margin-top: 20px; /* Space between sections */
+}
+
+.admin-nav-section-title:first-of-type {
+    margin-top: 0; /* No top margin for the first section title */
+}
+
+
+.admin-nav-item {
+    margin-bottom: 8px; /* Spacing between items */
+}
+
+.admin-nav-link {
+    text-decoration: none;
+    color: var(--dark-color); /* Use dark color for links */
+    padding: 10px 15px; /* Consistent padding */
+    display: block;
+    border-radius: 6px; /* Rounded corners for links */
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+    font-weight: 500; /* Slightly bolder */
+}
+
+.admin-nav-link:hover {
+    background-color: var(--active-nav-bg); /* Use variable for hover */
+    color: var(--primary-color); /* Primary color on hover */
+    text-decoration: none;
+}
+
+.admin-nav-link-active {
+    background-color: var(--primary-color); /* Primary color for active link */
+    color: #ffffff !important; /* White text for active link, important to override hover */
+    font-weight: bold;
+}
+
+.admin-content {
+    flex-grow: 1;
+    padding: 30px; /* More padding in content area */
+    overflow-y: auto;
+    box-sizing: border-box;
+    background-color: #ffffff; /* Ensure content area is white */
+}
+
+/* Styling for the default message in AdminDashboard index route */
+.admin-index-message h1 {
+    font-size: 1.8rem; /* Consistent with .page-title if you adopt that elsewhere */
+    color: var(--dark-color);
+    margin-top: 0; /* Remove default margin if it's the first element */
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.admin-index-message p {
+    font-size: 1rem;
+    color: var(--secondary-color);
+    line-height: 1.7;
+}
