@@ -9,6 +9,7 @@ const dashboardStyles = {
 
 const navStyles = {
     width: '200px',
+    flexShrink: 0,
     borderRight: '1px solid #ccc',
     padding: '20px',
     height: 'calc(100vh - 110px)', // Adjust based on header/footer height
@@ -39,9 +40,10 @@ const navLinkActiveStyles = {
 };
 
 const contentStyles = {
-    flexGrow: 1,
+    flex: '1 1 0%',
+    minWidth: 0,
     padding: '20px',
-    overflowY: 'auto', // Allow content scrolling
+    overflow: 'auto',
     height: 'calc(100vh - 110px)', // Match nav height
     boxSizing: 'border-box', // Ensure padding and border are included in the height
 };
