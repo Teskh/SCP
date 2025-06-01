@@ -8,14 +8,12 @@ const dashboardStyles = {
 };
 
 const navStyles = {
-    width: '200px',
+    width: '240px',
     flexShrink: 0,
     borderRight: '1px solid #ccc',
-    padding: '20px',
-    height: 'calc(100vh - 110px)', // Adjust based on header/footer height
-    background: '#f8f8f8',
-    overflowY: 'auto', // Allow navigation scrolling if many links
-    boxSizing: 'border-box', // Ensure padding and border are included in the height
+    padding: '16px',
+    overflowY: 'auto',
+    boxSizing: 'border-box',
 };
 
 const navListStyles = { listStyle: 'none', padding: 0, margin: 0 };

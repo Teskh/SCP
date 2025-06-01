@@ -700,7 +700,7 @@ function ActiveProductionDashboard() {
                         <span style={houseTypeBadgeStyle}>[{moduleData.house_type_name}]{moduleData.sub_type_name ? ` [${moduleData.sub_type_name}]` : ''}</span>
                     </div>
                     <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#555' }}>
-                        Total Paneles: {moduleData.panels ? moduleData.panels.length : 0}. Detalles al pasar el cursor.
+                        Total Paneles: {moduleData.panels ? moduleData.panels.length : 0}.
                     </div>
                 </div>
             ));
@@ -733,14 +733,6 @@ function ActiveProductionDashboard() {
 
             if (isPanelLineStation && content.modules_with_active_panels && content.modules_with_active_panels.length > 0) {
                 moduleForTooltip = content.modules_with_active_panels[0]; // Use first module for tooltip
-                // For W stations, the tooltip should ideally show status of ALL panels for that module, not just active at station.
-                // This requires fetching all panels for moduleForTooltip if not already available.
-                // For simplicity now, we'll use a placeholder or assume backend might provide this if needed.
-                // If moduleForTooltip.panels (all panels) is available, use that. Otherwise, it's tricky.
-                // Let's assume for now the tooltip for W stations will be more generic or rely on a different data point if full panel list isn't in modules_with_active_panels.
-                // For now, we'll use the active_panels_at_station for counting, which is not ideal for overall module panel status.
-                // A better approach would be to ensure modules_with_active_panels also contains a full 'panels' list like modules_in_magazine.
-                // Given current backend structure, this is a limitation.
                  panelsForTooltip = moduleForTooltip.active_panels_at_station; // This is NOT ideal for overall module panel status.
             } else if (isMagazineStation && content.modules_in_magazine && content.modules_in_magazine.length > 0) {
                 moduleForTooltip = content.modules_in_magazine[0];
