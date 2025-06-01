@@ -27,6 +27,9 @@ const navLinkStyles = {
     padding: '8px 12px',
     display: 'block',
     borderRadius: '4px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
 };
 
 const navLinkActiveStyles = {
