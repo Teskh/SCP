@@ -20,7 +20,7 @@ const navStyles = {
 
 const navListStyles = { listStyle: 'none', padding: 0, margin: 0 };
 
-const navItemStyles = { marginBottom: '10px' };
+const navItemStyles = { marginBottom: '6px' };
 
 const navLinkStyles = {
     textDecoration: 'none',
