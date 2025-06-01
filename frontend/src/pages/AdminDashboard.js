@@ -11,7 +11,7 @@ const navStyles = {
     width: '200px',
     borderRight: '1px solid #ccc',
     padding: '20px',
-    height: 'calc(100vh - 80px)', // Adjust based on header/footer height
+    height: 'calc(100vh - 105px)', // Adjust based on header/footer height
     background: '#f8f8f8',
     overflowY: 'auto', // Allow navigation scrolling if many links
     boxSizing: 'border-box', // Ensure padding and border are included in the height
@@ -39,7 +39,7 @@ const contentStyles = {
     flexGrow: 1,
     padding: '20px',
     overflowY: 'auto', // Allow content scrolling
-    height: 'calc(100vh - 80px)', // Match nav height
+    height: 'calc(100vh - 105px)', // Match nav height
     boxSizing: 'border-box', // Ensure padding and border are included in the height
 };
 
