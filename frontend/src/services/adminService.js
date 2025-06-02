@@ -107,6 +107,18 @@ export const deleteSpecialty = async (id) => {
 };
 
 
+// === External Projects ===
+export const getExternalProjects = async (dbPath = null) => {
+    let url = `${API_BASE_URL}/external-projects`;
+    if (dbPath) {
+        const params = new URLSearchParams({ db_path: dbPath });
+        url += `?${params.toString()}`;
+    }
+    const response = await fetch(url);
+    return handleResponse(response);
+};
+
+
 // === Workers ===
 
 export const getWorkers = async () => {
