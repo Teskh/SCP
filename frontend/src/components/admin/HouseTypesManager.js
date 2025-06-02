@@ -232,6 +232,7 @@ const styles = {
     textarea: { padding: '8px', border: '1px solid #ccc', borderRadius: '4px', flexGrow: 1, minHeight: '60px' },
     error: { color: 'red', marginTop: '10px' },
     loading: { fontStyle: 'italic' },
+    externalProjectSection: { marginTop: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px', background: '#f8f9fa' },
     subTypeSection: { marginTop: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px', background: '#f9f9f9' },
     subTypeTable: { width: '100%', borderCollapse: 'collapse', marginTop: '10px' },
     subTypeTh: { border: '1px solid #ccc', padding: '6px', backgroundColor: '#e9e9e9', textAlign: 'left' },
@@ -241,8 +242,16 @@ const styles = {
     subTypeButton: { padding: '4px 8px', fontSize: '0.9em' }
 };
 
-const initialHouseTypeFormState = { name: '', description: '', number_of_modules: 1, sub_types: [] }; // Added sub_types for potential nested creation
+const initialHouseTypeFormState = { 
+    name: '', 
+    description: '', 
+    number_of_modules: 1, 
+    sub_types: [],
+    linked_project_id: '', // Initialize new fields
+    linked_project_db_path: '' 
+};
 const initialSubTypeFormState = { name: '', description: '' }; // Renamed
+const LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY = 'externalProjectsDbPath';
 
 function HouseTypesManager() {
     const [houseTypes, setHouseTypes] = useState([]);
@@ -251,6 +260,13 @@ function HouseTypesManager() {
     const [error, setError] = useState('');
     const [editMode, setEditMode] = useState(null); // house_type_id
     const [formData, setFormData] = useState(initialHouseTypeFormState);
+
+    // State for external projects
+    const [externalDbPath, setExternalDbPath] = useState('');
+    const [externalProjects, setExternalProjects] = useState([]);
+    const [externalProjectsLoading, setExternalProjectsLoading] = useState(false);
+    const [externalProjectsError, setExternalProjectsError] = useState('');
+
 
     const [editingParamsFor, setEditingParamsFor] = useState(null);
     const [existingParamValues, setExistingParamValues] = useState([]);
@@ -301,7 +317,34 @@ function HouseTypesManager() {
 
     useEffect(() => {
         fetchHouseTypesAndParams();
+        const savedPath = localStorage.getItem(LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY);
+        if (savedPath) {
+            setExternalDbPath(savedPath);
+            // Optionally auto-fetch projects if a path is saved
+            // handleFetchExternalProjects(savedPath); 
+        }
     }, [fetchHouseTypesAndParams]);
+
+    const handleFetchExternalProjects = async (pathOverride = null) => {
+        const pathToFetch = pathOverride !== null ? pathOverride : externalDbPath;
+        setExternalProjectsLoading(true);
+        setExternalProjectsError('');
+        setExternalProjects([]);
+        try {
+            const projects = await adminService.getExternalProjects(pathToFetch || null); // Send null if path is empty to use backend default
+            setExternalProjects(projects || []);
+            if (pathToFetch && projects) { // Save only if custom path is used and fetch is successful
+                localStorage.setItem(LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY, pathToFetch);
+            } else if (!pathToFetch) { // If fetching with default, clear saved custom path
+                localStorage.removeItem(LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY);
+            }
+        } catch (err) {
+            setExternalProjectsError(err.message || 'Error al obtener proyectos externos.');
+            setExternalProjects([]);
+        } finally {
+            setExternalProjectsLoading(false);
+        }
+    };
 
     const handleInputChange = (e) => {
         const { name, value, type } = e.target;
@@ -322,9 +365,20 @@ function HouseTypesManager() {
             name: houseType.name,
             description: houseType.description || '',
             number_of_modules: houseType.number_of_modules || 1,
-            // Sub-types are part of the houseType object from getHouseTypes() if service is updated
-            sub_types: houseType.sub_types ? [...houseType.sub_types] : [] 
+            sub_types: houseType.sub_types ? [...houseType.sub_types] : [],
+            linked_project_id: houseType.linked_project_id || '',
+            linked_project_db_path: houseType.linked_project_db_path || '' // This might be the custom path used
         });
+        // If editing a house type that has a linked_project_db_path, set it for the fetcher
+        if (houseType.linked_project_db_path) {
+            setExternalDbPath(houseType.linked_project_db_path);
+            handleFetchExternalProjects(houseType.linked_project_db_path);
+        } else if (externalDbPath) { // If form had a path but this HT doesn't, fetch with current form path
+            handleFetchExternalProjects(externalDbPath);
+        } else { // Otherwise, fetch with default
+            handleFetchExternalProjects(null);
+        }
+
         setEditingParamsFor(null); 
         setEditingPanelsFor(null); 
         fetchSubTypes(houseType.house_type_id); 
@@ -341,6 +395,9 @@ function HouseTypesManager() {
         setSubTypeError('');
         setEditingSubTypeId(null);
         setSubTypeFormData(initialSubTypeFormState);
+        // Do not reset externalDbPath here, as it's independent of a single HT edit
+        // setExternalProjects([]); // Optionally clear projects list or keep it
+        // setExternalProjectsError('');
     };
 
     const handleSubmit = async (e) => {
@@ -360,10 +417,13 @@ function HouseTypesManager() {
             name: formData.name, 
             description: formData.description, 
             number_of_modules: formData.number_of_modules,
-            // Pass sub_types if backend handles nested creation/update through main house type endpoint
-            // For now, assuming sub_types are managed via their dedicated section after house type creation/selection.
-            // If backend expects sub_types here, it would be:
-            // sub_types: formData.sub_types.map(st => ({ name: st.name, description: st.description })) 
+            linked_project_id: formData.linked_project_id || null, // Send null if empty
+            // Send custom path only if it's filled and different from what backend might assume as default
+            // If externalDbPath is empty, backend uses its default. If filled, it's a custom path.
+            linked_project_db_path: externalDbPath || null, 
+            // sub_types are handled by backend if sent, or managed in their own section
+            // For now, assuming backend handles sub_types if they are part of the payload from `getHouseTypes`
+            sub_types: formData.sub_types 
         };
 
 
@@ -371,6 +431,9 @@ function HouseTypesManager() {
             let newOrUpdatedHouseType;
             if (editMode) {
                 newOrUpdatedHouseType = await adminService.updateHouseType(editMode, payload);
+                // If the path was changed during edit, update localStorage
+                if (externalDbPath) localStorage.setItem(LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY, externalDbPath);
+                else localStorage.removeItem(LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY);
             } else {
                 newOrUpdatedHouseType = await adminService.addHouseType(payload);
             }
@@ -581,8 +644,52 @@ function HouseTypesManager() {
                         <label style={styles.label} htmlFor="htModules">Número de Módulos:</label>
                         <input id="htModules" type="number" name="number_of_modules" value={formData.number_of_modules} onChange={handleInputChange} required min="1" style={{ ...styles.input, flexGrow: 0, width: '80px' }} />
                     </div>
+
+                    {/* External Project Linking Section */}
+                    <div style={styles.externalProjectSection}>
+                        <h4>Vincular Proyecto Externo (Opcional)</h4>
+                        <div style={styles.formRow}>
+                            <label style={styles.label} htmlFor="externalDbPath">Ruta BD Externa:</label>
+                            <input 
+                                id="externalDbPath" 
+                                type="text" 
+                                name="externalDbPath" 
+                                placeholder="Dejar vacío para usar ruta por defecto del sistema" 
+                                value={externalDbPath} 
+                                onChange={(e) => setExternalDbPath(e.target.value)} 
+                                style={styles.input} 
+                            />
+                            <button type="button" onClick={() => handleFetchExternalProjects()} disabled={externalProjectsLoading} style={{...styles.button, ...styles.buttonSecondary, padding: '8px 12px'}}>
+                                {externalProjectsLoading ? 'Cargando...' : 'Cargar Proyectos'}
+                            </button>
+                        </div>
+                        {externalProjectsError && <p style={{...styles.error, marginLeft: '130px'}}>{externalProjectsError}</p>}
+                        
+                        {externalProjects.length > 0 && (
+                            <div style={styles.formRow}>
+                                <label style={styles.label} htmlFor="linked_project_id">Proyecto Externo:</label>
+                                <select 
+                                    id="linked_project_id" 
+                                    name="linked_project_id" 
+                                    value={formData.linked_project_id} 
+                                    onChange={handleInputChange} 
+                                    style={styles.input}
+                                >
+                                    <option value="">Ninguno</option>
+                                    {externalProjects.map(proj => (
+                                        <option key={proj.project_id} value={proj.project_id}>
+                                            {proj.name} (ID: {proj.project_id})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                         {externalProjectsLoading && !externalProjects.length && <p style={{marginLeft: '130px'}}>Cargando lista de proyectos...</p>}
+                         {!externalProjectsLoading && !externalProjectsError && externalDbPath && !externalProjects.length && <p style={{marginLeft: '130px'}}>No se encontraron proyectos en la ruta especificada o la lista está vacía.</p>}
+                    </div>
+
                     <div>
-                        <button type="submit" disabled={isLoading} style={{...styles.button, ...styles.buttonPrimary}}>
+                        <button type="submit" disabled={isLoading || externalProjectsLoading} style={{...styles.button, ...styles.buttonPrimary}}>
                             {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Tipo Vivienda' : 'Añadir Tipo Vivienda')}
                         </button>
                         {editMode && (
@@ -687,12 +794,20 @@ function HouseTypesManager() {
                             <th style={styles.th}>Descripción</th>
                             <th style={styles.th}>Módulos</th>
                             <th style={styles.th}>Sub-Tipos</th>
+                            <th style={styles.th}>Proyecto Vinculado</th>
                             <th style={styles.th}>Parámetros</th>
                             <th style={styles.th}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {houseTypes.map((ht) => {
+                            // Find linked project name (assuming externalProjects might be populated if one was just edited/viewed)
+                            // This is a simple approach; a more robust one might involve fetching project names on demand or having them in ht object
+                            const linkedProject = externalProjects.find(p => p.project_id === ht.linked_project_id);
+                            const linkedProjectDisplay = ht.linked_project_id 
+                                ? (linkedProject ? `${linkedProject.name} (ID: ${ht.linked_project_id})` : `ID: ${ht.linked_project_id} (Ruta: ${ht.linked_project_db_path || 'defecto'})`)
+                                : <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>;
+
                             const paramsGrouped = (ht.parameters || []).reduce((acc, param) => {
                                 const modKey = `mod_${param.module_sequence_number}`;
                                 const subTypeKey = param.sub_type_id === null ? 'general' : `st_${param.sub_type_id}`; // Use sub_type_id
@@ -721,6 +836,7 @@ function HouseTypesManager() {
                                             : <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>
                                         }
                                     </td>
+                                    <td style={styles.td}>{linkedProjectDisplay}</td>
                                     <td style={styles.td}> {/* Parameters Cell */}
                                         {sortedModules.length === 0 && <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>}
                                         {sortedModules.map(modGroup => (

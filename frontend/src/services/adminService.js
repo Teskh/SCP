@@ -346,12 +346,13 @@ export const deleteTaskDefinition = async (id) => {
 // === Fetching related data for dropdowns ===
 export const getHouseTypes = async () => {
     const response = await fetch(`${API_BASE_URL}/house_types`);
-    return handleResponse(response); // Expects array of house types with their sub_types and parameters
+    // Expects array of house types with sub_types, parameters, linked_project_id, linked_project_db_path
+    return handleResponse(response); 
 };
 
 export const addHouseType = async (houseTypeData) => {
-    // houseTypeData should include name, description, number_of_modules, and sub_types array
-    // e.g., { name: 'Type A', ..., sub_types: [{name: 'Standard'}, {name: 'Premium'}] }
+    // houseTypeData includes name, description, number_of_modules, sub_types,
+    // linked_project_id (optional), linked_project_db_path (optional)
     const response = await fetch(`${API_BASE_URL}/house_types`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -361,7 +362,8 @@ export const addHouseType = async (houseTypeData) => {
 };
 
 export const updateHouseType = async (id, houseTypeData) => {
-    // houseTypeData should include name, description, number_of_modules, and sub_types array
+    // houseTypeData includes name, description, number_of_modules, sub_types,
+    // linked_project_id (optional), linked_project_db_path (optional)
     const response = await fetch(`${API_BASE_URL}/house_types/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

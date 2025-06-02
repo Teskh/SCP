@@ -20,7 +20,7 @@ def handle_exception(e):
 def get_house_types_route():
     """Get all house types, including their sub_types and parameters."""
     try:
-        types = queries.get_all_house_types_with_details()
+        types = queries.get_all_house_types_with_details() # This now includes linked_project_id and linked_project_db_path
         return jsonify(types)
     except Exception as e:
         logger.error(f"Error in get_house_types_route: {e}", exc_info=True)
@@ -42,11 +42,14 @@ def add_house_type_route():
     name = data['name']
     description = data.get('description', '')
     sub_types_data = data.get('sub_types', [])
+    linked_project_id = data.get('linked_project_id')
+    linked_project_db_path = data.get('linked_project_db_path')
+
 
     db = connection.get_db()
     try:
         with db:
-            new_house_type_id = queries.add_house_type(name, description, num_modules)
+            new_house_type_id = queries.add_house_type(name, description, num_modules, linked_project_id, linked_project_db_path)
             if not new_house_type_id:
                 existing = queries.get_house_type_by_name(name)
                 if existing:
@@ -65,14 +68,18 @@ def add_house_type_route():
                         raise Exception(f"Failed to add sub_type '{st_name}'.")
                     created_sub_types.append({'sub_type_id': sub_type_id, 'name': st_name, 'description': st_description})
         
-        final_house_type = queries.get_all_house_types_with_details()
+        final_house_type = queries.get_all_house_types_with_details() # Re-fetch to get all details including linked project info
         new_type_details = next((ht for ht in final_house_type if ht['house_type_id'] == new_house_type_id), None)
 
         if new_type_details:
              return jsonify(new_type_details), 201
-        else:
+        else: # Fallback if refetch fails, construct manually (might miss some joined data)
             logger.warning(f"House Type {new_house_type_id} created but couldn't be refetched with details.")
-            return jsonify({'house_type_id': new_house_type_id, 'name': name, 'description': description, 'number_of_modules': num_modules, 'sub_types': created_sub_types}), 201
+            return jsonify({
+                'house_type_id': new_house_type_id, 'name': name, 'description': description,
+                'number_of_modules': num_modules, 'sub_types': created_sub_types,
+                'linked_project_id': linked_project_id, 'linked_project_db_path': linked_project_db_path
+            }), 201
 
     except sqlite3.IntegrityError as ie:
         if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
@@ -104,11 +111,13 @@ def update_house_type_route(house_type_id):
     name = data['name']
     description = data.get('description', '')
     sub_types_data = data.get('sub_types', [])
+    linked_project_id = data.get('linked_project_id')
+    linked_project_db_path = data.get('linked_project_db_path')
 
     db = connection.get_db()
     try:
         with db:
-            success = queries.update_house_type(house_type_id, name, description, num_modules)
+            success = queries.update_house_type(house_type_id, name, description, num_modules, linked_project_id, linked_project_db_path)
             if not success:
                 existing = queries.get_house_type_by_id(house_type_id)
                 if not existing:
@@ -133,14 +142,18 @@ def update_house_type_route(house_type_id):
                         raise Exception(f"Failed to add sub_type '{st_name}'.")
                     updated_sub_types.append({'sub_type_id': sub_type_id, 'name': st_name, 'description': st_description})
         
-        final_house_type = queries.get_all_house_types_with_details()
+        final_house_type = queries.get_all_house_types_with_details() # Re-fetch to get all details
         updated_type_details = next((ht for ht in final_house_type if ht['house_type_id'] == house_type_id), None)
 
         if updated_type_details:
             return jsonify(updated_type_details)
-        else:
+        else: # Fallback
             logger.warning(f"House Type {house_type_id} updated but couldn't be refetched with details.")
-            return jsonify({'house_type_id': house_type_id, 'name': name, 'description': description, 'number_of_modules': num_modules, 'sub_types': updated_sub_types})
+            return jsonify({
+                'house_type_id': house_type_id, 'name': name, 'description': description,
+                'number_of_modules': num_modules, 'sub_types': updated_sub_types,
+                'linked_project_id': linked_project_id, 'linked_project_db_path': linked_project_db_path
+            })
 
     except sqlite3.IntegrityError as ie:
         if 'UNIQUE constraint failed: HouseTypes.name' in str(ie):
@@ -176,6 +189,60 @@ def delete_house_type_route(house_type_id):
     except Exception as e:
         logger.error(f"Error in delete_house_type_route {house_type_id}: {e}", exc_info=True)
         return jsonify(error="Failed to delete house type"), 500
+
+
+# === External Projects Route ===
+@admin_definitions_bp.route('/external-projects', methods=['GET'])
+def get_external_projects_route():
+    """
+    Fetches projects from an external SQLite database.
+    Accepts an optional 'db_path' query parameter.
+    If 'db_path' is not provided, uses the default path from config.
+    """
+    from flask import current_app # Import current_app here
+
+    custom_db_path = request.args.get('db_path')
+    
+    # Determine the database path to use
+    if custom_db_path:
+        # Basic validation: ensure it's a .db file. More robust validation might be needed.
+        # This path should be treated carefully. For now, we assume it's a local path
+        # accessible by the server.
+        if not custom_db_path.endswith('.db'):
+            return jsonify(error="Invalid db_path. Must be a .db file."), 400
+        # Security consideration: The path should be validated/sanitized if it's user-provided
+        # and could point anywhere on the filesystem. For an admin-only internal tool,
+        # this might be less critical but still good practice.
+        # For now, we'll use it as is, assuming it's a trusted input or relative to a safe base.
+        # A better approach for security would be to have pre-configured aliases for external DBs
+        # or ensure the path is within a specific allowed directory.
+        # For this implementation, we'll use the path directly but acknowledge the risk.
+        # A production system should have stronger path validation/sandboxing.
+        db_to_query = custom_db_path
+    else:
+        db_to_query = current_app.config['EXTERNAL_PROJECTS_DB_PATH']
+
+    if not os.path.isabs(db_to_query) and not custom_db_path:
+        # If default path is relative, make it absolute from project root (parent of backend dir)
+        # The config already makes it absolute from 'backend' dir's parent.
+        # db_to_query = os.path.join(current_app.config['PROJECT_ROOT_DIR'], '..', db_to_query) # Example if PROJECT_ROOT_DIR was git root
+        pass # Path from config should be absolute or correctly relative already
+
+    if not os.path.exists(db_to_query):
+        logger.error(f"External projects database not found at: {db_to_query}")
+        return jsonify(error=f"External projects database not found at the specified path."), 404
+
+    try:
+        projects = queries.get_external_projects(db_to_query)
+        return jsonify(projects)
+    except sqlite3.OperationalError as oe:
+        logger.error(f"Operational error accessing external projects DB {db_to_query}: {oe}", exc_info=True)
+        if "unable to open database file" in str(oe) or "no such table" in str(oe).lower():
+            return jsonify(error=f"Could not open or find 'Projects' table in the external database at {db_to_query}."), 404
+        return jsonify(error=f"Error accessing external projects database: {oe}"), 500
+    except Exception as e:
+        logger.error(f"Error fetching external projects from {db_to_query}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch external projects"), 500
 
 
 # === House SubType Routes ===

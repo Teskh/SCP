@@ -718,7 +718,7 @@ def get_all_house_types_with_details():
     Fetches all house types, including their associated parameters and sub_types, grouped by house type.
     """
     db = get_db()
-    ht_cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes ORDER BY name")
+    ht_cursor = db.execute("SELECT house_type_id, name, description, number_of_modules, linked_project_id, linked_project_db_path FROM HouseTypes ORDER BY name")
     house_types_list = [dict(row) for row in ht_cursor.fetchall()]
     house_types_dict = {ht['house_type_id']: ht for ht in house_types_list}
 
@@ -774,19 +774,19 @@ def get_all_stations():
 # === House Types ===
 
 def get_all_house_types():
-    """Fetches all basic house types (ID and name). For detailed info, use get_all_house_types_with_details."""
+    """Fetches all basic house types. For detailed info, use get_all_house_types_with_details."""
     db = get_db()
-    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules FROM HouseTypes ORDER BY name")
+    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules, linked_project_id, linked_project_db_path FROM HouseTypes ORDER BY name")
     return [dict(row) for row in cursor.fetchall()]
 
 
-def add_house_type(name, description, number_of_modules):
+def add_house_type(name, description, number_of_modules, linked_project_id=None, linked_project_db_path=None):
     """Adds a new house type."""
     db = get_db()
     try:
         cursor = db.execute(
-            "INSERT INTO HouseTypes (name, description, number_of_modules) VALUES (?, ?, ?)",
-            (name, description, number_of_modules)
+            "INSERT INTO HouseTypes (name, description, number_of_modules, linked_project_id, linked_project_db_path) VALUES (?, ?, ?, ?, ?)",
+            (name, description, number_of_modules, linked_project_id, linked_project_db_path)
         )
         db.commit()
         return cursor.lastrowid
@@ -794,13 +794,13 @@ def add_house_type(name, description, number_of_modules):
         logging.warning(f"HouseType '{name}' already exists or other integrity error: {e}")
         return None
 
-def update_house_type(house_type_id, name, description, number_of_modules):
+def update_house_type(house_type_id, name, description, number_of_modules, linked_project_id=None, linked_project_db_path=None):
     """Updates an existing house type."""
     db = get_db()
     try:
         cursor = db.execute(
-            "UPDATE HouseTypes SET name = ?, description = ?, number_of_modules = ? WHERE house_type_id = ?",
-            (name, description, number_of_modules, house_type_id)
+            "UPDATE HouseTypes SET name = ?, description = ?, number_of_modules = ?, linked_project_id = ?, linked_project_db_path = ? WHERE house_type_id = ?",
+            (name, description, number_of_modules, linked_project_id, linked_project_db_path, house_type_id)
         )
         db.commit()
         return cursor.rowcount > 0
@@ -824,6 +824,35 @@ def delete_house_type(house_type_id):
         logging.error(f"Error deleting house type {house_type_id} (possibly due to existing plans/modules): {e}", exc_info=True)
         return False
 
+
+# === External Projects Database ===
+
+def get_external_projects(db_path):
+    """
+    Connects to an external SQLite database and fetches projects.
+    Assumes a table named 'Projects' with 'project_id' and 'name' columns.
+    """
+    projects = []
+    conn_external = None
+    try:
+        # Important: Ensure the path is secure and validated if user-supplied directly to this function
+        # For now, assuming db_path is controlled and validated by the caller (e.g., API layer using config)
+        conn_external = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) # Read-only mode
+        conn_external.row_factory = sqlite3.Row
+        cursor_external = conn_external.cursor()
+        # Adjust table and column names if they are different in the external DB
+        cursor_external.execute("SELECT project_id, name FROM Projects ORDER BY name")
+        rows = cursor_external.fetchall()
+        for row in rows:
+            projects.append(dict(row))
+    except sqlite3.Error as e:
+        logging.error(f"Error connecting to or querying external projects DB at {db_path}: {e}")
+        # Depending on desired behavior, could raise an exception or return empty/error indicator
+        raise e # Re-raise to be handled by the API layer
+    finally:
+        if conn_external:
+            conn_external.close()
+    return projects
 
 # === House SubType ===
 
