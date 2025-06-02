@@ -23,6 +23,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     const [isLoadingPanelTasks, setIsLoadingPanelTasks] = useState(false);
     const [panelTasksError, setPanelTasksError] = useState('');
     const [taskActionMessage, setTaskActionMessage] = useState({ type: '', content: '' }); // type: 'success' or 'error'
+    const [materialsForSelectedTask, setMaterialsForSelectedTask] = useState([]);
+    const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
+    const [materialsError, setMaterialsError] = useState('');
 
 
     // Effect to determine the station context and specific station ID
@@ -133,18 +136,22 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         if (!selectedPanelIdentifier || !selectedPanelIdentifier.plan_id || !selectedPanelIdentifier.panel_definition_id) {
             setPanelTasks([]);
             setPanelTasksError('');
+            setMaterialsForSelectedTask([]); // Clear materials when no panel is selected
+            setMaterialsError('');
             return;
         }
 
-        // Ensure user object and specialty_id are accessed safely for the API call
         const workerSpecialtyId = user && user.specialty_id !== undefined ? user.specialty_id : null;
+        const currentHouseTypeId = panelProductionInfo?.data?.house_type_id; // Get house_type_id from panelProductionInfo
 
         setIsLoadingPanelTasks(true);
         setPanelTasksError('');
+        setMaterialsForSelectedTask([]); // Clear materials before fetching new ones
+        setMaterialsError('');
+
+        // Fetch tasks
         adminService.getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, workerSpecialtyId)
             .then(tasksData => {
-                // Sort tasks: 1. In Progress, 2. Paused, 3. Not Started,
-                // 4. Completed (not at current station), 5. Completed (at current station)
                 const getTaskSortScore = (task, currentStationId) => {
                     if (task.status === 'In Progress') return 1;
                     if (task.status === 'Paused') return 2;
@@ -152,7 +159,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     if (task.status === 'Completed') {
                         return task.station_finish === currentStationId ? 5 : 4;
                     }
-                    return 6; // Should not happen
+                    return 6;
                 };
 
                 const sortedTasks = tasksData.sort((a, b) => {
@@ -161,7 +168,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     if (scoreA !== scoreB) {
                         return scoreA - scoreB;
                     }
-                    return a.name.localeCompare(b.name); // Secondary sort by name
+                    return a.name.localeCompare(b.name);
                 });
                 setPanelTasks(sortedTasks);
             })
@@ -172,10 +179,50 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             })
             .finally(() => setIsLoadingPanelTasks(false));
 
-    }, [selectedPanelIdentifier, resolvedSpecificStationId, user]);
+        // Fetch materials for the selected task (if a task is selected and house_type_id is available)
+        if (selectedPanelIdentifier.task_definition_id && currentHouseTypeId) {
+            setIsLoadingMaterials(true);
+            adminService.getMaterialsForTask(selectedPanelIdentifier.task_definition_id, currentHouseTypeId)
+                .then(materialsData => {
+                    setMaterialsForSelectedTask(materialsData || []);
+                })
+                .catch(err => {
+                    console.error("Error fetching materials for task:", err);
+                    setMaterialsError(`Error obteniendo materiales para la tarea: ${err.message}`);
+                    setMaterialsForSelectedTask([]);
+                })
+                .finally(() => setIsLoadingMaterials(false));
+        } else {
+            setMaterialsForSelectedTask([]);
+            setMaterialsError('');
+        }
+
+    }, [selectedPanelIdentifier, resolvedSpecificStationId, user, panelProductionInfo]); // Add panelProductionInfo to dependencies
 
     const handlePanelSelect = (panelData) => {
+        // When a panel is selected, we need to know its associated task_definition_id
+        // to fetch materials. This means the panelData should ideally include the task_definition_id
+        // of the task that is currently being viewed/selected.
+        // For now, we'll assume the first task in the list is the one whose materials we want to show,
+        // or we'll need a way to select a specific task within the panel.
+        // For the initial implementation, let's assume we fetch materials for the *first* task
+        // in the panelTasks list once it's loaded, or when a specific task is clicked.
+        // To simplify, let's update selectedPanelIdentifier to also hold the task_definition_id
+        // if a task is clicked, or default to the first task's ID.
         setSelectedPanelIdentifier(panelData);
+        setMaterialsForSelectedTask([]); // Clear materials when a new panel is selected
+        setMaterialsError('');
+    };
+
+    const handleTaskSelectForMaterials = (task) => {
+        // This function will be called when a specific task is clicked to show its materials
+        // Update selectedPanelIdentifier to include the task_definition_id
+        setSelectedPanelIdentifier(prev => ({
+            ...prev,
+            task_definition_id: task.task_definition_id,
+            task_name: task.name // Store task name for display
+        }));
+        // The useEffect for materials will re-run due to selectedPanelIdentifier change
     };
 
     const handleSaveSpecificStation = (specificStationId) => {
@@ -527,7 +574,6 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                         {task.station_finish && <small>Finalizada en Estación: {task.station_finish}<br/></small>}
                                                         {task.completed_at && <small>Completada: {new Date(task.completed_at).toLocaleString()}<br/></small>}
                                                     </div>
-                                                    {/* Placeholder for task actions, currently disabled */}
                                                     <div style={taskActionsStyle}>
                                                         {(task.status === 'Not Started' || task.status === 'Paused') && (
                                                             <button 
@@ -556,6 +602,12 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                         {task.status === 'Completed' && (
                                                             <span style={{color: 'green', fontSize: '0.9em'}}>Completada</span>
                                                         )}
+                                                        <button 
+                                                            style={{...buttonStyle, backgroundColor: '#17a2b8', marginTop: '5px'}}
+                                                            onClick={() => handleTaskSelectForMaterials(task)}
+                                                        >
+                                                            Ver Materiales
+                                                        </button>
                                                     </div>
                                                 </li>
                                             ))}
@@ -568,6 +620,26 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                         <p style={taskActionMessage.type === 'error' ? errorStyle : successStyle}>
                                             {taskActionMessage.content}
                                         </p>
+                                    )}
+
+                                    {/* Materials for Selected Task Section */}
+                                    {selectedPanelIdentifier.task_definition_id && (
+                                        <div style={materialsSectionStyle}>
+                                            <h4>Materiales para Tarea: {selectedPanelIdentifier.task_name || selectedPanelIdentifier.task_definition_id}</h4>
+                                            {isLoadingMaterials && <p>Cargando materiales...</p>}
+                                            {materialsError && <p style={{ color: 'red' }}>{materialsError}</p>}
+                                            {!isLoadingMaterials && !materialsError && materialsForSelectedTask.length > 0 ? (
+                                                <ul style={listStyle}>
+                                                    {materialsForSelectedTask.map(material => (
+                                                        <li key={material.material_id} style={listItemStyle}>
+                                                            <strong>{material.material_name}</strong> (SKU: {material.SKU}) - {material.Units}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                !isLoadingMaterials && !materialsError && <p>No se encontraron materiales para esta tarea o no hay un proyecto vinculado.</p>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -620,6 +692,15 @@ const moduleInfoBoxStyle = {
     borderRadius: '5px',
     backgroundColor: '#f9f9f9',
     textAlign: 'left', // Align text left within the box
+};
+
+const materialsSectionStyle = {
+    marginTop: '20px',
+    padding: '15px',
+    border: '1px solid #e0e0e0',
+    borderRadius: '5px',
+    backgroundColor: '#f0f0f0',
+    textAlign: 'left',
 };
 
 const taskListItemStyle = {

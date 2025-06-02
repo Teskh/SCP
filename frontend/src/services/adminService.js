@@ -119,6 +119,14 @@ export const getExternalProjects = async (dbPath = null) => {
 };
 
 
+// === Materials for Tasks ===
+export const getMaterialsForTask = async (taskDefinitionId, houseTypeId) => {
+    const params = new URLSearchParams({ house_type_id: houseTypeId });
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskDefinitionId}/materials?${params.toString()}`);
+    return handleResponse(response);
+};
+
+
 // === Workers ===
 
 export const getWorkers = async () => {

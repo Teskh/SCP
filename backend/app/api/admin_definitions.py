@@ -246,6 +246,34 @@ def get_external_projects_route():
         return jsonify(error="Failed to fetch external projects"), 500
 
 
+# === Materials for Tasks Route ===
+@admin_definitions_bp.route('/tasks/<int:task_definition_id>/materials', methods=['GET'])
+def get_task_materials_route(task_definition_id):
+    """
+    Fetches materials applicable to a specific task, considering the house type's
+    linked project and instance-specific attributes.
+    Requires 'house_type_id' as a query parameter.
+    """
+    house_type_id_str = request.args.get('house_type_id')
+    if not house_type_id_str:
+        return jsonify(error="Missing 'house_type_id' query parameter."), 400
+    
+    try:
+        house_type_id = int(house_type_id_str)
+    except ValueError:
+        return jsonify(error="Invalid 'house_type_id' parameter. Must be an integer."), 400
+
+    try:
+        materials = external_db_queries.get_materials_for_task(task_definition_id, house_type_id)
+        return jsonify(materials)
+    except FileNotFoundError as fnfe:
+        logger.error(f"External database not found for materials query: {fnfe}")
+        return jsonify(error=f"Required external database not found: {fnfe}"), 404
+    except Exception as e:
+        logger.error(f"Error fetching materials for task {task_definition_id}, house_type {house_type_id}: {e}", exc_info=True)
+        return jsonify(error="Failed to fetch materials for task"), 500
+
+
 # === House SubType Routes ===
 
 @admin_definitions_bp.route('/house_types/<int:house_type_id>/sub_types', methods=['GET'])
