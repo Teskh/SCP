@@ -211,8 +211,7 @@ CREATE TABLE HouseTypes (
     name TEXT NOT NULL UNIQUE, -- e.g., 'Single Family Townhouse A', 'Lakehouse type B'
     description TEXT,
     number_of_modules INTEGER NOT NULL DEFAULT 1, -- How many physical modules make up this house type
-    linked_project_id INTEGER, -- Optional: ID from an external Projects table
-    linked_project_db_path TEXT -- Optional: Path to the external DB if not default
+    linked_project_id INTEGER -- Optional: ID from an external Projects table
 );
 
 -- Table for House SubTypes (formerly Tipologias) associated with a HouseType

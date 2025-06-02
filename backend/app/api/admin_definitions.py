@@ -43,13 +43,13 @@ def add_house_type_route():
     description = data.get('description', '')
     sub_types_data = data.get('sub_types', [])
     linked_project_id = data.get('linked_project_id')
-    linked_project_db_path = data.get('linked_project_db_path')
+    # linked_project_db_path is no longer stored per house type
 
 
     db = connection.get_db()
     try:
         with db:
-            new_house_type_id = queries.add_house_type(name, description, num_modules, linked_project_id, linked_project_db_path)
+            new_house_type_id = queries.add_house_type(name, description, num_modules, linked_project_id)
             if not new_house_type_id:
                 existing = queries.get_house_type_by_name(name)
                 if existing:
@@ -78,7 +78,7 @@ def add_house_type_route():
             return jsonify({
                 'house_type_id': new_house_type_id, 'name': name, 'description': description,
                 'number_of_modules': num_modules, 'sub_types': created_sub_types,
-                'linked_project_id': linked_project_id, 'linked_project_db_path': linked_project_db_path
+                'linked_project_id': linked_project_id
             }), 201
 
     except sqlite3.IntegrityError as ie:
@@ -112,12 +112,12 @@ def update_house_type_route(house_type_id):
     description = data.get('description', '')
     sub_types_data = data.get('sub_types', [])
     linked_project_id = data.get('linked_project_id')
-    linked_project_db_path = data.get('linked_project_db_path')
+    # linked_project_db_path is no longer stored per house type
 
     db = connection.get_db()
     try:
         with db:
-            success = queries.update_house_type(house_type_id, name, description, num_modules, linked_project_id, linked_project_db_path)
+            success = queries.update_house_type(house_type_id, name, description, num_modules, linked_project_id)
             if not success:
                 existing = queries.get_house_type_by_id(house_type_id)
                 if not existing:
@@ -152,7 +152,7 @@ def update_house_type_route(house_type_id):
             return jsonify({
                 'house_type_id': house_type_id, 'name': name, 'description': description,
                 'number_of_modules': num_modules, 'sub_types': updated_sub_types,
-                'linked_project_id': linked_project_id, 'linked_project_db_path': linked_project_db_path
+                'linked_project_id': linked_project_id
             })
 
     except sqlite3.IntegrityError as ie:

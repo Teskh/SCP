@@ -247,8 +247,8 @@ const initialHouseTypeFormState = {
     description: '', 
     number_of_modules: 1, 
     sub_types: [],
-    linked_project_id: '', // Initialize new fields
-    linked_project_db_path: '' 
+    linked_project_id: '' // Initialize new field
+    // linked_project_db_path is no longer part of form data for individual house type
 };
 const initialSubTypeFormState = { name: '', description: '' }; // Renamed
 const LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY = 'externalProjectsDbPath';
@@ -366,18 +366,14 @@ function HouseTypesManager() {
             description: houseType.description || '',
             number_of_modules: houseType.number_of_modules || 1,
             sub_types: houseType.sub_types ? [...houseType.sub_types] : [],
-            linked_project_id: houseType.linked_project_id || '',
-            linked_project_db_path: houseType.linked_project_db_path || '' // This might be the custom path used
+            linked_project_id: houseType.linked_project_id || ''
+            // linked_project_db_path is no longer stored with the house type
         });
-        // If editing a house type that has a linked_project_db_path, set it for the fetcher
-        if (houseType.linked_project_db_path) {
-            setExternalDbPath(houseType.linked_project_db_path);
-            handleFetchExternalProjects(houseType.linked_project_db_path);
-        } else if (externalDbPath) { // If form had a path but this HT doesn't, fetch with current form path
-            handleFetchExternalProjects(externalDbPath);
-        } else { // Otherwise, fetch with default
-            handleFetchExternalProjects(null);
-        }
+        
+        // When editing, always try to fetch projects based on the current externalDbPath setting
+        // (which is loaded from localStorage or can be changed by user)
+        // This ensures the dropdown is populated correctly for the current context.
+        handleFetchExternalProjects(externalDbPath || null);
 
         setEditingParamsFor(null); 
         setEditingPanelsFor(null); 
@@ -418,11 +414,8 @@ function HouseTypesManager() {
             description: formData.description, 
             number_of_modules: formData.number_of_modules,
             linked_project_id: formData.linked_project_id || null, // Send null if empty
-            // Send custom path only if it's filled and different from what backend might assume as default
-            // If externalDbPath is empty, backend uses its default. If filled, it's a custom path.
-            linked_project_db_path: externalDbPath || null, 
-            // sub_types are handled by backend if sent, or managed in their own section
-            // For now, assuming backend handles sub_types if they are part of the payload from `getHouseTypes`
+            // linked_project_db_path is no longer sent in the payload to save the house type.
+            // The externalDbPath (from localStorage) is used by the frontend to *fetch* projects.
             sub_types: formData.sub_types 
         };
 
@@ -431,9 +424,8 @@ function HouseTypesManager() {
             let newOrUpdatedHouseType;
             if (editMode) {
                 newOrUpdatedHouseType = await adminService.updateHouseType(editMode, payload);
-                // If the path was changed during edit, update localStorage
-                if (externalDbPath) localStorage.setItem(LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY, externalDbPath);
-                else localStorage.removeItem(LOCAL_STORAGE_EXTERNAL_DB_PATH_KEY);
+                // The externalDbPath is managed by localStorage directly when fetching projects,
+                // no need to tie its saving to house type submission.
             } else {
                 newOrUpdatedHouseType = await adminService.addHouseType(payload);
             }
@@ -804,8 +796,11 @@ function HouseTypesManager() {
                             // Find linked project name (assuming externalProjects might be populated if one was just edited/viewed)
                             // This is a simple approach; a more robust one might involve fetching project names on demand or having them in ht object
                             const linkedProject = externalProjects.find(p => p.project_id === ht.linked_project_id);
+                            // Display logic for linked project. Path is no longer stored with house type.
+                            // We can indicate if the current externalDbPath (from localStorage) was used if we want,
+                            // but for simplicity, just show project name/ID if linked.
                             const linkedProjectDisplay = ht.linked_project_id 
-                                ? (linkedProject ? `${linkedProject.name} (ID: ${ht.linked_project_id})` : `ID: ${ht.linked_project_id} (Ruta: ${ht.linked_project_db_path || 'defecto'})`)
+                                ? (linkedProject ? `${linkedProject.name} (ID: ${ht.linked_project_id})` : `ID: ${ht.linked_project_id} (Proyecto externo)`)
                                 : <span style={{ fontStyle: 'italic', color: '#888' }}>Ninguno</span>;
 
                             const paramsGrouped = (ht.parameters || []).reduce((acc, param) => {

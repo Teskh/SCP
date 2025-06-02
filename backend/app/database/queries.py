@@ -718,7 +718,7 @@ def get_all_house_types_with_details():
     Fetches all house types, including their associated parameters and sub_types, grouped by house type.
     """
     db = get_db()
-    ht_cursor = db.execute("SELECT house_type_id, name, description, number_of_modules, linked_project_id, linked_project_db_path FROM HouseTypes ORDER BY name")
+    ht_cursor = db.execute("SELECT house_type_id, name, description, number_of_modules, linked_project_id FROM HouseTypes ORDER BY name")
     house_types_list = [dict(row) for row in ht_cursor.fetchall()]
     house_types_dict = {ht['house_type_id']: ht for ht in house_types_list}
 
@@ -776,17 +776,17 @@ def get_all_stations():
 def get_all_house_types():
     """Fetches all basic house types. For detailed info, use get_all_house_types_with_details."""
     db = get_db()
-    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules, linked_project_id, linked_project_db_path FROM HouseTypes ORDER BY name")
+    cursor = db.execute("SELECT house_type_id, name, description, number_of_modules, linked_project_id FROM HouseTypes ORDER BY name")
     return [dict(row) for row in cursor.fetchall()]
 
 
-def add_house_type(name, description, number_of_modules, linked_project_id=None, linked_project_db_path=None):
+def add_house_type(name, description, number_of_modules, linked_project_id=None):
     """Adds a new house type."""
     db = get_db()
     try:
         cursor = db.execute(
-            "INSERT INTO HouseTypes (name, description, number_of_modules, linked_project_id, linked_project_db_path) VALUES (?, ?, ?, ?, ?)",
-            (name, description, number_of_modules, linked_project_id, linked_project_db_path)
+            "INSERT INTO HouseTypes (name, description, number_of_modules, linked_project_id) VALUES (?, ?, ?, ?)",
+            (name, description, number_of_modules, linked_project_id)
         )
         db.commit()
         return cursor.lastrowid
@@ -794,13 +794,13 @@ def add_house_type(name, description, number_of_modules, linked_project_id=None,
         logging.warning(f"HouseType '{name}' already exists or other integrity error: {e}")
         return None
 
-def update_house_type(house_type_id, name, description, number_of_modules, linked_project_id=None, linked_project_db_path=None):
+def update_house_type(house_type_id, name, description, number_of_modules, linked_project_id=None):
     """Updates an existing house type."""
     db = get_db()
     try:
         cursor = db.execute(
-            "UPDATE HouseTypes SET name = ?, description = ?, number_of_modules = ?, linked_project_id = ?, linked_project_db_path = ? WHERE house_type_id = ?",
-            (name, description, number_of_modules, linked_project_id, linked_project_db_path, house_type_id)
+            "UPDATE HouseTypes SET name = ?, description = ?, number_of_modules = ?, linked_project_id = ? WHERE house_type_id = ?",
+            (name, description, number_of_modules, linked_project_id, house_type_id)
         )
         db.commit()
         return cursor.rowcount > 0

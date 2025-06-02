@@ -364,22 +364,26 @@ export const getHouseTypes = async () => {
 
 export const addHouseType = async (houseTypeData) => {
     // houseTypeData includes name, description, number_of_modules, sub_types,
-    // linked_project_id (optional), linked_project_db_path (optional)
+    // linked_project_id (optional)
+    // linked_project_db_path is no longer sent to backend for storage per HouseType
+    const { linked_project_db_path, ...payload } = houseTypeData; // eslint-disable-line no-unused-vars
     const response = await fetch(`${API_BASE_URL}/house_types`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(houseTypeData),
+        body: JSON.stringify(payload),
     });
     return handleResponse(response);
 };
 
 export const updateHouseType = async (id, houseTypeData) => {
     // houseTypeData includes name, description, number_of_modules, sub_types,
-    // linked_project_id (optional), linked_project_db_path (optional)
+    // linked_project_id (optional)
+    // linked_project_db_path is no longer sent to backend for storage per HouseType
+    const { linked_project_db_path, ...payload } = houseTypeData; // eslint-disable-line no-unused-vars
     const response = await fetch(`${API_BASE_URL}/house_types/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(houseTypeData),
+        body: JSON.stringify(payload),
     });
     return handleResponse(response);
 };
