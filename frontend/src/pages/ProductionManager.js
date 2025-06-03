@@ -142,7 +142,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
 
         const workerSpecialtyId = user && user.specialty_id !== undefined ? user.specialty_id : null;
-        const currentHouseTypeId = panelProductionInfo?.data?.house_type_id; // Get house_type_id from panelProductionInfo
+        // Get house_type_id from the selectedPanelIdentifier, which will now store it
+        const currentHouseTypeId = selectedPanelIdentifier?.house_type_id; 
 
         setIsLoadingPanelTasks(true);
         setPanelTasksError('');
@@ -208,8 +209,11 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         // of the task that is currently being viewed/selected.
         // For now, we'll assume the first task in the list is the one whose materials we want to show,
         // or we'll need a way to select a specific task within the panel.
-        // For the initial implementation, let's assume we fetch materials for the *first* task
-        // in the panelTasks list once it's loaded, or when a specific task is clicked.
+        // When a panel is selected, we need to know its associated task_definition_id
+        // to fetch materials. This means the panelData should ideally include the task_definition_id
+        // of the task that is currently being viewed/selected.
+        // For now, we'll assume the first task in the list is the one whose materials we want to show,
+        // or we'll need a way to select a specific task within the panel.
         // To simplify, let's update selectedPanelIdentifier to also hold the task_definition_id
         // if a task is clicked, or default to the first task's ID.
         setSelectedPanelIdentifier(panelData);
@@ -501,7 +505,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                                         plan_id: panelProductionInfo.data.plan_id,
                                                                         panel_definition_id: panel.panel_definition_id,
                                                                         panel_name: `${panel.panel_code} (${panel.panel_group})`,
-                                                                        module_name: panel.module_name
+                                                                        module_name: panel.module_name,
+                                                                        house_type_id: panelProductionInfo.data.house_type_id // Add house_type_id
                                                                     })}>
                                                                         {panel.panel_code} ({panel.panel_group})
                                                                     </li>
@@ -518,7 +523,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                                         plan_id: panel.plan_id,
                                                                         panel_definition_id: panel.panel_definition_id,
                                                                         panel_name: panel.panel_name,
-                                                                        module_name: panel.module_name
+                                                                        module_name: panel.module_name,
+                                                                        house_type_id: panel.house_type_id // house_type_id is now in panel object
                                                                     })}>
                                                                         {panel.panel_name} (Módulo: {panel.module_name})
                                                                     </li>
@@ -546,7 +552,8 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                         plan_id: panel.plan_id,
                                                         panel_definition_id: panel.panel_definition_id,
                                                         panel_name: panel.panel_name,
-                                                        module_name: panel.module_name
+                                                        module_name: panel.module_name,
+                                                        house_type_id: panel.house_type_id // house_type_id is now in panel object
                                                     })}>
                                                         {panel.panel_name} (Módulo: {panel.module_name})
                                                     </li>

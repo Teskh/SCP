@@ -75,9 +75,10 @@ def get_module_for_panel_production():
                 )
                 panels_info = [dict(row) for row in panel_defs_cursor.fetchall()]
 
-            logging.info(f"Module for next panel production: plan_id {plan_id}. Panels to produce: {panels_info}")
+            logging.info(f"Module for next panel production: plan_id {plan_id}. HouseType ID: {house_type_id}. Panels to produce: {panels_info}")
             return {
                 "plan_id": plan_id,
+                "house_type_id": house_type_id, # Add house_type_id here
                 "module_name": module_name_str,
                 "panels_to_produce": panels_info
             }
@@ -344,7 +345,8 @@ def get_current_station_panels(station_id):
             pd.panel_code,
             mpp.project_name,
             mpp.house_identifier,
-            mpp.module_number
+            mpp.module_number,
+            mpp.house_type_id -- Add house_type_id here
         FROM PanelProductionPlan ppp
         JOIN PanelDefinitions pd ON ppp.panel_definition_id = pd.panel_definition_id
         JOIN ModuleProductionPlan mpp ON ppp.plan_id = mpp.plan_id
@@ -358,6 +360,7 @@ def get_current_station_panels(station_id):
             'panel_production_plan_id': row['panel_production_plan_id'],
             'panel_definition_id': row['panel_definition_id'],
             'plan_id': row['plan_id'],
+            'house_type_id': row['house_type_id'], # Include house_type_id
             'module_name': f"{row['project_name']} - {row['house_identifier']} - Mod {row['module_number']}",
             'panel_name': row['panel_code']
         })
