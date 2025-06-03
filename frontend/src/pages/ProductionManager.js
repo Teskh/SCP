@@ -181,9 +181,11 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
         // Fetch materials for the selected task (if a task is selected and house_type_id is available)
         if (selectedPanelIdentifier.task_definition_id && currentHouseTypeId) {
+            console.log(`Fetching materials for Task ID: ${selectedPanelIdentifier.task_definition_id}, HouseType ID: ${currentHouseTypeId}`);
             setIsLoadingMaterials(true);
             adminService.getMaterialsForTask(selectedPanelIdentifier.task_definition_id, currentHouseTypeId)
                 .then(materialsData => {
+                    console.log("Materials fetched:", materialsData);
                     setMaterialsForSelectedTask(materialsData || []);
                 })
                 .catch(err => {
@@ -193,6 +195,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                 })
                 .finally(() => setIsLoadingMaterials(false));
         } else {
+            console.log("Not fetching materials: task_definition_id or house_type_id missing.", { task_id: selectedPanelIdentifier.task_definition_id, house_type_id: currentHouseTypeId });
             setMaterialsForSelectedTask([]);
             setMaterialsError('');
         }
