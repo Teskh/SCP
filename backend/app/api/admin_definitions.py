@@ -2,7 +2,7 @@ import logging
 import os # Import the os module
 import sqlite3
 from flask import Blueprint, request, jsonify
-from ..database import queries, connection, production_flow
+from ..database import queries, connection, production_flow, external_db_queries
 
 # Configure logging for this blueprint
 logger = logging.getLogger(__name__)
