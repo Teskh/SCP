@@ -201,6 +201,25 @@ def update_module_production_plan_item(plan_id, updates):
         logging.error(f"Error updating module production plan item: {e}", exc_info=True)
         return False
 
+def get_module_production_plan_item_by_id(plan_id):
+    """Fetches a single module production plan item by its ID, including related house type and sub-type names."""
+    db = get_db()
+    query = """
+        SELECT
+            mpp.plan_id, mpp.project_name, mpp.house_identifier, mpp.module_number,
+            mpp.planned_sequence, mpp.planned_start_datetime, mpp.planned_assembly_line,
+            mpp.status, mpp.created_at, mpp.updated_at,
+            ht.house_type_id, ht.name AS house_type_name,
+            hst.sub_type_id, hst.name AS sub_type_name
+        FROM ModuleProductionPlan mpp
+        JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+        LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+        WHERE mpp.plan_id = ?
+    """
+    cursor = db.execute(query, (plan_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
 def delete_module_production_plan_item(plan_id):
     """Deletes a module production plan item."""
     db = get_db()
