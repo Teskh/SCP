@@ -887,6 +887,17 @@ def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, sta
     now_utc_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
     try:
+        # Verify the task_definition_id is for a module task
+        task_def_cursor = db.execute(
+            "SELECT is_panel_task FROM TaskDefinitions WHERE task_definition_id = ?",
+            (task_definition_id,)
+        )
+        task_def_row = task_def_cursor.fetchone()
+        if not task_def_row:
+            return {"error": f"TaskDefinition with id {task_definition_id} not found."}
+        if task_def_row['is_panel_task'] == 1:
+            return {"error": f"TaskDefinition id {task_definition_id} is a panel task, not a module task. Cannot start with start_module_task."}
+
         # Check current module status and station details
         module_cursor = db.execute(
             "SELECT status, planned_assembly_line FROM ModuleProductionPlan WHERE plan_id = ?", (plan_id,)
@@ -922,7 +933,7 @@ def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, sta
         # More complex scenarios (re-doing tasks) might need different handling.
         existing_log_cursor = db.execute(
             """SELECT task_log_id, status FROM TaskLogs
-               WHERE plan_id = ? AND task_definition_id = ? AND is_panel_task = 0""", # Ensure it's a module task log
+               WHERE plan_id = ? AND task_definition_id = ?""",
             (plan_id, task_definition_id)
         )
         existing_log_row = existing_log_cursor.fetchone()
@@ -954,8 +965,8 @@ def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, sta
         else:
             # Create new TaskLog entry
             cursor = db.execute(
-                """INSERT INTO TaskLogs (plan_id, task_definition_id, worker_id, status, started_at, station_start, is_panel_task)
-                   VALUES (?, ?, ?, 'In Progress', ?, ?, 0)""",
+                """INSERT INTO TaskLogs (plan_id, task_definition_id, worker_id, status, started_at, station_start)
+                   VALUES (?, ?, ?, 'In Progress', ?, ?)""",
                 (plan_id, task_definition_id, worker_id, now_utc_str, station_id)
             )
             log_id = cursor.lastrowid
@@ -997,21 +1008,38 @@ def finish_module_task(task_log_id: int, worker_id: int, station_id: str, notes:
     consumed_panels_info = None
 
     try:
+        # --- BEGIN NEW PRE-CHECK ---
+        task_def_info_cursor = db.execute(
+            """SELECT td.is_panel_task
+               FROM TaskLogs tl
+               JOIN TaskDefinitions td ON tl.task_definition_id = td.task_definition_id
+               WHERE tl.task_log_id = ?""",
+            (task_log_id,)
+        )
+        task_def_info = task_def_info_cursor.fetchone()
+
+        if not task_def_info:
+            return {"error": f"TaskLog with id {task_log_id} not found."}
+        
+        if task_def_info['is_panel_task'] == 1:
+            return {"error": f"TaskLog id {task_log_id} is for a panel task. Use the finish_panel_task endpoint."}
+        # --- END NEW PRE-CHECK ---
+
         # Update TaskLog to 'Completed'
         cursor = db.execute(
             """UPDATE TaskLogs
                SET status = 'Completed', completed_at = ?, worker_id = ?, station_finish = ?, notes = ?
-               WHERE task_log_id = ? AND is_panel_task = 0""",
+               WHERE task_log_id = ?""",
             (now_utc_str, worker_id, station_id, notes, task_log_id)
         )
         if cursor.rowcount == 0:
-            log_check_cursor = db.execute("SELECT is_panel_task FROM TaskLogs WHERE task_log_id = ?", (task_log_id,))
-            log_check = log_check_cursor.fetchone()
-            if not log_check:
-                 return {"error": f"TaskLog with id {task_log_id} not found."}
-            if log_check['is_panel_task'] == 1:
-                 return {"error": f"TaskLog id {task_log_id} is a panel task, not a module task."}
-            return {"error": f"Module TaskLog with id {task_log_id} not updated (already completed or other issue)."}
+            # The pre-check confirmed it's a module task and exists.
+            # If no rows were updated, it might be because the task was not in a state to be completed (e.g., already 'Completed').
+            current_status_cursor = db.execute("SELECT status FROM TaskLogs WHERE task_log_id = ?", (task_log_id,))
+            current_status_row = current_status_cursor.fetchone()
+            current_status = current_status_row['status'] if current_status_row else "UNKNOWN"
+            logging.warning(f"Module TaskLog {task_log_id} not updated by finish_module_task. Current status: {current_status}. Might be already completed or not in a state to be finished.")
+            return {"error": f"Module TaskLog with id {task_log_id} not updated (current status: {current_status})."}
 
         # Get plan_id from the completed task log
         log_info_cursor = db.execute(
@@ -1063,7 +1091,7 @@ def finish_module_task(task_log_id: int, worker_id: int, station_id: str, notes:
                 f"""SELECT COUNT(DISTINCT task_definition_id) as completed_count FROM TaskLogs
                    WHERE plan_id = ?
                      AND task_definition_id IN ({placeholders})
-                     AND status = 'Completed' AND is_panel_task = 0""",
+                     AND status = 'Completed'""",
                 [current_plan_id] + required_task_def_ids
             )
             completed_count = completed_tasks_cursor.fetchone()['completed_count']
