@@ -983,3 +983,153 @@ def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, sta
         return {"error": f"Unexpected error: {e}"}
 
 
+def finish_module_task(task_log_id: int, worker_id: int, station_id: str, notes: str = None):
+    """
+    Marks a module task (non-panel task) as completed.
+    Checks if all module tasks for the module at the current station are done.
+    If so, advances the module to the next station in the same line type,
+    or marks the module as 'Completed' if it's the last station.
+    If module completes, associated panels are marked 'Consumed'.
+    """
+    db = get_db()
+    now_utc_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    updated_mpp_details = None
+    consumed_panels_info = None
+
+    try:
+        # Update TaskLog to 'Completed'
+        cursor = db.execute(
+            """UPDATE TaskLogs
+               SET status = 'Completed', completed_at = ?, worker_id = ?, station_finish = ?, notes = ?
+               WHERE task_log_id = ? AND is_panel_task = 0""",
+            (now_utc_str, worker_id, station_id, notes, task_log_id)
+        )
+        if cursor.rowcount == 0:
+            log_check_cursor = db.execute("SELECT is_panel_task FROM TaskLogs WHERE task_log_id = ?", (task_log_id,))
+            log_check = log_check_cursor.fetchone()
+            if not log_check:
+                 return {"error": f"TaskLog with id {task_log_id} not found."}
+            if log_check['is_panel_task'] == 1:
+                 return {"error": f"TaskLog id {task_log_id} is a panel task, not a module task."}
+            return {"error": f"Module TaskLog with id {task_log_id} not updated (already completed or other issue)."}
+
+        # Get plan_id from the completed task log
+        log_info_cursor = db.execute(
+            "SELECT plan_id FROM TaskLogs WHERE task_log_id = ?", (task_log_id,)
+        )
+        log_info = log_info_cursor.fetchone()
+        if not log_info:
+            db.rollback()
+            return {"error": "Failed to retrieve log info after update."}
+        
+        current_plan_id = log_info['plan_id']
+
+        # Get module's house_type_id
+        mpp_cursor = db.execute("SELECT house_type_id FROM ModuleProductionPlan WHERE plan_id = ?", (current_plan_id,))
+        mpp_info = mpp_cursor.fetchone()
+        if not mpp_info:
+            db.rollback()
+            return {"error": f"ModuleProductionPlan not found for plan_id {current_plan_id}."}
+        house_type_id = mpp_info['house_type_id']
+
+        # Get current station's sequence_order and line_type
+        current_station_info_cursor = db.execute("SELECT sequence_order, line_type FROM Stations WHERE station_id = ?", (station_id,))
+        current_station_info = current_station_info_cursor.fetchone()
+        if not current_station_info:
+            db.rollback()
+            return {"error": f"Station {station_id} not found."}
+        current_station_sequence = current_station_info['sequence_order']
+        current_station_line_type = current_station_info['line_type']
+
+        # Get all relevant module task definitions for this house_type at this station sequence
+        required_tasks_cursor = db.execute(
+            """SELECT td.task_definition_id FROM TaskDefinitions td
+               WHERE (td.house_type_id = ? OR td.house_type_id IS NULL)
+                 AND td.is_panel_task = 0
+                 AND td.station_sequence_order = ?""",
+            (house_type_id, current_station_sequence)
+        )
+        required_task_defs = required_tasks_cursor.fetchall()
+        
+        all_module_tasks_completed_at_station = False
+        if not required_task_defs:
+            logging.info(f"No specific module tasks defined for house_type {house_type_id} at station sequence {current_station_sequence}. Assuming all tasks complete for progression.")
+            all_module_tasks_completed_at_station = True
+        else:
+            required_task_def_ids = [row['task_definition_id'] for row in required_task_defs]
+            placeholders = ','.join('?' for _ in required_task_def_ids)
+
+            completed_tasks_cursor = db.execute(
+                f"""SELECT COUNT(DISTINCT task_definition_id) as completed_count FROM TaskLogs
+                   WHERE plan_id = ?
+                     AND task_definition_id IN ({placeholders})
+                     AND status = 'Completed' AND is_panel_task = 0""",
+                [current_plan_id] + required_task_def_ids
+            )
+            completed_count = completed_tasks_cursor.fetchone()['completed_count']
+            all_module_tasks_completed_at_station = (completed_count == len(required_task_def_ids))
+
+        if all_module_tasks_completed_at_station:
+            logging.info(f"All module tasks for plan {current_plan_id} at station {station_id} (seq {current_station_sequence}, line {current_station_line_type}) are completed.")
+            
+            # Find next station in the same line type
+            next_station_cursor = db.execute(
+                """SELECT station_id FROM Stations
+                   WHERE line_type = ? AND sequence_order > ?
+                   ORDER BY sequence_order ASC LIMIT 1""",
+                (current_station_line_type, current_station_sequence)
+            )
+            next_station_row = next_station_cursor.fetchone()
+
+            mpp_update_fields = {"updated_at": now_utc_str}
+            if next_station_row:
+                mpp_update_fields["current_station"] = next_station_row['station_id']
+                logging.info(f"Module {current_plan_id} moved to next station: {next_station_row['station_id']}.")
+            else: # No next station in this line type (e.g., last assembly station)
+                mpp_update_fields["current_station"] = None
+                mpp_update_fields["status"] = 'Completed'
+                mpp_update_fields["completed_at"] = now_utc_str
+                logging.info(f"Module {current_plan_id} completed all stations in line {current_station_line_type}. Status set to 'Completed'.")
+
+                # Mark all associated panels in PanelProductionPlan as 'Consumed'
+                panel_update_cursor = db.execute(
+                    """UPDATE PanelProductionPlan
+                       SET status = 'Consumed', current_station = NULL, updated_at = ?
+                       WHERE plan_id = ?""",
+                    (now_utc_str, current_plan_id)
+                )
+                logging.info(f"Marked {panel_update_cursor.rowcount} panels as 'Consumed' for completed module {current_plan_id}.")
+                consumed_panels_info = {"plan_id": current_plan_id, "panels_consumed_count": panel_update_cursor.rowcount}
+
+            set_clauses = ", ".join([f"{key} = ?" for key in mpp_update_fields.keys()])
+            params = list(mpp_update_fields.values()) + [current_plan_id]
+            
+            db.execute(
+                f"UPDATE ModuleProductionPlan SET {set_clauses} WHERE plan_id = ?",
+                params
+            )
+            
+            updated_mpp_cursor = db.execute(
+                "SELECT * FROM ModuleProductionPlan WHERE plan_id = ?", (current_plan_id,)
+            )
+            updated_mpp_details = dict(updated_mpp_cursor.fetchone())
+
+        db.commit()
+        logging.info(f"Module task_log_id {task_log_id} finished by worker {worker_id} at station {station_id}. Notes: {notes}")
+        response = {"success": True, "message": f"Module task {task_log_id} completed."}
+        if updated_mpp_details:
+            response["module_production_plan_update"] = updated_mpp_details
+        if consumed_panels_info:
+            response["panels_consumed_update"] = consumed_panels_info
+        return response
+
+    except sqlite3.Error as e:
+        db.rollback()
+        logging.error(f"Database error in finish_module_task for task_log_id {task_log_id}: {e}", exc_info=True)
+        return {"error": f"Database error: {e}"}
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Unexpected error in finish_module_task for task_log_id {task_log_id}: {e}", exc_info=True)
+        return {"error": f"Unexpected error: {e}"}
+
+
