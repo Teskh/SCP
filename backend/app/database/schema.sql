@@ -197,12 +197,7 @@ CREATE INDEX idx_paneltasklogs_station_finish ON PanelTaskLogs (station_finish);
 -- TaskPauses
 CREATE INDEX idx_taskpauses_tasklog ON TaskPauses (task_log_id);
 CREATE INDEX idx_taskpauses_paneltasklog ON TaskPauses (panel_task_log_id);
--- ProjectModules
--- CREATE INDEX idx_projectmodules_project ON ProjectModules (project_id); -- project_id removed
 CREATE INDEX idx_projectmodules_house_type ON ProjectModules (house_type_id);
--- Projects table removed, so these are no longer needed:
--- CREATE INDEX idx_projects_name ON Projects (name);
--- CREATE INDEX idx_projects_status ON Projects (status);
 
 -- ========= House Types and Parameters =========
 

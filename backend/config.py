@@ -14,8 +14,6 @@ class Config:
     # Disable modification tracking for SQLAlchemy if not needed, reduces overhead
     SQLALCHEMY_TRACK_MODIFICATIONS = False # Although we are not using SQLAlchemy yet, good practice
 
-    # Default path for the external projects database, relative to the 'backend' directory's parent
-    # e.g., if backend is /app/backend/, this will resolve to /app/2025.03.04 SPGXI/projects.db
     DEFAULT_EXTERNAL_PROJECTS_DB_PATH = os.path.join(project_root, '..', '2025.03.04 SPGXI', 'projects.db')
     EXTERNAL_PROJECTS_DB_PATH = os.environ.get('EXTERNAL_EXTERNAL_PROJECTS_DB_PATH', DEFAULT_EXTERNAL_PROJECTS_DB_PATH)
 
