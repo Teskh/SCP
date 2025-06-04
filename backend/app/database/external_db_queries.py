@@ -252,18 +252,19 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
                         for mat_dict in applicable_mats_for_item:
                             bom_cursor = project_db_conn.cursor()
                             bom_cursor.execute(
-                                "SELECT quantity, unit, assembly_kit FROM Bill_Of_Materials WHERE project_id = ? AND material_id = ?",
+                                "SELECT quantity, assembly_kit FROM Bill_Of_Materials WHERE project_id = ? AND material_id = ?",
                                 (linked_project_id, mat_dict['material_id'])
                             )
                             bom_data = bom_cursor.fetchone()
                             if bom_data:
                                 mat_dict['quantity'] = bom_data['quantity']
-                                mat_dict['unit'] = bom_data['unit'] if bom_data['unit'] else mat_dict.get('Units') # Prioritize BOM unit
+                                # 'unit' is now solely from mat_dict.get('Units') from main.db
                                 mat_dict['assembly_kit'] = bom_data['assembly_kit']
                             else:
                                 mat_dict['quantity'] = 0 # Default quantity if not in BOM for this project
-                                # mat_dict['unit'] will use mat_dict.get('Units') from main.db by default if not set here
                                 mat_dict['assembly_kit'] = None
+                            # Ensure 'unit' key exists, using the value from main.db's Materials.Units
+                            mat_dict['unit'] = mat_dict.get('Units')
                             processed_mats_for_item.append(mat_dict)
                         
                         materials_list.extend(processed_mats_for_item)
@@ -301,17 +302,19 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
                         for mat_dict in applicable_mats_for_accessory:
                             bom_cursor = project_db_conn.cursor()
                             bom_cursor.execute(
-                                "SELECT quantity, unit, assembly_kit FROM Bill_Of_Materials WHERE project_id = ? AND material_id = ?",
+                                "SELECT quantity, assembly_kit FROM Bill_Of_Materials WHERE project_id = ? AND material_id = ?",
                                 (linked_project_id, mat_dict['material_id'])
                             )
                             bom_data = bom_cursor.fetchone()
                             if bom_data:
                                 mat_dict['quantity'] = bom_data['quantity']
-                                mat_dict['unit'] = bom_data['unit'] if bom_data['unit'] else mat_dict.get('Units') # Prioritize BOM unit
+                                # 'unit' is now solely from mat_dict.get('Units') from main.db
                                 mat_dict['assembly_kit'] = bom_data['assembly_kit']
                             else:
                                 mat_dict['quantity'] = 0 # Default quantity if not in BOM for this project
                                 mat_dict['assembly_kit'] = None
+                            # Ensure 'unit' key exists, using the value from main.db's Materials.Units
+                            mat_dict['unit'] = mat_dict.get('Units')
                             processed_mats_for_accessory.append(mat_dict)
 
                         materials_list.extend(processed_mats_for_accessory)
