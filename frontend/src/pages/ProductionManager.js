@@ -691,9 +691,6 @@ const listItemStyle = {
     borderBottom: '1px solid #eee',
 };
 
-listItemStyle[':last-child'] = {
-    borderBottom: 'none',
-};
 
 const moduleInfoBoxStyle = {
     marginTop: '20px',

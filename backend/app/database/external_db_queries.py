@@ -3,6 +3,7 @@ import logging
 import json
 import os
 from flask import current_app # To access app.config
+from .connection import get_db # Import the main DB connection helper
 
 logger = logging.getLogger(__name__)
 
@@ -192,18 +193,16 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
     # 1. Get linked_project_id from HouseType
     # Use the main application's database connection for HouseTypes
     try:
-        db = sqlite3.connect(current_app.config['DATABASE_URI'].replace('sqlite:///', ''), uri=True)
-        db.row_factory = sqlite3.Row
-        house_type_cursor = db.execute("SELECT linked_project_id FROM HouseTypes WHERE house_type_id = ?", (house_type_id,))
+        # Use the Flask-managed main database connection
+        main_db_conn = get_db()
+        house_type_cursor = main_db_conn.execute("SELECT linked_project_id FROM HouseTypes WHERE house_type_id = ?", (house_type_id,))
         house_type_info = house_type_cursor.fetchone()
-        db.close()
     except sqlite3.Error as e:
         logger.error(f"Database error connecting to main DB or querying HouseTypes for house_type_id {house_type_id}: {e}", exc_info=True)
         return []
     except Exception as e:
         logger.error(f"Unexpected error querying HouseTypes for house_type_id {house_type_id}: {e}", exc_info=True)
         return []
-
 
     if not house_type_info or house_type_info['linked_project_id'] is None:
         logger.info(f"HouseType {house_type_id} is not linked to an external project (linked_project_id is NULL or HouseType not found). No materials to fetch based on project context.")
@@ -213,7 +212,8 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
     logger.info(f"HouseType {house_type_id} linked to project ID: {linked_project_id}")
 
     try:
-        with _connect_to_external_db(main_db_path) as main_db_conn:
+        # Use the Flask-managed main database connection for subsequent queries
+        with get_db() as main_db_conn:
             with _connect_to_external_db(project_db_path) as project_db_conn:
                 # 2. Find Items linked to this task_definition_id in main.db
                 main_db_cursor = main_db_conn.cursor()
