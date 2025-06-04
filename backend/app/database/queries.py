@@ -369,11 +369,11 @@ def update_task_definition(task_definition_id, name, description, house_type_id,
         logging.error(f"Error updating task definition {task_definition_id}: {e}", exc_info=True)
         return False
 
-def get_potential_task_dependencies(current_station_sequence_order, is_panel_task_filter=None):
+def get_potential_task_dependencies(current_task_station_seq_order, current_task_is_panel_task):
     """
-    Fetches task definitions that could be prerequisites.
-    Potential prerequisites must be from stations with a lower sequence order
-    or no specific station. Optionally filters by is_panel_task.
+    Fetches task definitions that could be prerequisites for the current task being defined/edited.
+    - current_task_station_seq_order: The station_sequence_order of the task being defined. Can be None.
+    - current_task_is_panel_task: Boolean, True if the task being defined is a panel task.
     """
     db = get_db()
     base_query = """
@@ -381,27 +381,50 @@ def get_potential_task_dependencies(current_station_sequence_order, is_panel_tas
             td.task_definition_id,
             td.name,
             td.station_sequence_order,
-            td.task_dependencies,
+            td.task_dependencies, -- This is of the potential dependency, not the current task
             td.is_panel_task
         FROM TaskDefinitions td
     """
-    conditions = []
+    
+    conditions_list = []  # Stores individual OR conditions as strings
     params = []
 
-    if current_station_sequence_order is not None and current_station_sequence_order > 0:
-        conditions.append("(td.station_sequence_order < ? OR td.station_sequence_order IS NULL)")
-        params.append(current_station_sequence_order)
-    else: # Only fetch tasks with NULL station_sequence_order if no specific station context
-        conditions.append("td.station_sequence_order IS NULL")
+    if current_task_is_panel_task:
+        # Current task is a PANEL task.
+        # Dependencies can be:
+        # 1. Other PANEL tasks in the same or preceding panel stations (sequence_order 1-5).
+        if current_task_station_seq_order is not None and 1 <= current_task_station_seq_order <= 5:
+            conditions_list.append("(td.is_panel_task = 1 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order <= ?)")
+            params.append(current_task_station_seq_order)
+        
+        # 2. General PANEL tasks (station_sequence_order IS NULL, td.is_panel_task = 1).
+        conditions_list.append("(td.is_panel_task = 1 AND td.station_sequence_order IS NULL)")
 
-    if is_panel_task_filter is not None:
-        conditions.append("td.is_panel_task = ?")
-        params.append(is_panel_task_filter)
+    else:
+        # Current task is a MODULE task.
+        # Dependencies can be:
+        # 1. All specific PANEL tasks (from stations 1-5, td.is_panel_task = 1).
+        conditions_list.append("(td.is_panel_task = 1 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order >= 1 AND td.station_sequence_order <= 5)")
 
-    if conditions:
-        base_query += " WHERE " + " AND ".join(conditions)
+        # 2. MODULE tasks in the same or preceding assembly stations (sequence_order 7-12),
+        #    if the current task is in an assembly station.
+        if current_task_station_seq_order is not None and current_task_station_seq_order >= 7: # Current task in assembly station (7-12)
+            conditions_list.append("(td.is_panel_task = 0 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order >= 7 AND td.station_sequence_order <= ?)")
+            params.append(current_task_station_seq_order)
+        
+        # 3. General MODULE tasks (station_sequence_order IS NULL, td.is_panel_task = 0).
+        conditions_list.append("(td.is_panel_task = 0 AND td.station_sequence_order IS NULL)")
 
-    base_query += " ORDER BY td.station_sequence_order, td.name;"
+    if conditions_list:
+        base_query += " WHERE (" + " OR ".join(conditions_list) + ")"
+    else:
+        # Fallback: if no valid conditions are generated, show no dependencies.
+        # This might happen if current_task_is_panel_task is somehow not boolean or
+        # current_task_station_seq_order is out of expected ranges for panel tasks.
+        base_query += " WHERE 1=0" # Effectively false, returns no rows
+
+    base_query += " ORDER BY td.station_sequence_order NULLS FIRST, td.is_panel_task, td.name;"
+    
     cursor = db.execute(base_query, params)
     potential_deps = cursor.fetchall()
     return [dict(row) for row in potential_deps]

@@ -961,32 +961,42 @@ def delete_task_definition_route(task_definition_id):
 def get_potential_dependencies_route():
     """
     Get potential task dependencies.
-    Requires 'current_station_sequence_order' (optional) and 'is_panel_task' (optional) query parameters.
+    Parameters from query string:
+    - 'station_sequence_order': The station_sequence_order of the task being defined/edited. Optional.
+    - 'is_panel_task': Boolean indicating if the task being defined/edited is a panel task. Required.
     """
-    sequence_order_str = request.args.get('current_station_sequence_order')
+    station_seq_order_str = request.args.get('station_sequence_order') # Renamed for clarity from 'current_station_sequence_order'
     is_panel_task_str = request.args.get('is_panel_task')
 
-    current_sequence_order = None
-    if sequence_order_str and sequence_order_str.lower() != 'null' and sequence_order_str != '':
+    current_task_station_seq_order = None
+    if station_seq_order_str and station_seq_order_str.lower() != 'null' and station_seq_order_str != '':
         try:
-            current_sequence_order = int(sequence_order_str)
-            if current_sequence_order <= 0: raise ValueError()
+            current_task_station_seq_order = int(station_seq_order_str)
+            # Basic validation, detailed validation (1-12) might be too strict here if db allows other values
+            if current_task_station_seq_order <= 0: 
+                logger.warning(f"Received non-positive station_sequence_order: {current_task_station_seq_order}")
+                # Allow it to pass to query, which might handle it or return empty if it's truly invalid for context
         except ValueError:
-            return jsonify(error="Invalid 'current_station_sequence_order'. Must be a positive integer."), 400
+            return jsonify(error="Invalid 'station_sequence_order'. Must be an integer if provided."), 400
 
-    is_panel_task_filter = None
-    if is_panel_task_str is not None:
-        if is_panel_task_str.lower() in ['true', '1']:
-            is_panel_task_filter = 1
-        elif is_panel_task_str.lower() in ['false', '0']:
-            is_panel_task_filter = 0
-        else:
-            return jsonify(error="Invalid 'is_panel_task' parameter. Must be boolean-like (true/false, 1/0)."), 400
+    if is_panel_task_str is None:
+        return jsonify(error="Missing required 'is_panel_task' query parameter."), 400
+
+    current_task_is_panel_task_bool = None
+    if is_panel_task_str.lower() in ['true', '1']:
+        current_task_is_panel_task_bool = True
+    elif is_panel_task_str.lower() in ['false', '0']:
+        current_task_is_panel_task_bool = False
+    else:
+        return jsonify(error="Invalid 'is_panel_task' parameter. Must be boolean-like (true/false, 1/0)."), 400
             
     try:
-        potential_deps = queries.get_potential_task_dependencies(current_sequence_order, is_panel_task_filter)
+        # Call the updated query function with parameters for the *current task*
+        potential_deps = queries.get_potential_task_dependencies(current_task_station_seq_order, current_task_is_panel_task_bool)
+        # The 'has_dependencies' field on each dep is about whether *that dependency* itself has further dependencies.
+        # This might not be needed by the frontend for the picker, but keeping it for now.
         for dep in potential_deps:
-            dep['has_dependencies'] = bool(dep.get('task_dependencies'))
+            dep['has_dependencies'] = bool(dep.get('task_dependencies')) # Checks if the *potential dependency task* has its own deps
         return jsonify(potential_deps)
     except Exception as e:
         logger.error(f"Error fetching potential task dependencies: {e}", exc_info=True)
