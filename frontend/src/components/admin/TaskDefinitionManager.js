@@ -142,7 +142,11 @@ function TaskDefinitionManager() {
             house_type_id: taskDef.house_type_id?.toString() || '',
             specialty_id: taskDef.specialty_id?.toString() || '',
             station_sequence_order: taskDef.station_sequence_order?.toString() || '',
-            task_dependencies: Array.isArray(taskDef.task_dependencies) ? taskDef.task_dependencies.map(String) : (taskDef.task_dependencies ? String(taskDef.task_dependencies).split(',').map(String) : [])
+            task_dependencies: Array.isArray(taskDef.task_dependencies) 
+                ? taskDef.task_dependencies.map(String).filter(dep => dep && dep.trim() !== '') 
+                : (taskDef.task_dependencies 
+                    ? String(taskDef.task_dependencies).split(',').map(s => s.trim()).filter(s => s !== '') 
+                    : [])
         });
         window.scrollTo(0, 0);
     };
@@ -167,7 +171,7 @@ function TaskDefinitionManager() {
             specialty_id: formData.specialty_id || null,
             station_sequence_order: currentStationOrder ? parseInt(currentStationOrder, 10) : null,
             is_panel_task: derivedIsPanelTaskForSubmit,
-            task_dependencies: formData.task_dependencies.join(','), // Convert to comma-separated string for backend
+            task_dependencies: formData.task_dependencies.filter(dep => dep && dep.trim() !== '').join(','), // Ensure only valid IDs are joined
         };
 
         try {
