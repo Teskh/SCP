@@ -856,16 +856,20 @@ def add_task_definition_route():
     house_type_id = data.get('house_type_id')
     specialty_id = data.get('specialty_id')
     station_sequence_order = data.get('station_sequence_order')
-    task_dependencies_input = data.get('task_dependencies', [])
-    is_panel_task = data.get('is_panel_task')
+    task_dependencies_input = data.get('task_dependencies', "") # Default to empty string, as sent by frontend
+    is_panel_task = data.get('is_panel_task') # This will be True/False from JSON
 
     try:
         station_seq_int = int(station_sequence_order) if station_sequence_order is not None else None
-        is_panel_task_bool = bool(int(is_panel_task))
+        # is_panel_task is already a boolean from JSON payload (True/False)
+        is_panel_task_bool = bool(is_panel_task) 
     except (ValueError, TypeError):
-        return jsonify(error="Invalid station_sequence_order (must be integer or null) or is_panel_task (must be 0 or 1)"), 400
+        # Error mainly for station_sequence_order if it's not a valid integer string
+        return jsonify(error="Invalid station_sequence_order (must be integer or null)"), 400
 
-    task_dependencies_str = ",".join(map(str, task_dependencies_input)) if task_dependencies_input else None
+    # task_dependencies_input is already a string like "1,2,3" or "" from the frontend.
+    # If it's an empty string, make it None for the database. Otherwise, use as is.
+    task_dependencies_str = task_dependencies_input if task_dependencies_input else None
 
     try:
         new_id = queries.add_task_definition(
@@ -900,16 +904,20 @@ def update_task_definition_route(task_definition_id):
     house_type_id = data.get('house_type_id')
     specialty_id = data.get('specialty_id')
     station_sequence_order = data.get('station_sequence_order')
-    task_dependencies_input = data.get('task_dependencies', [])
-    is_panel_task = data.get('is_panel_task')
+    task_dependencies_input = data.get('task_dependencies', "") # Default to empty string, as sent by frontend
+    is_panel_task = data.get('is_panel_task') # This will be True/False from JSON
 
     try:
         station_seq_int = int(station_sequence_order) if station_sequence_order is not None else None
-        is_panel_task_bool = bool(int(is_panel_task))
+        # is_panel_task is already a boolean from JSON payload (True/False)
+        is_panel_task_bool = bool(is_panel_task)
     except (ValueError, TypeError):
-        return jsonify(error="Invalid station_sequence_order (must be integer or null) or is_panel_task (must be 0 or 1)"), 400
+        # Error mainly for station_sequence_order if it's not a valid integer string
+        return jsonify(error="Invalid station_sequence_order (must be integer or null)"), 400
 
-    task_dependencies_str = ",".join(map(str, task_dependencies_input)) if task_dependencies_input else None
+    # task_dependencies_input is already a string like "1,2,3" or "" from the frontend.
+    # If it's an empty string, make it None for the database. Otherwise, use as is.
+    task_dependencies_str = task_dependencies_input if task_dependencies_input else None
 
     try:
         success = queries.update_task_definition(
