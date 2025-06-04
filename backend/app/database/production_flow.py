@@ -168,7 +168,7 @@ def get_station_status_and_upcoming_modules():
             'content': {
                 'modules_with_active_panels': [], # For W stations
                 'modules_in_magazine': [],        # For M1 station (modules physically in magazine)
-                'modules_with_active_tasks': [],   # For A, B, C stations (modules already in assembly)
+                'modules_present_at_assembly_station': [], # NEW for A, B, C stations
                 'magazine_modules_for_assembly': [] # For Assembly Station 1 to pull from logical 'Magazine' status
             }
         }
@@ -251,50 +251,62 @@ def get_station_status_and_upcoming_modules():
                 })
 
         elif line_type in ['A', 'B', 'C']: # Assembly lines
-            assembly_tasks_cursor = db.execute("""
+            # Fetch modules physically at this assembly station
+            modules_physically_at_station_cursor = db.execute("""
                 SELECT
                     mpp.plan_id, mpp.project_name, mpp.house_identifier, mpp.module_number,
                     mpp.house_type_id, ht.name as house_type_name, ht.number_of_modules,
                     mpp.sub_type_id, hst.name as sub_type_name, mpp.status as module_status,
-                    td.task_definition_id, td.name as task_name, td.description as task_description,
-                    tl.task_log_id, tl.status as task_status, tl.started_at
-                FROM TaskLogs tl
-                JOIN ModuleProductionPlan mpp ON tl.plan_id = mpp.plan_id
-                JOIN TaskDefinitions td ON tl.task_definition_id = td.task_definition_id
+                    mpp.current_station, mpp.planned_assembly_line
+                FROM ModuleProductionPlan mpp
                 JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
                 LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
-                WHERE tl.station_start = ? AND tl.status = 'In Progress' AND td.is_panel_task = 0
-                ORDER BY mpp.planned_sequence, td.name
+                WHERE mpp.current_station = ? AND mpp.status = 'Assembly'
+                ORDER BY mpp.planned_sequence ASC
             """, (station_id,))
 
-            modules_at_assembly_station = {}
-            for row_data in assembly_tasks_cursor.fetchall():
-                row = dict(row_data)
-                if row['plan_id'] not in modules_at_assembly_station:
-                    modules_at_assembly_station[row['plan_id']] = {
-                        'plan_id': row['plan_id'],
-                        'project_name': row['project_name'],
-                        'house_identifier': row['house_identifier'],
-                        'module_number': row['module_number'],
-                        'module_sequence_in_house': row['module_number'],
-                        'status': row['module_status'],
-                        'house_type_name': row['house_type_name'],
-                        'house_type_id': row['house_type_id'],
-                        'number_of_modules': row['number_of_modules'],
-                        'sub_type_name': row.get('sub_type_name'),
-                        'sub_type_id': row.get('sub_type_id'),
-                        'active_module_tasks_at_station': []
-                    }
-                modules_at_assembly_station[row['plan_id']]['active_module_tasks_at_station'].append({
-                    'task_log_id': row['task_log_id'],
-                    'task_definition_id': row['task_definition_id'],
-                    'task_name': row['task_name'],
-                    'task_description': row['task_description'],
-                    'status': row['task_status'],
-                    'started_at': row['started_at']
-                })
-            station_data['content']['modules_with_active_tasks'] = list(modules_at_assembly_station.values())
+            current_station_modules_list = []
+            for module_row_data in modules_physically_at_station_cursor.fetchall():
+                module_row = dict(module_row_data)
+                plan_id = module_row['plan_id']
+                house_type_id = module_row['house_type_id']
+                station_sequence_order = station_info['sequence_order']
 
+                # Fetch eligible tasks for this module at this station
+                eligible_tasks_cursor = db.execute("""
+                    SELECT 
+                        td.task_definition_id, td.name, td.description, td.specialty_id,
+                        td.station_sequence_order,
+                        COALESCE(tl.status, 'Not Started') as status,
+                        tl.task_log_id, tl.started_at, tl.completed_at, tl.station_start, tl.station_finish
+                    FROM TaskDefinitions td
+                    LEFT JOIN TaskLogs tl ON td.task_definition_id = tl.task_definition_id AND tl.plan_id = ?
+                    WHERE (td.house_type_id = ? OR td.house_type_id IS NULL)
+                      AND td.is_panel_task = 0
+                      AND td.station_sequence_order = ? 
+                      AND COALESCE(tl.status, 'Not Started') != 'Completed'
+                    ORDER BY td.name
+                """, (plan_id, house_type_id, station_sequence_order))
+                
+                eligible_tasks = [dict(task_row) for task_row in eligible_tasks_cursor.fetchall()]
+
+                current_station_modules_list.append({
+                    'plan_id': plan_id,
+                    'project_name': module_row['project_name'],
+                    'house_identifier': module_row['house_identifier'],
+                    'module_number': module_row['module_number'],
+                    'status': module_row['module_status'], 
+                    'house_type_name': module_row['house_type_name'],
+                    'house_type_id': house_type_id,
+                    'number_of_modules': module_row['number_of_modules'],
+                    'sub_type_name': module_row.get('sub_type_name'),
+                    'sub_type_id': module_row.get('sub_type_id'),
+                    'planned_assembly_line': module_row.get('planned_assembly_line'),
+                    'current_station': module_row.get('current_station'),
+                    'eligible_tasks': eligible_tasks 
+                })
+            station_data['content']['modules_present_at_assembly_station'] = current_station_modules_list
+            
             # If this is Assembly Station 1 (sequence_order 7), also fetch 'Magazine' status modules
             if station_info['sequence_order'] == 7:
                 magazine_for_assembly_cursor = db.execute("""

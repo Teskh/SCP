@@ -180,11 +180,13 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     if (stationDetail) {
                         // Combine modules already at station and magazine modules if it's assembly station 1 (seq 7)
                         let combinedModules = [];
-                        if (stationDetail.content.modules_with_active_tasks) {
+                        // Modules physically at this assembly station (e.g. A2, A3, B2)
+                        if (stationDetail.content.modules_present_at_assembly_station) {
                             combinedModules = combinedModules.concat(
-                                stationDetail.content.modules_with_active_tasks.map(m => ({...m, source: 'active_station'}))
+                                stationDetail.content.modules_present_at_assembly_station.map(m => ({...m, source: 'at_station'}))
                             );
                         }
+                        // Modules from magazine, specifically for assembly station 1 (sequence_order 7)
                         if (currentStation.sequence_order === 7 && stationDetail.content.magazine_modules_for_assembly) {
                              combinedModules = combinedModules.concat(
                                 stationDetail.content.magazine_modules_for_assembly.map(m => ({...m, source: 'magazine'}))
@@ -303,13 +305,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             plan_id: moduleData.plan_id,
             module_name: `${moduleData.project_name} - ${moduleData.house_identifier} - Mod ${moduleData.module_number}`,
             house_type_id: moduleData.house_type_id,
-            // If moduleData.source is 'active_station', tasks are in 'active_module_tasks_at_station'
-            // If moduleData.source is 'magazine', tasks are in 'eligible_tasks'
-            eligible_tasks: moduleData.source === 'active_station' 
-                            ? (moduleData.active_module_tasks_at_station || []) 
-                            : (moduleData.eligible_tasks || []),
-            source: moduleData.source, // Keep track of where the module data came from
-            status: moduleData.status // Keep track of the module's current status
+            eligible_tasks: moduleData.eligible_tasks || [], // Directly use moduleData.eligible_tasks from backend
+            source: moduleData.source, 
+            status: moduleData.status, // ModuleProductionPlan status
             // task_definition_id can be set when a specific task is clicked for materials
         });
         setSelectedPanelIdentifier(null); // Clear panel selection
@@ -375,9 +373,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     const stationDetail = overviewData.station_status.find(s => s.station_id === resolvedSpecificStationId);
                     if (stationDetail) {
                         let combinedModules = [];
-                        if (stationDetail.content.modules_with_active_tasks) {
+                        if (stationDetail.content.modules_present_at_assembly_station) {
                              combinedModules = combinedModules.concat(
-                                stationDetail.content.modules_with_active_tasks.map(m => ({...m, source: 'active_station'}))
+                                stationDetail.content.modules_present_at_assembly_station.map(m => ({...m, source: 'at_station'}))
                             );
                         }
                         if (currentStation.sequence_order === 7 && stationDetail.content.magazine_modules_for_assembly) {
@@ -790,18 +788,11 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                 <li key={task.task_definition_id} style={taskListItemStyle}>
                                                     <div style={taskInfoStyle}>
                                                         <strong>{task.name}</strong> (ID: {task.task_definition_id})<br />
-                                                        {/* If task comes from 'active_module_tasks_at_station' (source: 'active_station'), it has a status.
-                                                            If it comes from 'eligible_tasks' (source: 'magazine'), it's 'Not Started' by definition here. */}
-                                                        <small>Estado: {selectedModuleIdentifier.source === 'active_station' && task.status ? task.status : 'No Iniciada'}</small><br/>
+                                                        <small>Estado: {task.status}</small><br/>
                                                         {task.description && <small>Desc: {task.description}<br/></small>}
                                                     </div>
                                                     <div style={taskActionsStyle}>
-                                                        {/* Show Start/Resume button if:
-                                                            - Module is from 'magazine' (implies tasks are 'Not Started' conceptually for this station)
-                                                            - OR Module is 'active_station' AND task status is 'Not Started' or 'Paused'
-                                                        */}
-                                                        {(selectedModuleIdentifier.source === 'magazine' || (task.status === 'Not Started' || task.status === 'Paused')) && 
-                                                            task.status !== 'In Progress' && task.status !== 'Completed' && (
+                                                        {(task.status === 'Not Started' || task.status === 'Paused') && (
                                                             <button 
                                                                 style={buttonStyle} 
                                                                 onClick={() => handleStartModuleTaskClick(selectedModuleIdentifier.plan_id, task)}
@@ -815,6 +806,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                             <button style={{...buttonStyle, backgroundColor: '#28a745'}} onClick={() => handleCompleteModuleTaskClick(selectedModuleIdentifier.plan_id, task)}>Completar</button>
                                                             </>
                                                         )}
+                                                        {/* 'Completed' tasks are filtered out by backend, but good to have a visual cue if one slips through or logic changes */}
                                                         {task.status === 'Completed' && (<span style={{color: 'green', fontSize: '0.9em'}}>Completada</span>)}
                                                         <button style={{...buttonStyle, backgroundColor: '#17a2b8', marginTop: '5px'}} onClick={() => handleTaskSelectForMaterials(task, 'module')}>Ver Materiales</button>
                                                     </div>
