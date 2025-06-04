@@ -167,8 +167,9 @@ def get_station_status_and_upcoming_modules():
             'sequence_order': station_info['sequence_order'],
             'content': {
                 'modules_with_active_panels': [], # For W stations
-                'modules_in_magazine': [],        # For M1 station
-                'modules_with_active_tasks': []   # For A, B, C stations
+                'modules_in_magazine': [],        # For M1 station (modules physically in magazine)
+                'modules_with_active_tasks': [],   # For A, B, C stations (modules already in assembly)
+                'magazine_modules_for_assembly': [] # For Assembly Station 1 to pull from logical 'Magazine' status
             }
         }
 
@@ -293,6 +294,59 @@ def get_station_status_and_upcoming_modules():
                     'started_at': row['started_at']
                 })
             station_data['content']['modules_with_active_tasks'] = list(modules_at_assembly_station.values())
+
+            # If this is Assembly Station 1 (sequence_order 7), also fetch 'Magazine' status modules
+            if station_info['sequence_order'] == 7:
+                magazine_for_assembly_cursor = db.execute("""
+                    SELECT
+                        mpp.plan_id, mpp.project_name, mpp.house_type_id, ht.name as house_type_name,
+                        mpp.house_identifier, mpp.module_number, ht.number_of_modules,
+                        mpp.status, mpp.sub_type_id, hst.name as sub_type_name,
+                        mpp.planned_assembly_line
+                    FROM ModuleProductionPlan mpp
+                    JOIN HouseTypes ht ON mpp.house_type_id = ht.house_type_id
+                    LEFT JOIN HouseSubType hst ON mpp.sub_type_id = hst.sub_type_id
+                    WHERE mpp.status = 'Magazine'
+                    ORDER BY mpp.planned_sequence ASC
+                """)
+                magazine_modules_list = []
+                for mag_mod_row_data in magazine_for_assembly_cursor.fetchall():
+                    mag_mod_row = dict(mag_mod_row_data)
+                    
+                    # Fetch eligible tasks for this magazine module at this station (seq 7, non-panel)
+                    eligible_tasks_cursor = db.execute("""
+                        SELECT td.task_definition_id, td.name, td.description, td.specialty_id
+                        FROM TaskDefinitions td
+                        WHERE (td.house_type_id = ? OR td.house_type_id IS NULL)
+                          AND td.is_panel_task = 0
+                          AND td.station_sequence_order = 7 
+                          AND NOT EXISTS (
+                              SELECT 1 FROM TaskLogs tl
+                              WHERE tl.plan_id = ? AND tl.task_definition_id = td.task_definition_id
+                                AND tl.status = 'Completed'
+                          )
+                        ORDER BY td.name
+                    """, (mag_mod_row['house_type_id'], mag_mod_row['plan_id']))
+                    
+                    eligible_tasks = [dict(task_row) for task_row in eligible_tasks_cursor.fetchall()]
+                    
+                    # Only include module if it has eligible tasks for this station
+                    if eligible_tasks:
+                        magazine_modules_list.append({
+                            'plan_id': mag_mod_row['plan_id'],
+                            'project_name': mag_mod_row['project_name'],
+                            'house_identifier': mag_mod_row['house_identifier'],
+                            'module_number': mag_mod_row['module_number'],
+                            'status': mag_mod_row['status'],
+                            'house_type_name': mag_mod_row['house_type_name'],
+                            'house_type_id': mag_mod_row['house_type_id'],
+                            'number_of_modules': mag_mod_row['number_of_modules'],
+                            'sub_type_name': mag_mod_row.get('sub_type_name'),
+                            'sub_type_id': mag_mod_row.get('sub_type_id'),
+                            'planned_assembly_line': mag_mod_row.get('planned_assembly_line'),
+                            'eligible_tasks': eligible_tasks
+                        })
+                station_data['content']['magazine_modules_for_assembly'] = magazine_modules_list
         
         station_status_list.append(station_data)
 
@@ -818,6 +872,110 @@ def finish_panel_task(panel_task_log_id: int, worker_id: int, station_id: str, n
     except Exception as e:
         db.rollback()
         logging.error(f"Unexpected error in finish_panel_task for PTL_id {panel_task_log_id}: {e}", exc_info=True)
+        return {"error": f"Unexpected error: {e}"}
+
+
+# === Module Task Management ===
+
+def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, station_id: str):
+    """
+    Starts a module task (non-panel task).
+    If the module is in 'Magazine' status and the task is started at an Assembly Station 1 (seq 7),
+    it updates the module's status to 'Assembly' and sets its current_station.
+    """
+    db = get_db()
+    now_utc_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+    try:
+        # Check current module status and station details
+        module_cursor = db.execute(
+            "SELECT status, planned_assembly_line FROM ModuleProductionPlan WHERE plan_id = ?", (plan_id,)
+        )
+        module_data = module_cursor.fetchone()
+        if not module_data:
+            return {"error": f"Module with plan_id {plan_id} not found."}
+        
+        module_status = module_data['status']
+        # planned_line = module_data['planned_assembly_line'] # Not directly used for setting current_station, station_id is king
+
+        station_cursor = db.execute(
+            "SELECT sequence_order, line_type FROM Stations WHERE station_id = ?", (station_id,)
+        )
+        station_data = station_cursor.fetchone()
+        if not station_data:
+            return {"error": f"Station with station_id {station_id} not found."}
+        station_sequence_order = station_data['sequence_order']
+        # station_line_type = station_data['line_type']
+
+        # Logic for 'Magazine' modules at Assembly Station 1 (sequence_order 7)
+        if module_status == 'Magazine' and station_sequence_order == 7:
+            db.execute(
+                """UPDATE ModuleProductionPlan
+                   SET status = 'Assembly', current_station = ?, updated_at = ?
+                   WHERE plan_id = ?""",
+                (station_id, now_utc_str, plan_id)
+            )
+            logging.info(f"Module {plan_id} status updated to 'Assembly', current_station set to {station_id}.")
+
+        # Check for existing TaskLog for this specific task on this module
+        # This simplified check assumes one active log per task_definition_id for a plan_id.
+        # More complex scenarios (re-doing tasks) might need different handling.
+        existing_log_cursor = db.execute(
+            """SELECT task_log_id, status FROM TaskLogs
+               WHERE plan_id = ? AND task_definition_id = ? AND is_panel_task = 0""", # Ensure it's a module task log
+            (plan_id, task_definition_id)
+        )
+        existing_log_row = existing_log_cursor.fetchone()
+
+        task_log_data = None
+
+        if existing_log_row:
+            log_id = existing_log_row['task_log_id']
+            current_task_status = existing_log_row['status']
+            if current_task_status == 'Paused':
+                # Resume logic (simplified: update status and worker)
+                # Proper resume should update TaskPauses table if used for module tasks
+                db.execute(
+                    """UPDATE TaskLogs SET status = 'In Progress', worker_id = ?, started_at = COALESCE(started_at, ?)
+                       WHERE task_log_id = ?""",
+                    (worker_id, now_utc_str, log_id)
+                )
+                logging.info(f"Resuming module task for log_id {log_id} by worker {worker_id} at station {station_id}.")
+            elif current_task_status in ['In Progress', 'Completed']:
+                 return {"error": f"Module task is already {current_task_status}."}
+            else: # 'Not Started' or other, treat as fresh start for this log entry
+                db.execute(
+                    """UPDATE TaskLogs 
+                       SET status = 'In Progress', worker_id = ?, started_at = ?, station_start = ?
+                       WHERE task_log_id = ?""",
+                    (worker_id, now_utc_str, station_id, log_id)
+                )
+        else:
+            # Create new TaskLog entry
+            cursor = db.execute(
+                """INSERT INTO TaskLogs (plan_id, task_definition_id, worker_id, status, started_at, station_start, is_panel_task)
+                   VALUES (?, ?, ?, 'In Progress', ?, ?, 0)""",
+                (plan_id, task_definition_id, worker_id, now_utc_str, station_id)
+            )
+            log_id = cursor.lastrowid
+            logging.info(f"Creating new TaskLog for module task: plan_id {plan_id}, task_def_id {task_definition_id} by worker {worker_id} at station {station_id}.")
+
+        db.commit()
+        
+        # Fetch the created/updated task log data to return
+        final_log_cursor = db.execute("SELECT * FROM TaskLogs WHERE task_log_id = ?", (log_id,))
+        task_log_data = dict(final_log_cursor.fetchone())
+
+        logging.info(f"start_module_task successful for plan_id {plan_id}, task_def_id {task_definition_id}. Log data: {task_log_data}")
+        return {"success": True, "task_log": task_log_data}
+
+    except sqlite3.Error as e:
+        db.rollback()
+        logging.error(f"Database error in start_module_task: {e}", exc_info=True)
+        return {"error": f"Database error: {e}"}
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Unexpected error in start_module_task: {e}", exc_info=True)
         return {"error": f"Unexpected error: {e}"}
 
 

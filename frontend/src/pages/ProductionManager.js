@@ -23,6 +23,13 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     const [isLoadingPanelTasks, setIsLoadingPanelTasks] = useState(false);
     const [panelTasksError, setPanelTasksError] = useState('');
     const [taskActionMessage, setTaskActionMessage] = useState({ type: '', content: '' }); // type: 'success' or 'error'
+    
+    // Module Task Specific State (for Assembly Stations)
+    const [selectedModuleIdentifier, setSelectedModuleIdentifier] = useState(null); // { plan_id, module_name, house_type_id, eligible_tasks }
+    const [moduleTasks, setModuleTasks] = useState([]); // Tasks for a selected module (if not directly in eligible_tasks)
+    const [isLoadingModuleTasks, setIsLoadingModuleTasks] = useState(false);
+    const [moduleTasksError, setModuleTasksError] = useState('');
+    
     const [materialsForSelectedTask, setMaterialsForSelectedTask] = useState([]);
     const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
     const [materialsError, setMaterialsError] = useState('');
@@ -64,27 +71,36 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
     }, [user, allStations, isLoadingAllStations]);
 
-    // Effect to fetch panel production information
+    // Effect to fetch panel production information OR module information for assembly stations
     useEffect(() => {
-        if (!resolvedSpecificStationId || !allStations || allStations.length === 0) {
+        if (!resolvedSpecificStationId || !allStations || allStations.length === 0 || !user) {
             setPanelProductionInfo(null);
             setPanelInfoError('');
-            setSelectedPanelIdentifier(null); // Clear selected panel if station changes
+            setSelectedPanelIdentifier(null);
             setPanelTasks([]);
+            setSelectedModuleIdentifier(null);
+            setModuleTasks([]);
             return;
         }
 
         const currentStation = allStations.find(s => s.station_id === resolvedSpecificStationId);
 
-        if (currentStation && currentStation.line_type === 'W') {
+        // Clear previous states
+        setPanelProductionInfo(null);
+        setPanelInfoError('');
+        setSelectedPanelIdentifier(null);
+        setPanelTasks([]);
+        setSelectedModuleIdentifier(null);
+        setModuleTasks([]);
+        setTaskActionMessage({ type: '', content: '' });
+
+
+        if (currentStation && currentStation.line_type === 'W') { // Panel Production Stations (W1-W5)
             setIsLoadingPanelInfo(true);
-            setPanelInfoError('');
-            setPanelProductionInfo(null);
-            setSelectedPanelIdentifier(null); // Clear selected panel when station info reloads
-            setPanelTasks([]);
+            // setSelectedPanelIdentifier(null); // Already cleared above
+            // setPanelTasks([]); // Already cleared above
 
-
-            if (currentStation.station_id === 'W1') {
+            if (currentStation.station_id === 'W1') { // Special logic for W1
                 setIsLoadingPanelInfo(true);
                 setPanelInfoError('');
                 setPanelProductionInfo(null);
@@ -123,136 +139,236 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                     })
                     .finally(() => setIsLoadingPanelInfo(false));
             }
+        } else if (currentStation && (currentStation.line_type === 'A' || currentStation.line_type === 'B' || currentStation.line_type === 'C')) { // Assembly Stations
+            // For assembly stations, we fetch the station status overview which includes modules at station and magazine modules for station 1
+            setIsLoadingPanelInfo(true); // Re-use for general loading state
+            adminService.getStationStatusOverview()
+                .then(overviewData => {
+                    const stationDetail = overviewData.station_status.find(s => s.station_id === resolvedSpecificStationId);
+                    if (stationDetail) {
+                        // Combine modules already at station and magazine modules if it's assembly station 1 (seq 7)
+                        let combinedModules = [];
+                        if (stationDetail.content.modules_with_active_tasks) {
+                            combinedModules = combinedModules.concat(
+                                stationDetail.content.modules_with_active_tasks.map(m => ({...m, source: 'active_station'}))
+                            );
+                        }
+                        if (currentStation.sequence_order === 7 && stationDetail.content.magazine_modules_for_assembly) {
+                             combinedModules = combinedModules.concat(
+                                stationDetail.content.magazine_modules_for_assembly.map(m => ({...m, source: 'magazine'}))
+                            );
+                        }
+                        setPanelProductionInfo({ type: 'assemblyStation', data: { modules: combinedModules, station: currentStation } });
+                    } else {
+                        setPanelInfoError(`No se encontró detalle para la estación de ensamblaje ${resolvedSpecificStationId}.`);
+                    }
+                })
+                .catch(err => {
+                    console.error(`Error fetching station overview for assembly station ${resolvedSpecificStationId}:`, err);
+                    setPanelInfoError(`Error obteniendo datos para la estación de ensamblaje: ${err.message}`);
+                })
+                .finally(() => setIsLoadingPanelInfo(false));
+
         } else {
-            setPanelProductionInfo(null); // Clear if not a W station or station not found
-            setPanelInfoError('');
-            setSelectedPanelIdentifier(null);
-            setPanelTasks([]);
+            // Neither W line nor Assembly line, or station not found
+            // setPanelProductionInfo(null); // Already cleared
+            // setPanelInfoError(''); // Already cleared
+            // setSelectedPanelIdentifier(null); // Already cleared
+            // setPanelTasks([]); // Already cleared
         }
     }, [resolvedSpecificStationId, allStations, user]);
 
-    // Effect to fetch tasks for the selected panel
+    // Effect to fetch tasks for the selected panel (W-line) OR materials for selected module task (Assembly-line)
     useEffect(() => {
-        if (!selectedPanelIdentifier || !selectedPanelIdentifier.plan_id || !selectedPanelIdentifier.panel_definition_id) {
+        // Panel Task Logic (W-line)
+        if (selectedPanelIdentifier && selectedPanelIdentifier.plan_id && selectedPanelIdentifier.panel_definition_id) {
+            const workerSpecialtyId = user && user.specialty_id !== undefined ? user.specialty_id : null;
+            const currentHouseTypeId = selectedPanelIdentifier?.house_type_id;
+
+            setIsLoadingPanelTasks(true);
+            setPanelTasksError('');
+            setMaterialsForSelectedTask([]);
+            setMaterialsError('');
+
+            adminService.getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, workerSpecialtyId)
+                .then(tasksData => {
+                    // Sorting logic for panel tasks
+                    const getTaskSortScore = (task, currentStationId) => {
+                        if (task.status === 'In Progress') return 1;
+                        if (task.status === 'Paused') return 2;
+                        if (task.status === 'Not Started') return 3;
+                        if (task.status === 'Completed') {
+                            return task.station_finish === currentStationId ? 5 : 4;
+                        }
+                        return 6;
+                    };
+                    const sortedTasks = tasksData.sort((a, b) => {
+                        const scoreA = getTaskSortScore(a, resolvedSpecificStationId);
+                        const scoreB = getTaskSortScore(b, resolvedSpecificStationId);
+                        if (scoreA !== scoreB) return scoreA - scoreB;
+                        return a.name.localeCompare(b.name);
+                    });
+                    setPanelTasks(sortedTasks);
+                })
+                .catch(err => {
+                    console.error("Error fetching panel tasks:", err);
+                    setPanelTasksError(`Error obteniendo tareas del panel: ${err.message}`);
+                    setPanelTasks([]);
+                })
+                .finally(() => setIsLoadingPanelTasks(false));
+
+            // Fetch materials for selected panel task
+            if (selectedPanelIdentifier.task_definition_id && currentHouseTypeId) {
+                setIsLoadingMaterials(true);
+                adminService.getMaterialsForTask(selectedPanelIdentifier.task_definition_id, currentHouseTypeId)
+                    .then(materialsData => setMaterialsForSelectedTask(materialsData || []))
+                    .catch(err => {
+                        console.error("Error fetching materials for panel task:", err);
+                        setMaterialsError(`Error obteniendo materiales: ${err.message}`);
+                        setMaterialsForSelectedTask([]);
+                    })
+                    .finally(() => setIsLoadingMaterials(false));
+            } else {
+                setMaterialsForSelectedTask([]);
+                setMaterialsError('');
+            }
+        } else {
             setPanelTasks([]);
             setPanelTasksError('');
-            setMaterialsForSelectedTask([]); // Clear materials when no panel is selected
-            setMaterialsError('');
-            return;
         }
 
-        const workerSpecialtyId = user && user.specialty_id !== undefined ? user.specialty_id : null;
-        // Get house_type_id from the selectedPanelIdentifier, which will now store it
-        const currentHouseTypeId = selectedPanelIdentifier?.house_type_id; 
-
-        setIsLoadingPanelTasks(true);
-        setPanelTasksError('');
-        setMaterialsForSelectedTask([]); // Clear materials before fetching new ones
-        setMaterialsError('');
-
-        // Fetch tasks
-        adminService.getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, workerSpecialtyId)
-            .then(tasksData => {
-                const getTaskSortScore = (task, currentStationId) => {
-                    if (task.status === 'In Progress') return 1;
-                    if (task.status === 'Paused') return 2;
-                    if (task.status === 'Not Started') return 3;
-                    if (task.status === 'Completed') {
-                        return task.station_finish === currentStationId ? 5 : 4;
-                    }
-                    return 6;
-                };
-
-                const sortedTasks = tasksData.sort((a, b) => {
-                    const scoreA = getTaskSortScore(a, resolvedSpecificStationId);
-                    const scoreB = getTaskSortScore(b, resolvedSpecificStationId);
-                    if (scoreA !== scoreB) {
-                        return scoreA - scoreB;
-                    }
-                    return a.name.localeCompare(b.name);
-                });
-                setPanelTasks(sortedTasks);
-            })
-            .catch(err => {
-                console.error("Error fetching panel tasks:", err);
-                setPanelTasksError(`Error obteniendo tareas del panel: ${err.message}`);
-                setPanelTasks([]);
-            })
-            .finally(() => setIsLoadingPanelTasks(false));
-
-        // Fetch materials for the selected task (if a task is selected and house_type_id is available)
-        if (selectedPanelIdentifier.task_definition_id && currentHouseTypeId) {
-            console.log(`Fetching materials for Task ID: ${selectedPanelIdentifier.task_definition_id}, HouseType ID: ${currentHouseTypeId}`);
+        // Materials for selected Module Task (Assembly Line)
+        if (selectedModuleIdentifier && selectedModuleIdentifier.task_definition_id && selectedModuleIdentifier.house_type_id) {
             setIsLoadingMaterials(true);
-            adminService.getMaterialsForTask(selectedPanelIdentifier.task_definition_id, currentHouseTypeId)
+            setMaterialsError('');
+            adminService.getMaterialsForTask(selectedModuleIdentifier.task_definition_id, selectedModuleIdentifier.house_type_id)
                 .then(materialsData => {
-                    console.log("Materials fetched:", materialsData);
                     setMaterialsForSelectedTask(materialsData || []);
                 })
                 .catch(err => {
-                    console.error("Error fetching materials for task:", err);
-                    setMaterialsError(`Error obteniendo materiales para la tarea: ${err.message}`);
+                    console.error("Error fetching materials for module task:", err);
+                    setMaterialsError(`Error obteniendo materiales para la tarea del módulo: ${err.message}`);
                     setMaterialsForSelectedTask([]);
                 })
                 .finally(() => setIsLoadingMaterials(false));
-        } else {
-            console.log("Not fetching materials: task_definition_id or house_type_id missing.", { task_id: selectedPanelIdentifier.task_definition_id, house_type_id: currentHouseTypeId });
+        } else if (selectedModuleIdentifier) { // If a module is selected but not a specific task for materials
             setMaterialsForSelectedTask([]);
             setMaterialsError('');
         }
 
-    }, [selectedPanelIdentifier, resolvedSpecificStationId, user, panelProductionInfo]); // Add panelProductionInfo to dependencies
+    }, [selectedPanelIdentifier, selectedModuleIdentifier, resolvedSpecificStationId, user]);
+
 
     const handlePanelSelect = (panelData) => {
-        // When a panel is selected, we need to know its associated task_definition_id
-        // to fetch materials. This means the panelData should ideally include the task_definition_id
-        // of the task that is currently being viewed/selected.
-        // For now, we'll assume the first task in the list is the one whose materials we want to show,
-        // or we'll need a way to select a specific task within the panel.
-        // When a panel is selected, we need to know its associated task_definition_id
-        // to fetch materials. This means the panelData should ideally include the task_definition_id
-        // of the task that is currently being viewed/selected.
-        // For now, we'll assume the first task in the list is the one whose materials we want to show,
-        // or we'll need a way to select a specific task within the panel.
-        // To simplify, let's update selectedPanelIdentifier to also hold the task_definition_id
-        // if a task is clicked, or default to the first task's ID.
         setSelectedPanelIdentifier(panelData);
-        setMaterialsForSelectedTask([]); // Clear materials when a new panel is selected
+        setSelectedModuleIdentifier(null); // Clear module selection
+        setMaterialsForSelectedTask([]);
+        setMaterialsError('');
+    };
+    
+    const handleModuleSelect = (moduleData) => {
+        setSelectedModuleIdentifier({
+            plan_id: moduleData.plan_id,
+            module_name: `${moduleData.project_name} - ${moduleData.house_identifier} - Mod ${moduleData.module_number}`,
+            house_type_id: moduleData.house_type_id,
+            eligible_tasks: moduleData.eligible_tasks || moduleData.active_module_tasks_at_station || [], // Use appropriate task list
+            // task_definition_id can be set when a specific task is clicked for materials
+        });
+        setSelectedPanelIdentifier(null); // Clear panel selection
+        setMaterialsForSelectedTask([]);
         setMaterialsError('');
     };
 
-    const handleTaskSelectForMaterials = (task) => {
-        // This function will be called when a specific task is clicked to show its materials
-        // Update selectedPanelIdentifier to include the task_definition_id
-        setSelectedPanelIdentifier(prev => ({
-            ...prev,
-            task_definition_id: task.task_definition_id,
-            task_name: task.name // Store task name for display
-        }));
-        // The useEffect for materials will re-run due to selectedPanelIdentifier change
+    const handleTaskSelectForMaterials = (task, itemType = 'panel') => { // itemType can be 'panel' or 'module'
+        if (itemType === 'panel' && selectedPanelIdentifier) {
+            setSelectedPanelIdentifier(prev => ({
+                ...prev,
+                task_definition_id: task.task_definition_id,
+                task_name: task.name
+            }));
+        } else if (itemType === 'module' && selectedModuleIdentifier) {
+            setSelectedModuleIdentifier(prev => ({
+                ...prev,
+                task_definition_id: task.task_definition_id, // For fetching materials
+                task_name: task.name
+            }));
+        }
     };
 
     const handleSaveSpecificStation = (specificStationId) => {
         localStorage.setItem(SELECTED_SPECIFIC_STATION_ID_KEY, specificStationId);
-        setResolvedSpecificStationId(specificStationId); // Update resolved ID
+        setResolvedSpecificStationId(specificStationId);
         setShowSpecificStationModal(false);
     };
-
-    // --- Task Action Handlers ---
-    // These handlers will no longer have moduleData or tasks to operate on directly
-    // as the station context fetching logic is removed.
-    // They are kept as placeholders but will likely need significant refactoring
-    // if task operations are to be re-implemented with a different data flow.
 
     const clearTaskActionMessage = () => {
         setTimeout(() => setTaskActionMessage({ type: '', content: '' }), 3000);
     };
     
-    const refreshTasks = () => {
+    const refreshStationData = () => {
+        // This function will re-trigger the main data fetching useEffect by changing resolvedSpecificStationId temporarily or user.
+        // A more robust way would be to have a dedicated refresh function that calls the service again.
+        // For now, we can force a re-fetch by briefly clearing and resetting resolvedSpecificStationId if it's set.
+        // Or, even better, make the main useEffect depend on a 'refreshKey' state variable.
+        // For simplicity here, we'll rely on the existing useEffects to re-fetch when relevant state changes.
+        // The backend calls in task actions should return updated data or we call a specific refresh for that part.
+        
+        // Re-fetch panel/module info based on current station type
+        const currentStation = allStations.find(s => s.station_id === resolvedSpecificStationId);
+        if (currentStation && currentStation.line_type === 'W') {
+            // Refresh panel info (logic similar to main useEffect)
+            if (currentStation.station_id === 'W1') {
+                 Promise.all([
+                    adminService.getInfoForNextModulePanels(),
+                    adminService.getCurrentStationPanels('W1')
+                ]).then(([infoData, inProgressPanels]) => {
+                    const combinedData = { ...infoData, in_progress_panels: inProgressPanels };
+                     setPanelProductionInfo({ type: 'nextModule', data: combinedData.plan_id ? combinedData : null, message: combinedData.message, in_progress_panels: inProgressPanels });
+                }).catch(err => setPanelInfoError(err.message));
+            } else {
+                adminService.getCurrentStationPanels(resolvedSpecificStationId)
+                    .then(data => setPanelProductionInfo({ type: 'currentStation', data }))
+                    .catch(err => setPanelInfoError(err.message));
+            }
+        } else if (currentStation && (currentStation.line_type === 'A' || currentStation.line_type === 'B' || currentStation.line_type === 'C')) {
+            // Refresh assembly station info
+            adminService.getStationStatusOverview()
+                .then(overviewData => {
+                    const stationDetail = overviewData.station_status.find(s => s.station_id === resolvedSpecificStationId);
+                    if (stationDetail) {
+                        let combinedModules = [];
+                        if (stationDetail.content.modules_with_active_tasks) {
+                             combinedModules = combinedModules.concat(
+                                stationDetail.content.modules_with_active_tasks.map(m => ({...m, source: 'active_station'}))
+                            );
+                        }
+                        if (currentStation.sequence_order === 7 && stationDetail.content.magazine_modules_for_assembly) {
+                             combinedModules = combinedModules.concat(
+                                stationDetail.content.magazine_modules_for_assembly.map(m => ({...m, source: 'magazine'}))
+                            );
+                        }
+                        setPanelProductionInfo({ type: 'assemblyStation', data: { modules: combinedModules, station: currentStation } });
+                         // If a module was selected, its tasks might need refresh if they are not part of 'eligible_tasks' directly
+                        if (selectedModuleIdentifier) {
+                            // Potentially re-select or update selectedModuleIdentifier if its source list changed
+                            const updatedSelectedModule = combinedModules.find(m => m.plan_id === selectedModuleIdentifier.plan_id);
+                            if (updatedSelectedModule) {
+                                handleModuleSelect(updatedSelectedModule); // This will update eligible_tasks
+                            } else {
+                                setSelectedModuleIdentifier(null); // Module might have moved or changed status
+                            }
+                        }
+                    }
+                })
+                .catch(err => setPanelInfoError(err.message));
+        }
+
+
+        // If a panel is selected, refresh its tasks
         if (selectedPanelIdentifier && resolvedSpecificStationId && user) {
-            // Use the imported adminService directly
             adminService.getTasksForPanel(selectedPanelIdentifier.plan_id, selectedPanelIdentifier.panel_definition_id, resolvedSpecificStationId, user.specialty_id)
                 .then(tasksData => {
+                    // Sorting logic for panel tasks
                      const getTaskSortScore = (task, currentStationId) => {
                         if (task.status === 'In Progress') return 1;
                         if (task.status === 'Paused') return 2;
@@ -272,13 +388,15 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                 })
                 .catch(err => {
                     console.error("Error refreshing panel tasks:", err);
-                    setTaskActionMessage({ type: 'error', content: `Error actualizando tareas: ${err.message}` });
+                    setTaskActionMessage({ type: 'error', content: `Error actualizando tareas del panel: ${err.message}` });
                     clearTaskActionMessage();
                 });
         }
+        // Note: Refreshing module tasks if a module is selected is handled by re-selecting the module or if tasks are part of moduleData.
     };
 
-    const handleStartTaskClick = async (task) => {
+
+    const handleStartPanelTaskClick = async (task) => {
         if (!user || typeof user.id !== 'number') {
             setTaskActionMessage({ type: 'error', content: 'Usuario no identificado. No se puede iniciar la tarea.' });
             clearTaskActionMessage();
@@ -325,7 +443,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         clearTaskActionMessage();
     };
 
-    const handlePauseTaskClick = async (task) => {
+    const handlePausePanelTaskClick = async (task) => {
         if (!user || typeof user.id !== 'number') {
             setTaskActionMessage({ type: 'error', content: 'Usuario no identificado.' });
             clearTaskActionMessage();
@@ -338,27 +456,23 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
         }
         
         const reason = window.prompt("Motivo de la pausa (opcional):");
-        // If user clicks cancel, prompt returns null. If OK with empty, it's "".
-        if (reason === null) { // User cancelled
-            return;
-        }
+        if (reason === null) return;
 
         setTaskActionMessage({ type: '', content: '' });
         try {
-            const response = await adminService.pausePanelTask(task.panel_task_log_id, { worker_id: user.id, reason: reason || '' });
-            console.log("Pause task response:", response);
-            setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" pausada.` });
-            refreshTasks();
+            await adminService.pausePanelTask(task.panel_task_log_id, { worker_id: user.id, reason: reason || '' });
+            setTaskActionMessage({ type: 'success', content: `Tarea de panel "${task.name}" pausada.` });
+            refreshStationData(); // Refresh data
         } catch (error) {
-            console.error("Error pausing task:", error);
-            setTaskActionMessage({ type: 'error', content: `Error pausando tarea "${task.name}": ${error.message}` });
+            console.error("Error pausing panel task:", error);
+            setTaskActionMessage({ type: 'error', content: `Error pausando tarea de panel "${task.name}": ${error.message}` });
         }
         clearTaskActionMessage();
     };
     
-    const handleCompleteTaskClick = async (task) => {
-        if (!user || typeof user.id !== 'number') {
-            setTaskActionMessage({ type: 'error', content: 'Usuario no identificado.' });
+    const handleCompletePanelTaskClick = async (task) => {
+        if (!user || typeof user.id !== 'number' || !resolvedSpecificStationId) {
+            setTaskActionMessage({ type: 'error', content: 'Usuario o estación no identificados.' });
             clearTaskActionMessage();
             return;
         }
@@ -367,16 +481,9 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             clearTaskActionMessage();
             return;
         }
-        if (!resolvedSpecificStationId) {
-            setTaskActionMessage({ type: 'error', content: 'Estación no resuelta. No se puede completar la tarea.' });
-            clearTaskActionMessage();
-            return;
-        }
 
         const notes = window.prompt("Notas para completar la tarea (opcional):");
-        if (notes === null) { // User cancelled
-            return;
-        }
+        if (notes === null) return;
         
         setTaskActionMessage({ type: '', content: '' });
         try {
@@ -385,24 +492,57 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                 station_id: resolvedSpecificStationId,
                 notes: notes || ''
             });
-            console.log("Complete task response:", response);
-            setTaskActionMessage({ type: 'success', content: `Tarea "${task.name}" completada.` });
-            refreshTasks();
-            // If response.panel_production_plan_update exists, may need to update panel list or selection
+            setTaskActionMessage({ type: 'success', content: `Tarea de panel "${task.name}" completada.` });
+            refreshStationData(); // Refresh data
             if (response && response.panel_production_plan_update) {
-                console.log("Panel production plan updated:", response.panel_production_plan_update);
-                // Potentially refresh the list of panels for the station if it's not W1
-                // Or clear selection if the panel moved from the current station
-                // For now, refreshTasks should handle tasks disappearing if they are no longer relevant
+                // If the completed panel moved, clear selection or update lists
+                const currentStation = allStations.find(s => s.station_id === resolvedSpecificStationId);
+                if (currentStation && currentStation.line_type === 'W' && currentStation.station_id !== 'W1') {
+                    // If panel moved from W2-W5, it might no longer be in this station's list
+                    // Check if selectedPanelIdentifier is still valid for current station
+                    const stillExists = panelProductionInfo?.data?.find(p => p.panel_production_plan_id === selectedPanelIdentifier.panel_production_plan_id);
+                    if (!stillExists) setSelectedPanelIdentifier(null);
+                }
             }
         } catch (error) {
-            console.error("Error completing task:", error);
-            setTaskActionMessage({ type: 'error', content: `Error completando tarea "${task.name}": ${error.message}` });
+            console.error("Error completing panel task:", error);
+            setTaskActionMessage({ type: 'error', content: `Error completando tarea de panel "${task.name}": ${error.message}` });
         }
         clearTaskActionMessage();
     };
 
-    // --- End Task Action Handlers ---
+    // --- Module Task Action Handlers (Assembly Line) ---
+    const handleStartModuleTaskClick = async (modulePlanId, task) => {
+        if (!user || typeof user.id !== 'number' || !resolvedSpecificStationId) {
+            setTaskActionMessage({ type: 'error', content: 'Usuario o estación no identificados.' });
+            clearTaskActionMessage();
+            return;
+        }
+        setTaskActionMessage({ type: '', content: '' });
+        try {
+            // Using the generic startTask service for module tasks
+            await adminService.startTask(modulePlanId, task.task_definition_id, user.id, resolvedSpecificStationId);
+            setTaskActionMessage({ type: 'success', content: `Tarea de módulo "${task.name}" iniciada/reanudada.` });
+            refreshStationData(); // Refresh data, which should update module status and task lists
+        } catch (error) {
+            console.error("Error starting/resuming module task:", error);
+            setTaskActionMessage({ type: 'error', content: `Error iniciando/reanudando tarea de módulo "${task.name}": ${error.message}` });
+        }
+        clearTaskActionMessage();
+    };
+
+    // Placeholder for Pause Module Task - Requires backend support similar to panel tasks (TaskPauses, etc.)
+    const handlePauseModuleTaskClick = async (modulePlanId, task) => {
+        alert(`Funcionalidad de pausar tarea de módulo (${task.name}) aún no implementada.`);
+        // TODO: Implement if backend supports pausing generic module tasks with TaskPauses table
+    };
+
+    // Placeholder for Complete Module Task
+    const handleCompleteModuleTaskClick = async (modulePlanId, task) => {
+        alert(`Funcionalidad de completar tarea de módulo (${task.name}) aún no implementada.`);
+        // TODO: Implement if backend supports completing generic module tasks
+    };
+
 
     const displayStationName = useMemo(() => {
         if (isLoadingAllStations) return "Cargando info de estación...";
@@ -481,92 +621,39 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
             {!showSpecificStationModal && resolvedSpecificStationId && (
                 <div style={{ marginTop: '20px' }}>
-                    {isLoadingPanelInfo && <p>Cargando información de producción de paneles...</p>}
+                    {isLoadingPanelInfo && <p>Cargando información de producción...</p>}
                     {panelInfoError && <p style={{ color: 'red' }}>{panelInfoError}</p>}
                     
-                    {panelProductionInfo && !isLoadingPanelInfo && !panelInfoError && (
+                    {/* Panel Production Display (W-lines) */}
+                    {panelProductionInfo && panelProductionInfo.type !== 'assemblyStation' && !isLoadingPanelInfo && !panelInfoError && (
                         <div style={panelProductionSectionStyle}>
-                            <h3>Información de Paneles</h3>
+                            <h3>Información de Paneles (Estaciones W)</h3>
                             {!selectedPanelIdentifier ? (
                                 <>
                                     {/* Panel Selection for W1 */}
                                     {panelProductionInfo.type === 'nextModule' && panelProductionInfo.data && (
                                         <>
                                             <p><strong>Módulo:</strong> {panelProductionInfo.data.module_name} (Plan ID: {panelProductionInfo.data.plan_id})</p>
-                                            {(panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0) ||
-                                             (panelProductionInfo.data.in_progress_panels && panelProductionInfo.data.in_progress_panels.length > 0) ? (
+                                            {(panelProductionInfo.data.panels_to_produce?.length > 0 || panelProductionInfo.data.in_progress_panels?.length > 0) ? (
                                                 <>
-                                                    {panelProductionInfo.data.panels_to_produce && panelProductionInfo.data.panels_to_produce.length > 0 && (
-                                                        <>
-                                                            <p><strong>Paneles nuevos para producción:</strong></p>
-                                                            <ul style={listStyle}>
-                                                                {panelProductionInfo.data.panels_to_produce.map(panel => (
-                                                                    <li key={panel.panel_definition_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
-                                                                        plan_id: panelProductionInfo.data.plan_id,
-                                                                        panel_definition_id: panel.panel_definition_id,
-                                                                        panel_name: `${panel.panel_code} (${panel.panel_group})`,
-                                                                        module_name: panel.module_name,
-                                                                        house_type_id: panelProductionInfo.data.house_type_id // Add house_type_id
-                                                                    })}>
-                                                                        {panel.panel_code} ({panel.panel_group})
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </>
+                                                    {panelProductionInfo.data.panels_to_produce?.length > 0 && (
+                                                        <> <p><strong>Paneles nuevos para producción:</strong></p> <ul style={listStyle}> {panelProductionInfo.data.panels_to_produce.map(panel => ( <li key={panel.panel_definition_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({ plan_id: panelProductionInfo.data.plan_id, panel_definition_id: panel.panel_definition_id, panel_name: `${panel.panel_code} (${panel.panel_group})`, module_name: panelProductionInfo.data.module_name, house_type_id: panelProductionInfo.data.house_type_id })}>{panel.panel_code} ({panel.panel_group})</li> ))} </ul> </>
                                                     )}
-                                                    {panelProductionInfo.data.in_progress_panels && panelProductionInfo.data.in_progress_panels.length > 0 && (
-                                                        <>
-                                                            <p><strong>Paneles en progreso:</strong></p>
-                                                            <ul style={listStyle}>
-                                                                {panelProductionInfo.data.in_progress_panels.map(panel => (
-                                                                    <li key={panel.panel_production_plan_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
-                                                                        plan_id: panel.plan_id,
-                                                                        panel_definition_id: panel.panel_definition_id,
-                                                                        panel_name: panel.panel_name,
-                                                                        module_name: panel.module_name,
-                                                                        house_type_id: panel.house_type_id // house_type_id is now in panel object
-                                                                    })}>
-                                                                        {panel.panel_name} (Módulo: {panel.module_name})
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </>
+                                                    {panelProductionInfo.data.in_progress_panels?.length > 0 && (
+                                                        <> <p><strong>Paneles en progreso:</strong></p> <ul style={listStyle}> {panelProductionInfo.data.in_progress_panels.map(panel => ( <li key={panel.panel_production_plan_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({ plan_id: panel.plan_id, panel_definition_id: panel.panel_definition_id, panel_name: panel.panel_name, module_name: panel.module_name, house_type_id: panel.house_type_id })}>{panel.panel_name} (Módulo: {panel.module_name})</li> ))} </ul> </>
                                                     )}
                                                 </>
-                                            ) : (
-                                                <p>No hay paneles específicos listados para iniciar producción para este módulo.</p>
-                                            )}
+                                            ) : <p>No hay paneles específicos listados para este módulo.</p>}
                                         </>
                                     )}
-                                    {panelProductionInfo.type === 'nextModule' && !panelProductionInfo.data && panelProductionInfo.message && (
-                                        <p>{panelProductionInfo.message}</p>
-                                    )}
-
+                                    {panelProductionInfo.type === 'nextModule' && !panelProductionInfo.data && panelProductionInfo.message && (<p>{panelProductionInfo.message}</p>)}
                                     {/* Panel Selection for W2-W5 */}
-                                    {panelProductionInfo.type === 'currentStation' && panelProductionInfo.data && panelProductionInfo.data.length > 0 && (
-                                        <>
-                                            <p><strong>Paneles en esta Estación ({resolvedSpecificStationId}). Seleccione uno para ver sus tareas:</strong></p>
-                                            <ul style={listStyle}>
-                                                {panelProductionInfo.data.map(panel => (
-                                                    <li key={panel.panel_production_plan_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({
-                                                        plan_id: panel.plan_id,
-                                                        panel_definition_id: panel.panel_definition_id,
-                                                        panel_name: panel.panel_name,
-                                                        module_name: panel.module_name,
-                                                        house_type_id: panel.house_type_id // house_type_id is now in panel object
-                                                    })}>
-                                                        {panel.panel_name} (Módulo: {panel.module_name})
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </>
+                                    {panelProductionInfo.type === 'currentStation' && panelProductionInfo.data?.length > 0 && (
+                                        <> <p><strong>Paneles en esta Estación ({resolvedSpecificStationId}). Seleccione uno:</strong></p> <ul style={listStyle}> {panelProductionInfo.data.map(panel => ( <li key={panel.panel_production_plan_id} style={{...listItemStyle, cursor: 'pointer'}} onClick={() => handlePanelSelect({ plan_id: panel.plan_id, panel_definition_id: panel.panel_definition_id, panel_name: panel.panel_name, module_name: panel.module_name, house_type_id: panel.house_type_id })}>{panel.panel_name} (Módulo: {panel.module_name})</li> ))} </ul> </>
                                     )}
-                                    {panelProductionInfo.type === 'currentStation' && (!panelProductionInfo.data || panelProductionInfo.data.length === 0) && (
-                                        <p>No hay paneles "En Progreso" actualmente en esta estación.</p>
-                                    )}
+                                    {panelProductionInfo.type === 'currentStation' && (!panelProductionInfo.data || panelProductionInfo.data.length === 0) && (<p>No hay paneles "En Progreso" actualmente en esta estación.</p>)}
                                 </>
-                            ) : (
-                                // Display tasks for selectedPanelIdentifier
+                            ) : ( // Display tasks for selectedPanelIdentifier
                                 <div style={{ marginTop: '20px' }}>
                                     <button onClick={() => setSelectedPanelIdentifier(null)} style={{ ...buttonStyle, backgroundColor: '#6c757d', marginBottom: '10px' }}>Volver a selección de panel</button>
                                     <h4>Tareas para Panel: {selectedPanelIdentifier.panel_name}</h4>
@@ -574,96 +661,107 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                     {isLoadingPanelTasks && <p>Cargando tareas del panel...</p>}
                                     {panelTasksError && <p style={{ color: 'red' }}>{panelTasksError}</p>}
                                     {!isLoadingPanelTasks && !panelTasksError && panelTasks.length > 0 && (
+                                        <ul style={listStyle}> {panelTasks.map(task => ( <li key={task.task_definition_id} style={taskListItemStyle}> <div style={taskInfoStyle}> <strong>{task.name}</strong> (ID: {task.task_definition_id})<br /> Estado: {task.status} <br/> {task.description && <small>Desc: {task.description}<br/></small>} {task.station_finish && <small>Finalizada en Estación: {task.station_finish}<br/></small>} {task.completed_at && <small>Completada: {new Date(task.completed_at).toLocaleString()}<br/></small>} </div> <div style={taskActionsStyle}> {(task.status === 'Not Started' || task.status === 'Paused') && ( <button style={buttonStyle} onClick={() => handleStartPanelTaskClick(task)}> {task.status === 'Not Started' ? 'Iniciar' : 'Reanudar'} </button> )} {task.status === 'In Progress' && ( <> <button style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black', marginBottom: '5px'}} onClick={() => handlePausePanelTaskClick(task)}> Pausar </button> <button style={{...buttonStyle, backgroundColor: '#28a745'}} onClick={() => handleCompletePanelTaskClick(task)}> Completar </button> </> )} {task.status === 'Completed' && (<span style={{color: 'green', fontSize: '0.9em'}}>Completada</span>)} <button style={{...buttonStyle, backgroundColor: '#17a2b8', marginTop: '5px'}} onClick={() => handleTaskSelectForMaterials(task, 'panel')}> Ver Materiales </button> </div> </li> ))} </ul>
+                                    )}
+                                    {!isLoadingPanelTasks && !panelTasksError && panelTasks.length === 0 && (<p>No hay tareas definidas o encontradas para este panel.</p>)}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Assembly Station Display (A, B, C lines) */}
+                    {panelProductionInfo && panelProductionInfo.type === 'assemblyStation' && !isLoadingPanelInfo && !panelInfoError && (
+                        <div style={panelProductionSectionStyle}>
+                            <h3>Información de Módulos (Estación de Ensamblaje: {panelProductionInfo.data.station.name})</h3>
+                            {!selectedModuleIdentifier ? (
+                                <>
+                                    {panelProductionInfo.data.modules?.length > 0 ? (
+                                        <>
+                                        <p><strong>Seleccione un módulo para ver/iniciar sus tareas:</strong></p>
                                         <ul style={listStyle}>
-                                            {panelTasks.map(task => (
+                                            {panelProductionInfo.data.modules.map(module => (
+                                                <li key={module.plan_id} style={{...listItemStyle, cursor: 'pointer', backgroundColor: module.source === 'magazine' ? '#e6fffa' : 'inherit'}} onClick={() => handleModuleSelect(module)}>
+                                                    {module.project_name} - {module.house_identifier} - Mod {module.module_number} (Plan ID: {module.plan_id})
+                                                    <br/><small>Estado: {module.status} {module.source === 'magazine' ? '(Desde Almacén)' : `(En Estación ${module.current_station || 'N/A'})`}</small>
+                                                    {module.planned_assembly_line && <small> - Línea Planificada: {module.planned_assembly_line}</small>}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        </>
+                                    ) : (
+                                        <p>No hay módulos activos o disponibles desde el almacén para esta estación en este momento.</p>
+                                    )}
+                                </>
+                            ) : ( // Display tasks for selectedModuleIdentifier
+                                <div style={{ marginTop: '20px' }}>
+                                    <button onClick={() => setSelectedModuleIdentifier(null)} style={{ ...buttonStyle, backgroundColor: '#6c757d', marginBottom: '10px' }}>Volver a selección de módulo</button>
+                                    <h4>Tareas para Módulo: {selectedModuleIdentifier.module_name}</h4>
+                                    <p>(Plan ID: {selectedModuleIdentifier.plan_id})</p>
+                                    {/* Assuming eligible_tasks contains all tasks to display. Adapt if tasks need separate fetching. */}
+                                    {selectedModuleIdentifier.eligible_tasks?.length > 0 ? (
+                                        <ul style={listStyle}>
+                                            {selectedModuleIdentifier.eligible_tasks.map(task => (
                                                 <li key={task.task_definition_id} style={taskListItemStyle}>
                                                     <div style={taskInfoStyle}>
                                                         <strong>{task.name}</strong> (ID: {task.task_definition_id})<br />
-                                                        Estado: {task.status} <br/>
+                                                        {/* Status for module tasks might come from TaskLogs, not directly on eligible_tasks yet */}
+                                                        {/* For now, we assume 'Not Started' if from magazine, or actual status if from active_module_tasks */}
+                                                        <small>Estado: {task.status || 'No Iniciada'}</small><br/>
                                                         {task.description && <small>Desc: {task.description}<br/></small>}
-                                                        {task.station_finish && <small>Finalizada en Estación: {task.station_finish}<br/></small>}
-                                                        {task.completed_at && <small>Completada: {new Date(task.completed_at).toLocaleString()}<br/></small>}
                                                     </div>
                                                     <div style={taskActionsStyle}>
-                                                        {(task.status === 'Not Started' || task.status === 'Paused') && (
-                                                            <button 
-                                                                style={buttonStyle}
-                                                                onClick={() => handleStartTaskClick(task)}
-                                                            >
-                                                                {task.status === 'Not Started' ? 'Iniciar' : 'Reanudar'}
+                                                        {(!task.status || task.status === 'Not Started' || task.status === 'Paused') && (
+                                                            <button style={buttonStyle} onClick={() => handleStartModuleTaskClick(selectedModuleIdentifier.plan_id, task)}>
+                                                                {task.status === 'Paused' ? 'Reanudar' : 'Iniciar'}
                                                             </button>
                                                         )}
                                                         {task.status === 'In Progress' && (
                                                             <>
-                                                                <button 
-                                                                    style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black', marginBottom: '5px'}}
-                                                                    onClick={() => handlePauseTaskClick(task)}
-                                                                >
-                                                                    Pausar
-                                                                </button>
-                                                                <button 
-                                                                    style={{...buttonStyle, backgroundColor: '#28a745'}}
-                                                                    onClick={() => handleCompleteTaskClick(task)}
-                                                                >
-                                                                    Completar
-                                                                </button>
+                                                            <button style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black', marginBottom: '5px'}} onClick={() => handlePauseModuleTaskClick(selectedModuleIdentifier.plan_id, task)}>Pausar</button>
+                                                            <button style={{...buttonStyle, backgroundColor: '#28a745'}} onClick={() => handleCompleteModuleTaskClick(selectedModuleIdentifier.plan_id, task)}>Completar</button>
                                                             </>
                                                         )}
-                                                        {task.status === 'Completed' && (
-                                                            <span style={{color: 'green', fontSize: '0.9em'}}>Completada</span>
-                                                        )}
-                                                        <button 
-                                                            style={{...buttonStyle, backgroundColor: '#17a2b8', marginTop: '5px'}}
-                                                            onClick={() => handleTaskSelectForMaterials(task)}
-                                                        >
-                                                            Ver Materiales
-                                                        </button>
+                                                        {task.status === 'Completed' && (<span style={{color: 'green', fontSize: '0.9em'}}>Completada</span>)}
+                                                        <button style={{...buttonStyle, backgroundColor: '#17a2b8', marginTop: '5px'}} onClick={() => handleTaskSelectForMaterials(task, 'module')}>Ver Materiales</button>
                                                     </div>
                                                 </li>
                                             ))}
                                         </ul>
-                                    )}
-                                    {!isLoadingPanelTasks && !panelTasksError && panelTasks.length === 0 && (
-                                        <p>No hay tareas definidas o encontradas para este panel.</p>
-                                    )}
-                                    {taskActionMessage.content && (
-                                        <p style={taskActionMessage.type === 'error' ? errorStyle : successStyle}>
-                                            {taskActionMessage.content}
-                                        </p>
-                                    )}
-
-                                    {/* Materials for Selected Task Section */}
-                                    {selectedPanelIdentifier.task_definition_id && (
-                                        <div style={materialsSectionStyle}>
-                                            <h4>Materiales para Tarea: {selectedPanelIdentifier.task_name || selectedPanelIdentifier.task_definition_id}</h4>
-                                            {isLoadingMaterials && <p>Cargando materiales...</p>}
-                                            {materialsError && <p style={{ color: 'red' }}>{materialsError}</p>}
-                                            {!isLoadingMaterials && !materialsError && materialsForSelectedTask.length > 0 ? (
-                                                <ul style={listStyle}>
-                                                    {materialsForSelectedTask.map(material => (
-                                                        <li key={material.material_id} style={listItemStyle}>
-                                                            <strong>{material.material_name}</strong> (SKU: {material.SKU}) - {material.quantity} {material.unit || material.Units}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            ) : (
-                                                !isLoadingMaterials && !materialsError && <p>No se encontraron materiales para esta tarea o no hay un proyecto vinculado.</p>
-                                            )}
-                                        </div>
+                                    ) : (
+                                        <p>No hay tareas elegibles definidas para este módulo en esta estación.</p>
                                     )}
                                 </div>
                             )}
                         </div>
                     )}
-                    {/* Message when no panel is selected, kept as is */}
-                    {!selectedPanelIdentifier && resolvedSpecificStationId && panelProductionInfo && !isLoadingPanelInfo && (
+
+                    {/* Common Sections: Task Action Message & Materials */}
+                    {taskActionMessage.content && (
+                        <p style={taskActionMessage.type === 'error' ? errorStyle : successStyle}>
+                            {taskActionMessage.content}
+                        </p>
+                    )}
+                    {/* Materials for Selected Task Section (Panel or Module) */}
+                    {(selectedPanelIdentifier?.task_definition_id || selectedModuleIdentifier?.task_definition_id) && (
+                        <div style={materialsSectionStyle}>
+                            <h4>Materiales para Tarea: {(selectedPanelIdentifier?.task_name || selectedModuleIdentifier?.task_name) || (selectedPanelIdentifier?.task_definition_id || selectedModuleIdentifier?.task_definition_id)}</h4>
+                            {isLoadingMaterials && <p>Cargando materiales...</p>}
+                            {materialsError && <p style={{ color: 'red' }}>{materialsError}</p>}
+                            {!isLoadingMaterials && !materialsError && materialsForSelectedTask.length > 0 ? (
+                                <ul style={listStyle}> {materialsForSelectedTask.map(material => ( <li key={material.material_id} style={listItemStyle}> <strong>{material.material_name}</strong> (SKU: {material.SKU}) - {material.quantity} {material.unit || material.Units}</li> ))} </ul>
+                            ) : (!isLoadingMaterials && !materialsError && <p>No se encontraron materiales para esta tarea o no hay un proyecto vinculado.</p>)}
+                        </div>
+                    )}
+
+                    {/* Message when nothing is selected */}
+                    {!selectedPanelIdentifier && !selectedModuleIdentifier && resolvedSpecificStationId && panelProductionInfo && !isLoadingPanelInfo && (
                          <p style={{ marginTop: '20px', fontStyle: 'italic' }}>
-                            Seleccione un panel de la lista de arriba para ver y gestionar sus tareas.
+                            Seleccione un panel o módulo de la lista de arriba para ver y gestionar sus tareas.
                          </p>
                     )}
                 </div>
             )}
-            {!resolvedSpecificStationId && !showSpecificStationModal && !isLoadingAllStations && <p>Estación no configurada o inválida. Por favor, configure una estación válida desde el selector de contexto.</p>}
+            {!resolvedSpecificStationId && !showSpecificStationModal && !isLoadingAllStations && <p>Estación no configurada o inválida. Por favor, configure una estación válida.</p>}
             {showSpecificStationModal && (
                 <p>Por favor, seleccione su estación específica para continuar.</p>
             )}
