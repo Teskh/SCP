@@ -386,42 +386,46 @@ def get_potential_task_dependencies(current_task_station_seq_order, current_task
         FROM TaskDefinitions td
     """
     
-    conditions_list = []  # Stores individual OR conditions as strings
+    conditions_list = []  # Stores individual OR condition strings
     params = []
 
     if current_task_is_panel_task:
         # Current task is a PANEL task.
-        # Dependencies can be:
-        # 1. Other PANEL tasks in the same or preceding panel stations (sequence_order 1-5).
-        if current_task_station_seq_order is not None and 1 <= current_task_station_seq_order <= 5:
-            conditions_list.append("(td.is_panel_task = 1 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order <= ?)")
-            params.append(current_task_station_seq_order)
-        
-        # 2. General PANEL tasks (station_sequence_order IS NULL, td.is_panel_task = 1).
+        # Potential dependencies include:
+        # 1. General panel tasks (those with station_sequence_order IS NULL and td.is_panel_task = 1).
         conditions_list.append("(td.is_panel_task = 1 AND td.station_sequence_order IS NULL)")
 
+        if current_task_station_seq_order is not None and 1 <= current_task_station_seq_order <= 5:
+            # Current task is in a specific PANEL station (sequence_order 1-5).
+            # Add: Panel tasks in the current or any preceding panel stations (i.e., sequence_order 1 up to current_task_station_seq_order).
+            conditions_list.append("(td.is_panel_task = 1 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order >= 1 AND td.station_sequence_order <= ?)")
+            params.append(current_task_station_seq_order)
+        # If current_task_station_seq_order is NULL (general panel task), only general panel tasks (already added) are relevant from panel task types.
+            
     else:
         # Current task is a MODULE task.
-        # Dependencies can be:
-        # 1. All specific PANEL tasks (from stations 1-5, td.is_panel_task = 1).
-        conditions_list.append("(td.is_panel_task = 1 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order >= 1 AND td.station_sequence_order <= 5)")
+        # Potential dependencies include:
+        # 1. ALL panel tasks (this includes general panel tasks and panel tasks in stations 1-5).
+        conditions_list.append("(td.is_panel_task = 1)")
 
-        # 2. MODULE tasks in the same or preceding assembly stations (sequence_order 7-12),
-        #    if the current task is in an assembly station.
-        if current_task_station_seq_order is not None and current_task_station_seq_order >= 7: # Current task in assembly station (7-12)
-            conditions_list.append("(td.is_panel_task = 0 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order >= 7 AND td.station_sequence_order <= ?)")
-            params.append(current_task_station_seq_order)
-        
-        # 3. General MODULE tasks (station_sequence_order IS NULL, td.is_panel_task = 0).
+        # 2. General module tasks (those with station_sequence_order IS NULL and td.is_panel_task = 0).
         conditions_list.append("(td.is_panel_task = 0 AND td.station_sequence_order IS NULL)")
 
-    if conditions_list:
-        base_query += " WHERE (" + " OR ".join(conditions_list) + ")"
+        if current_task_station_seq_order is not None and 7 <= current_task_station_seq_order <= 12:
+            # Current task is in a specific ASSEMBLY station (sequence_order 7-12).
+            # Add: Module tasks in the current or any preceding assembly stations (i.e., sequence_order 7 up to current_task_station_seq_order).
+            conditions_list.append("(td.is_panel_task = 0 AND td.station_sequence_order IS NOT NULL AND td.station_sequence_order >= 7 AND td.station_sequence_order <= ?)")
+            params.append(current_task_station_seq_order)
+        # If current_task_station_seq_order is NULL (general module task), only general module tasks (already added) 
+        # and all panel tasks (already added) are relevant from module/panel task types.
+
+    if not conditions_list:
+        # This state should ideally not be reached given the logic above,
+        # as conditions are always added based on current_task_is_panel_task.
+        # Adding a fallback to prevent SQL errors with an empty WHERE clause.
+        base_query += " WHERE 1=0" # Returns no rows
     else:
-        # Fallback: if no valid conditions are generated, show no dependencies.
-        # This might happen if current_task_is_panel_task is somehow not boolean or
-        # current_task_station_seq_order is out of expected ranges for panel tasks.
-        base_query += " WHERE 1=0" # Effectively false, returns no rows
+        base_query += " WHERE (" + " OR ".join(conditions_list) + ")"
 
     base_query += " ORDER BY td.station_sequence_order NULLS FIRST, td.is_panel_task, td.name;"
     
