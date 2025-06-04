@@ -442,7 +442,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                 return;
             }
             console.log("Start/Resume task response:", response);
-            refreshTasks();
+            refreshStationData();
         } catch (error) {
             console.error("Error starting/resuming task:", error);
             setTaskActionMessage({ type: 'error', content: `Error iniciando/reanudando tarea "${task.name}": ${error.message}` });
