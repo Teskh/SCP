@@ -217,68 +217,68 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
         with _connect_to_external_db(project_db_path) as project_db_conn:
             # 2. Find Items linked to this task_definition_id in main.db
             main_db_cursor = main_db_conn.cursor()
-                
-                # Search in Items table
-                # Note: json_extract(associated_tasks, '$') returns a JSON array as text.
-                # The LIKE '%"task_definition_id"%' is a common way to search for elements in a JSON array in SQLite.
-                # It assumes the task_definition_id is stored as a number in the JSON array.
-                main_db_cursor.execute(
-                    "SELECT item_id, name, associated_tasks FROM Items WHERE json_extract(associated_tasks, '$') LIKE ?",
-                    (f'%"{task_definition_id}"%',)
+            
+            # Search in Items table
+            # Note: json_extract(associated_tasks, '$') returns a JSON array as text.
+            # The LIKE '%"task_definition_id"%' is a common way to search for elements in a JSON array in SQLite.
+            # It assumes the task_definition_id is stored as a number in the JSON array.
+            main_db_cursor.execute(
+                "SELECT item_id, name, associated_tasks FROM Items WHERE json_extract(associated_tasks, '$') LIKE ?",
+                (f'%"{task_definition_id}"%',)
+            )
+            items_linked_to_task = main_db_cursor.fetchall()
+            logger.info(f"Found {len(items_linked_to_task)} items linked to task {task_definition_id}.")
+
+            for item_row in items_linked_to_task:
+                item_id = item_row['item_id']
+                logger.debug(f"Processing item {item_id} ('{item_row['name']}') linked to task {task_definition_id}. Associated tasks: {item_row['associated_tasks']}")
+                # 3. Find instances of this item for the linked_project_id in projects.db
+                project_db_cursor = project_db_conn.cursor()
+                project_db_cursor.execute(
+                    "SELECT instance_id FROM Item_Instances WHERE project_id = ? AND item_id = ?",
+                    (linked_project_id, item_id)
                 )
-                items_linked_to_task = main_db_cursor.fetchall()
-                logger.info(f"Found {len(items_linked_to_task)} items linked to task {task_definition_id}.")
+                item_instances = project_db_cursor.fetchall()
+                logger.debug(f"Found {len(item_instances)} instances for item {item_id} in project {linked_project_id}.")
 
-                for item_row in items_linked_to_task:
-                    item_id = item_row['item_id']
-                    logger.debug(f"Processing item {item_id} ('{item_row['name']}') linked to task {task_definition_id}. Associated tasks: {item_row['associated_tasks']}")
-                    # 3. Find instances of this item for the linked_project_id in projects.db
-                    project_db_cursor = project_db_conn.cursor()
-                    project_db_cursor.execute(
-                        "SELECT instance_id FROM Item_Instances WHERE project_id = ? AND item_id = ?",
-                        (linked_project_id, item_id)
-                    )
-                    item_instances = project_db_cursor.fetchall()
-                    logger.debug(f"Found {len(item_instances)} instances for item {item_id} in project {linked_project_id}.")
+                for instance_row in item_instances:
+                    instance_id = instance_row['instance_id']
+                    logger.debug(f"  Processing item instance {instance_id}.")
+                    # 4. Get instance attributes from projects.db
+                    instance_attributes = _get_project_instance_attributes(project_db_path, linked_project_id, 'item', instance_id)
+                    # 5. Get applicable materials from main.db based on attributes
+                    applicable_mats = _get_applicable_materials_from_main_db(main_db_conn, 'item', item_id, instance_attributes)
+                    materials_list.extend(applicable_mats)
+                    logger.debug(f"  Added {len(applicable_mats)} materials for item instance {instance_id}.")
 
-                    for instance_row in item_instances:
-                        instance_id = instance_row['instance_id']
-                        logger.debug(f"  Processing item instance {instance_id}.")
-                        # 4. Get instance attributes from projects.db
-                        instance_attributes = _get_project_instance_attributes(project_db_path, linked_project_id, 'item', instance_id)
-                        # 5. Get applicable materials from main.db based on attributes
-                        applicable_mats = _get_applicable_materials_from_main_db(main_db_conn, 'item', item_id, instance_attributes)
-                        materials_list.extend(applicable_mats)
-                        logger.debug(f"  Added {len(applicable_mats)} materials for item instance {instance_id}.")
+            # 6. Find Accessory_Items linked to this task_definition_id in main.db
+            main_db_cursor.execute(
+                "SELECT accesory_id, name, associated_tasks FROM Accesory_Item WHERE json_extract(associated_tasks, '$') LIKE ?",
+                (f'%"{task_definition_id}"%',)
+            )
+            accessories_linked_to_task = main_db_cursor.fetchall()
+            logger.info(f"Found {len(accessories_linked_to_task)} accessories linked to task {task_definition_id}.")
 
-                # 6. Find Accessory_Items linked to this task_definition_id in main.db
-                main_db_cursor.execute(
-                    "SELECT accesory_id, name, associated_tasks FROM Accesory_Item WHERE json_extract(associated_tasks, '$') LIKE ?",
-                    (f'%"{task_definition_id}"%',)
+            for accessory_row in accessories_linked_to_task:
+                accessory_id = accessory_row['accesory_id']
+                logger.debug(f"Processing accessory {accessory_id} ('{accessory_row['name']}') linked to task {task_definition_id}. Associated tasks: {accessory_row['associated_tasks']}")
+                # 7. Find instances of this accessory for the linked_project_id in projects.db
+                project_db_cursor.execute(
+                    "SELECT accessory_instance_id FROM Accessory_Instance WHERE project_id = ? AND accessory_id = ?",
+                    (linked_project_id, accessory_id)
                 )
-                accessories_linked_to_task = main_db_cursor.fetchall()
-                logger.info(f"Found {len(accessories_linked_to_task)} accessories linked to task {task_definition_id}.")
+                accessory_instances = project_db_cursor.fetchall()
+                logger.debug(f"Found {len(accessory_instances)} instances for accessory {accessory_id} in project {linked_project_id}.")
 
-                for accessory_row in accessories_linked_to_task:
-                    accessory_id = accessory_row['accesory_id']
-                    logger.debug(f"Processing accessory {accessory_id} ('{accessory_row['name']}') linked to task {task_definition_id}. Associated tasks: {accessory_row['associated_tasks']}")
-                    # 7. Find instances of this accessory for the linked_project_id in projects.db
-                    project_db_cursor.execute(
-                        "SELECT accessory_instance_id FROM Accessory_Instance WHERE project_id = ? AND accessory_id = ?",
-                        (linked_project_id, accessory_id)
-                    )
-                    accessory_instances = project_db_cursor.fetchall()
-                    logger.debug(f"Found {len(accessory_instances)} instances for accessory {accessory_id} in project {linked_project_id}.")
-
-                    for instance_row in accessory_instances:
-                        instance_id = instance_row['accessory_instance_id']
-                        logger.debug(f"  Processing accessory instance {instance_id}.")
-                        # 8. Get instance attributes from projects.db
-                        instance_attributes = _get_project_instance_attributes(project_db_path, linked_project_id, 'accessory', instance_id)
-                        # 9. Get applicable materials from main.db based on attributes
-                        applicable_mats = _get_applicable_materials_from_main_db(main_db_conn, 'accessory', accessory_id, instance_attributes)
-                        materials_list.extend(applicable_mats)
-                        logger.debug(f"  Added {len(applicable_mats)} materials for accessory instance {instance_id}.")
+                for instance_row in accessory_instances:
+                    instance_id = instance_row['accessory_instance_id']
+                    logger.debug(f"  Processing accessory instance {instance_id}.")
+                    # 8. Get instance attributes from projects.db
+                    instance_attributes = _get_project_instance_attributes(project_db_path, linked_project_id, 'accessory', instance_id)
+                    # 9. Get applicable materials from main.db based on attributes
+                    applicable_mats = _get_applicable_materials_from_main_db(main_db_conn, 'accessory', accessory_id, instance_attributes)
+                    materials_list.extend(applicable_mats)
+                    logger.debug(f"  Added {len(applicable_mats)} materials for accessory instance {instance_id}.")
 
     except FileNotFoundError as fnfe:
         logger.error(f"Required external database not found: {fnfe}")
