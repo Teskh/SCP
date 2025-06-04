@@ -213,10 +213,10 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
 
     try:
         # Use the Flask-managed main database connection for subsequent queries
-        with get_db() as main_db_conn:
-            with _connect_to_external_db(project_db_path) as project_db_conn:
-                # 2. Find Items linked to this task_definition_id in main.db
-                main_db_cursor = main_db_conn.cursor()
+        main_db_conn = get_db()
+        with _connect_to_external_db(project_db_path) as project_db_conn:
+            # 2. Find Items linked to this task_definition_id in main.db
+            main_db_cursor = main_db_conn.cursor()
                 
                 # Search in Items table
                 # Note: json_extract(associated_tasks, '$') returns a JSON array as text.
