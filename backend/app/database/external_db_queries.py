@@ -246,9 +246,28 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
                         # 4. Get instance attributes from projects.db
                         instance_attributes = _get_project_instance_attributes(project_db_path, linked_project_id, 'item', instance_id)
                         # 5. Get applicable materials from main.db based on attributes
-                        applicable_mats = _get_applicable_materials_from_main_db(actual_main_db_conn, 'item', item_id, instance_attributes)
-                        materials_list.extend(applicable_mats)
-                        logger.debug(f"  Added {len(applicable_mats)} materials for item instance {instance_id}.")
+                        applicable_mats_for_item = _get_applicable_materials_from_main_db(actual_main_db_conn, 'item', item_id, instance_attributes)
+                        
+                        processed_mats_for_item = []
+                        for mat_dict in applicable_mats_for_item:
+                            bom_cursor = project_db_conn.cursor()
+                            bom_cursor.execute(
+                                "SELECT quantity, unit, assembly_kit FROM Bill_Of_Materials WHERE project_id = ? AND material_id = ?",
+                                (linked_project_id, mat_dict['material_id'])
+                            )
+                            bom_data = bom_cursor.fetchone()
+                            if bom_data:
+                                mat_dict['quantity'] = bom_data['quantity']
+                                mat_dict['unit'] = bom_data['unit'] if bom_data['unit'] else mat_dict.get('Units') # Prioritize BOM unit
+                                mat_dict['assembly_kit'] = bom_data['assembly_kit']
+                            else:
+                                mat_dict['quantity'] = 0 # Default quantity if not in BOM for this project
+                                # mat_dict['unit'] will use mat_dict.get('Units') from main.db by default if not set here
+                                mat_dict['assembly_kit'] = None
+                            processed_mats_for_item.append(mat_dict)
+                        
+                        materials_list.extend(processed_mats_for_item)
+                        logger.debug(f"  Added {len(processed_mats_for_item)} materials (with quantity info) for item instance {instance_id}.")
 
                 # 6. Find Accessory_Items linked to this task_definition_id in main.db
                 # Using REPLACE to make searching for a number in a JSON array string more robust.
@@ -276,9 +295,27 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
                         # 8. Get instance attributes from projects.db
                         instance_attributes = _get_project_instance_attributes(project_db_path, linked_project_id, 'accessory', instance_id)
                         # 9. Get applicable materials from main.db based on attributes
-                        applicable_mats = _get_applicable_materials_from_main_db(actual_main_db_conn, 'accessory', accessory_id, instance_attributes)
-                        materials_list.extend(applicable_mats)
-                        logger.debug(f"  Added {len(applicable_mats)} materials for accessory instance {instance_id}.")
+                        applicable_mats_for_accessory = _get_applicable_materials_from_main_db(actual_main_db_conn, 'accessory', accessory_id, instance_attributes)
+
+                        processed_mats_for_accessory = []
+                        for mat_dict in applicable_mats_for_accessory:
+                            bom_cursor = project_db_conn.cursor()
+                            bom_cursor.execute(
+                                "SELECT quantity, unit, assembly_kit FROM Bill_Of_Materials WHERE project_id = ? AND material_id = ?",
+                                (linked_project_id, mat_dict['material_id'])
+                            )
+                            bom_data = bom_cursor.fetchone()
+                            if bom_data:
+                                mat_dict['quantity'] = bom_data['quantity']
+                                mat_dict['unit'] = bom_data['unit'] if bom_data['unit'] else mat_dict.get('Units') # Prioritize BOM unit
+                                mat_dict['assembly_kit'] = bom_data['assembly_kit']
+                            else:
+                                mat_dict['quantity'] = 0 # Default quantity if not in BOM for this project
+                                mat_dict['assembly_kit'] = None
+                            processed_mats_for_accessory.append(mat_dict)
+
+                        materials_list.extend(processed_mats_for_accessory)
+                        logger.debug(f"  Added {len(processed_mats_for_accessory)} materials (with quantity info) for accessory instance {instance_id}.")
 
     except FileNotFoundError as fnfe:
         logger.error(f"Required external database not found: {fnfe}")

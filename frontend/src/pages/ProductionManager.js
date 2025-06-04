@@ -642,7 +642,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                 <ul style={listStyle}>
                                                     {materialsForSelectedTask.map(material => (
                                                         <li key={material.material_id} style={listItemStyle}>
-                                                            <strong>{material.material_name}</strong> (SKU: {material.SKU}) - {material.Units}
+                                                            <strong>{material.material_name}</strong> (SKU: {material.SKU}) - {material.quantity} {material.unit || material.Units}
                                                         </li>
                                                     ))}
                                                 </ul>
