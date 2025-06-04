@@ -219,12 +219,11 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
             main_db_cursor = main_db_conn.cursor()
             
             # Search in Items table
-            # Note: json_extract(associated_tasks, '$') returns a JSON array as text.
-            # The LIKE '%"task_definition_id"%' is a common way to search for elements in a JSON array in SQLite.
-            # It assumes the task_definition_id is stored as a number in the JSON array.
+            # Using REPLACE to make searching for a number in a JSON array string more robust.
+            # This assumes task_definition_id is an integer and stored as a number in the JSON, e.g., [1,2,3]
             main_db_cursor.execute(
-                "SELECT item_id, name, associated_tasks FROM Items WHERE json_extract(associated_tasks, '$') LIKE ?",
-                (f'%"{task_definition_id}"%',)
+                "SELECT item_id, name, associated_tasks FROM Items WHERE REPLACE(REPLACE(json_extract(associated_tasks, '$'), '[', ','), ']', ',') LIKE '%,' || CAST(? AS TEXT) || ',%'",
+                (task_definition_id,)
             )
             items_linked_to_task = main_db_cursor.fetchall()
             logger.info(f"Found {len(items_linked_to_task)} items linked to task {task_definition_id}.")
@@ -252,9 +251,10 @@ def get_materials_for_task(task_definition_id: int, house_type_id: int):
                     logger.debug(f"  Added {len(applicable_mats)} materials for item instance {instance_id}.")
 
             # 6. Find Accessory_Items linked to this task_definition_id in main.db
+            # Using REPLACE to make searching for a number in a JSON array string more robust.
             main_db_cursor.execute(
-                "SELECT accesory_id, name, associated_tasks FROM Accesory_Item WHERE json_extract(associated_tasks, '$') LIKE ?",
-                (f'%"{task_definition_id}"%',)
+                "SELECT accesory_id, name, associated_tasks FROM Accesory_Item WHERE REPLACE(REPLACE(json_extract(associated_tasks, '$'), '[', ','), ']', ',') LIKE '%,' || CAST(? AS TEXT) || ',%'",
+                (task_definition_id,)
             )
             accessories_linked_to_task = main_db_cursor.fetchall()
             logger.info(f"Found {len(accessories_linked_to_task)} accessories linked to task {task_definition_id}.")
