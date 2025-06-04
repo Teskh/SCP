@@ -716,9 +716,9 @@ function ActiveProductionDashboard() {
                     <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px dashed #bbb' }}>
                         <strong>Tareas de Módulo Activas en esta Estación:</strong>
                         <ul style={taskListStyle}>
-                            {moduleData.active_module_tasks_at_station.map(task => (
+                            {moduleData.all_module_tasks_at_station.map(task => ( // Changed from active_module_tasks_at_station
                                 <li key={task.task_log_id || task.task_definition_id} style={{...taskItemStyle, ...(task.status === 'Completed' && completedTaskStyle)}}>
-                                    {task.task_name} - <span style={{ fontWeight: 'normal', color: task.status === 'In Progress' ? 'green' : '#c28b00'}}>{task.status}</span>
+                                    {task.name} - <span style={{ fontWeight: 'normal', color: task.status === 'In Progress' ? 'green' : '#c28b00'}}>{task.status}</span>
                                 </li>
                             ))}
                         </ul>
@@ -729,31 +729,62 @@ function ActiveProductionDashboard() {
         
         const handleMouseEnter = (event) => {
             let moduleForTooltip = null;
-            let panelsForTooltip = []; // Panels to count for the tooltip
+            let tooltipDetails = null;
 
             if (isPanelLineStation && content.modules_with_active_panels && content.modules_with_active_panels.length > 0) {
                 moduleForTooltip = content.modules_with_active_panels[0]; // Use first module for tooltip
-                 panelsForTooltip = moduleForTooltip.active_panels_at_station; // This is NOT ideal for overall module panel status.
-            } else if (isMagazineStation && content.modules_in_magazine && content.modules_in_magazine.length > 0) {
-                moduleForTooltip = content.modules_in_magazine[0];
-                panelsForTooltip = moduleForTooltip.panels || [];
-            }
-
-            if (moduleForTooltip) {
+                const panelsForTooltip = moduleForTooltip.active_panels_at_station;
                 const panelCounts = (panelsForTooltip).reduce((acc, panel) => {
                     const statusKey = panel.status ? panel.status.toLowerCase().replace(' ', '_') : 'unknown';
                     acc[statusKey] = (acc[statusKey] || 0) + 1;
                     return acc;
                 }, { not_started: 0, in_progress: 0, completed: 0, paused: 0, unknown: 0 });
 
-                const rect = event.currentTarget.getBoundingClientRect();
-                setTooltipPosition({ x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 5 });
-                setHoveredStationDetails({
+                tooltipDetails = {
                     stationId: stationId,
                     moduleName: `Módulo ${moduleForTooltip.module_number} (${moduleForTooltip.project_name} - ${moduleForTooltip.house_identifier})`,
                     panelCounts: panelCounts,
-                    moduleStatus: moduleForTooltip.status || 'N/A' // ModuleProductionPlan status
-                });
+                    moduleStatus: moduleForTooltip.status || 'N/A', // ModuleProductionPlan status
+                    isAssemblyLine: false
+                };
+            } else if (isMagazineStation && content.modules_in_magazine && content.modules_in_magazine.length > 0) {
+                moduleForTooltip = content.modules_in_magazine[0];
+                const panelsForTooltip = moduleForTooltip.panels || [];
+                const panelCounts = (panelsForTooltip).reduce((acc, panel) => {
+                    const statusKey = panel.status ? panel.status.toLowerCase().replace(' ', '_') : 'unknown';
+                    acc[statusKey] = (acc[statusKey] || 0) + 1;
+                    return acc;
+                }, { not_started: 0, in_progress: 0, completed: 0, paused: 0, unknown: 0 });
+
+                tooltipDetails = {
+                    stationId: stationId,
+                    moduleName: `Módulo ${moduleForTooltip.module_number} (${moduleForTooltip.project_name} - ${moduleForTooltip.house_identifier})`,
+                    panelCounts: panelCounts,
+                    moduleStatus: moduleForTooltip.status || 'N/A',
+                    isAssemblyLine: false
+                };
+            } else if (isAssemblyLineStation && content.modules_with_active_tasks && content.modules_with_active_tasks.length > 0) {
+                moduleForTooltip = content.modules_with_active_tasks[0];
+                const tasksForTooltip = moduleForTooltip.all_module_tasks_at_station || []; // Use the new key
+                const taskCounts = tasksForTooltip.reduce((acc, task) => {
+                    const statusKey = task.status ? task.status.toLowerCase().replace(' ', '_') : 'unknown';
+                    acc[statusKey] = (acc[statusKey] || 0) + 1;
+                    return acc;
+                }, { not_started: 0, in_progress: 0, completed: 0, paused: 0, unknown: 0 });
+
+                tooltipDetails = {
+                    stationId: stationId,
+                    moduleName: `Módulo ${moduleForTooltip.module_number} (${moduleForTooltip.project_name} - ${moduleForTooltip.house_identifier})`,
+                    taskCounts: taskCounts,
+                    moduleStatus: moduleForTooltip.status || 'N/A',
+                    isAssemblyLine: true
+                };
+            }
+
+            if (tooltipDetails) {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setTooltipPosition({ x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 5 });
+                setHoveredStationDetails(tooltipDetails);
             }
         };
 
@@ -780,7 +811,8 @@ function ActiveProductionDashboard() {
     
     const renderTooltip = () => {
         if (!hoveredStationDetails) return null;
-        const { moduleName, panelCounts, moduleStatus } = hoveredStationDetails;
+        const { moduleName, moduleStatus, isAssemblyLine } = hoveredStationDetails;
+
         return (
             <div style={{
                 position: 'absolute',
@@ -799,11 +831,23 @@ function ActiveProductionDashboard() {
             }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '1.05em', borderBottom: '1px solid rgba(255,255,255,0.3)', paddingBottom: '5px' }}>{moduleName}</h4>
                 <p style={{ margin: '0 0 5px 0' }}>Estado del Módulo: <strong style={{color: moduleStatus === 'Panels' || moduleStatus === 'Assembly' ? '#ffa726' : (moduleStatus === 'Completed' ? '#bdbdbd' : (moduleStatus === 'Magazine' ? '#66bb6a' : '#bdbdbd'))}}>{moduleStatus}</strong></p>
-                <p style={{ margin: '0 0 5px 0' }}>Paneles No Iniciados: <strong style={{color: '#ffcc80'}}>{panelCounts.not_started || panelCounts.planned || 0}</strong></p>
-                <p style={{ margin: '0 0 5px 0' }}>Paneles En Progreso: <strong style={{color: '#81d4fa'}}>{panelCounts.in_progress || 0}</strong></p>
-                <p style={{ margin: '0 0 5px 0' }}>Paneles Pausados: <strong style={{color: '#fff176'}}>{panelCounts.paused || 0}</strong></p> {/* Assuming 'paused' is a possible status key */}
-                <p style={{ margin: '0' }}>Paneles Completados: <strong style={{color: '#c5e1a5'}}>{panelCounts.completed || 0}</strong></p>
-                {panelCounts.unknown > 0 && <p style={{ margin: '5px 0 0 0', color: '#ef9a9a' }}>Paneles con estado desconocido: {panelCounts.unknown}</p>}
+                {isAssemblyLine ? (
+                    <>
+                        <p style={{ margin: '0 0 5px 0' }}>Tareas No Iniciadas: <strong style={{color: '#ffcc80'}}>{hoveredStationDetails.taskCounts.not_started || 0}</strong></p>
+                        <p style={{ margin: '0 0 5px 0' }}>Tareas En Progreso: <strong style={{color: '#81d4fa'}}>{hoveredStationDetails.taskCounts.in_progress || 0}</strong></p>
+                        <p style={{ margin: '0 0 5px 0' }}>Tareas Pausadas: <strong style={{color: '#fff176'}}>{hoveredStationDetails.taskCounts.paused || 0}</strong></p>
+                        <p style={{ margin: '0' }}>Tareas Completadas: <strong style={{color: '#c5e1a5'}}>{hoveredStationDetails.taskCounts.completed || 0}</strong></p>
+                        {hoveredStationDetails.taskCounts.unknown > 0 && <p style={{ margin: '5px 0 0 0', color: '#ef9a9a' }}>Tareas con estado desconocido: {hoveredStationDetails.taskCounts.unknown}</p>}
+                    </>
+                ) : (
+                    <>
+                        <p style={{ margin: '0 0 5px 0' }}>Paneles No Iniciados: <strong style={{color: '#ffcc80'}}>{hoveredStationDetails.panelCounts.not_started || hoveredStationDetails.panelCounts.planned || 0}</strong></p>
+                        <p style={{ margin: '0 0 5px 0' }}>Paneles En Progreso: <strong style={{color: '#81d4fa'}}>{hoveredStationDetails.panelCounts.in_progress || 0}</strong></p>
+                        <p style={{ margin: '0 0 5px 0' }}>Paneles Pausados: <strong style={{color: '#fff176'}}>{hoveredStationDetails.panelCounts.paused || 0}</strong></p> {/* Assuming 'paused' is a possible status key */}
+                        <p style={{ margin: '0' }}>Paneles Completados: <strong style={{color: '#c5e1a5'}}>{hoveredStationDetails.panelCounts.completed || 0}</strong></p>
+                        {hoveredStationDetails.panelCounts.unknown > 0 && <p style={{ margin: '5px 0 0 0', color: '#ef9a9a' }}>Paneles con estado desconocido: {hoveredStationDetails.panelCounts.unknown}</p>}
+                    </>
+                )}
             </div>
         );
     };
@@ -916,6 +960,7 @@ function ActiveProductionDashboard() {
                     />
                 )}
             </div>
+            {renderTooltip()}
         </div>
     );
 }

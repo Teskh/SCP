@@ -168,7 +168,7 @@ def get_station_status_and_upcoming_modules():
             'content': {
                 'modules_with_active_panels': [], # For W stations
                 'modules_in_magazine': [],        # For M1 station (modules physically in magazine)
-                'modules_present_at_assembly_station': [], # NEW for A, B, C stations
+                'modules_with_active_tasks': [], # For A, B, C stations (renamed from modules_present_at_assembly_station)
                 'magazine_modules_for_assembly': [] # For Assembly Station 1 to pull from logical 'Magazine' status
             }
         }
@@ -272,8 +272,8 @@ def get_station_status_and_upcoming_modules():
                 house_type_id = module_row['house_type_id']
                 station_sequence_order = station_info['sequence_order']
 
-                # Fetch eligible tasks for this module at this station
-                eligible_tasks_cursor = db.execute("""
+                # Fetch ALL relevant tasks for this module at this station (for tooltip)
+                all_module_tasks_cursor = db.execute("""
                     SELECT 
                         td.task_definition_id, td.name, td.description, td.specialty_id,
                         td.station_sequence_order,
@@ -284,11 +284,10 @@ def get_station_status_and_upcoming_modules():
                     WHERE (td.house_type_id = ? OR td.house_type_id IS NULL)
                       AND td.is_panel_task = 0
                       AND td.station_sequence_order = ? 
-                      AND COALESCE(tl.status, 'Not Started') != 'Completed'
                     ORDER BY td.name
                 """, (plan_id, house_type_id, station_sequence_order))
                 
-                eligible_tasks = [dict(task_row) for task_row in eligible_tasks_cursor.fetchall()]
+                all_module_tasks_at_station = [dict(task_row) for task_row in all_module_tasks_cursor.fetchall()]
 
                 current_station_modules_list.append({
                     'plan_id': plan_id,
@@ -303,9 +302,9 @@ def get_station_status_and_upcoming_modules():
                     'sub_type_id': module_row.get('sub_type_id'),
                     'planned_assembly_line': module_row.get('planned_assembly_line'),
                     'current_station': module_row.get('current_station'),
-                    'eligible_tasks': eligible_tasks 
+                    'all_module_tasks_at_station': all_module_tasks_at_station # Renamed for clarity
                 })
-            station_data['content']['modules_present_at_assembly_station'] = current_station_modules_list
+            station_data['content']['modules_with_active_tasks'] = list(current_station_modules_list) # Renamed key
             
             # If this is Assembly Station 1 (sequence_order 7), also fetch 'Magazine' status modules
             if station_info['sequence_order'] == 7:
@@ -326,6 +325,7 @@ def get_station_status_and_upcoming_modules():
                     mag_mod_row = dict(mag_mod_row_data)
                     
                     # Fetch eligible tasks for this magazine module at this station (seq 7, non-panel)
+                    # This query still filters out completed tasks, as it's for "eligible" tasks to pull.
                     eligible_tasks_cursor = db.execute("""
                         SELECT td.task_definition_id, td.name, td.description, td.specialty_id
                         FROM TaskDefinitions td
@@ -586,7 +586,7 @@ def start_panel_task(plan_id: int, panel_definition_id: int, task_definition_id:
                     """UPDATE PanelTaskLogs 
                        SET status = 'In Progress', worker_id = ?, started_at = ?, station_start = ?
                        WHERE panel_task_log_id = ?""",
-                    ('In Progress', worker_id, now_utc_str, station_id, log_id)
+                    (worker_id, now_utc_str, station_id, log_id)
                 )
                 db.commit()
                 updated_log_cursor = db.execute("SELECT * FROM PanelTaskLogs WHERE panel_task_log_id = ?", (log_id,))
@@ -1171,5 +1171,4 @@ def finish_module_task(task_log_id: int, worker_id: int, station_id: str, notes:
         db.rollback()
         logging.error(f"Unexpected error in finish_module_task for task_log_id {task_log_id}: {e}", exc_info=True)
         return {"error": f"Unexpected error: {e}"}
-
 
