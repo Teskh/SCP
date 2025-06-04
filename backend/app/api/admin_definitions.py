@@ -1237,3 +1237,42 @@ def start_module_task_route():
     except Exception as e:
         logger.error(f"Exception in start_module_task_route: {e}", exc_info=True)
         return jsonify(error="An unexpected error occurred while starting the module task."), 500
+
+
+@admin_definitions_bp.route('/module-tasks/<int:task_log_id>/finish', methods=['POST'])
+def finish_module_task_route(task_log_id):
+    """Marks a module task (non-panel task) as completed."""
+    data = request.get_json()
+    required_fields = ['worker_id', 'station_id']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data or data[field] is None]
+        if missing:
+            return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    try:
+        worker_id = int(data['worker_id'])
+        station_id = str(data['station_id']) # station_id where task is finished
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Invalid data types for finish_module_task: {e}. Data: {data}")
+        return jsonify(error="Invalid data type for 'worker_id' or 'station_id'."), 400
+
+    notes = data.get('notes') # Optional
+
+    try:
+        result = production_flow.finish_module_task(
+            task_log_id, worker_id, station_id, notes
+        )
+        if result.get("error"):
+            status_code = 400 # Default bad request
+            if "not found" in result["error"].lower():
+                status_code = 404
+            elif "not updated" in result["error"].lower() or "already completed" in result["error"].lower():
+                status_code = 409 # Conflict
+            logger.warning(f"finish_module_task failed for log_id {task_log_id}: {result['error']}")
+            return jsonify(error=result["error"]), status_code
+        
+        logger.info(f"Module task {task_log_id} finished successfully by worker {worker_id} at station {station_id}.")
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Exception in finish_module_task_route for log_id {task_log_id}: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while finishing the module task."), 500
