@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as adminService from '../../services/adminService';
+import TaskDependencySelectorModal from './TaskDependencySelectorModal'; // Import the new modal
 
 // Basic styling (styles assumed to be similar, with potential additions for checkbox)
 const styles = {
@@ -59,6 +60,7 @@ function TaskDefinitionManager() {
     const [error, setError] = useState('');
     const [editMode, setEditMode] = useState(null);
     const [formData, setFormData] = useState(initialFormState);
+    const [isDependencyModalOpen, setIsDependencyModalOpen] = useState(false);
 
     const stageLabelMap = useMemo(() => {
         const options = generateStageOptions(stations);
@@ -126,9 +128,9 @@ function TaskDefinitionManager() {
         }));
     };
     
-    const handleDependenciesChange = (e) => {
-        const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-        setFormData(prev => ({ ...prev, task_dependencies: selectedOptions.map(String) }));
+    // This function will be called by the modal on save
+    const handleSaveDependencies = (selectedDependencyIds) => {
+        setFormData(prev => ({ ...prev, task_dependencies: selectedDependencyIds.map(String) }));
     };
 
 
@@ -235,22 +237,39 @@ function TaskDefinitionManager() {
                      </select>
                  </div>
                  <div style={styles.formRow}>
-                    <label style={styles.label} htmlFor="task_dependencies">Dependencias (Pre-requisitos):</label>
-                    <select
-                        id="task_dependencies"
-                        name="task_dependencies"
-                        multiple
-                        value={formData.task_dependencies}
-                        onChange={handleDependenciesChange}
-                        style={{...styles.select, height: '100px'}} // Allow multiple selections
-                    >
-                        {potentialDependencies.map(dep => (
-                            <option key={dep.task_definition_id} value={dep.task_definition_id.toString()}>
-                                {dep.name} (Etapa: {stageLabelMap.get(dep.station_sequence_order) || dep.station_sequence_order || 'N/A'}, Tipo: {dep.is_panel_task ? "Panel" : "Módulo"})
-                            </option>
-                        ))}
-                    </select>
+                    <label style={styles.label}>Dependencias (Pre-requisitos):</label>
+                    <div style={{flexGrow: 1}}>
+                        <button 
+                            type="button" 
+                            onClick={() => setIsDependencyModalOpen(true)} 
+                            style={{...styles.button, ...styles.buttonSecondary, marginBottom: '5px'}}
+                            disabled={isLoading}
+                        >
+                            Seleccionar Dependencias
+                        </button>
+                        <div style={{fontSize: '0.9em', color: '#333', marginTop: '5px'}}>
+                            {formData.task_dependencies && formData.task_dependencies.length > 0 ?
+                                `Seleccionadas: ${formData.task_dependencies.map(depId => {
+                                    const depTask = potentialDependencies.find(pd => pd.task_definition_id.toString() === depId) || taskDefs.find(td => td.task_definition_id.toString() === depId);
+                                    return depTask ? depTask.name : `ID ${depId}`;
+                                }).join(', ')}`
+                                : 'Ninguna dependencia seleccionada.'
+                            }
+                        </div>
+                    </div>
                 </div>
+
+                {isDependencyModalOpen && (
+                    <TaskDependencySelectorModal
+                        show={isDependencyModalOpen}
+                        potentialDependencies={potentialDependencies}
+                        currentDependencies={formData.task_dependencies}
+                        onSave={handleSaveDependencies}
+                        onClose={() => setIsDependencyModalOpen(false)}
+                        stageLabelMap={stageLabelMap}
+                    />
+                )}
+
                  <div>
                      <button type="submit" disabled={isLoading} style={{...styles.button, ...styles.buttonPrimary}}>
                          {isLoading ? 'Guardando...' : (editMode ? 'Actualizar Definición' : 'Añadir Definición')}
