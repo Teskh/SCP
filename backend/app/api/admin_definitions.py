@@ -1237,3 +1237,44 @@ def start_module_task_route():
     except Exception as e:
         logger.error(f"Exception in start_module_task_route: {e}", exc_info=True)
         return jsonify(error="An unexpected error occurred while starting the module task."), 500
+
+
+# === Module Task Management Endpoints ===
+
+@admin_definitions_bp.route('/tasks/start', methods=['POST'])
+def start_module_task_route():
+    """Starts a module task (non-panel task)."""
+    data = request.get_json()
+    required_fields = ['plan_id', 'task_definition_id', 'worker_id', 'station_start']
+    if not data or not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data or data[field] is None]
+        if missing:
+            return jsonify(error=f"Missing required fields: {', '.join(missing)}"), 400
+
+    try:
+        plan_id = int(data['plan_id'])
+        task_definition_id = int(data['task_definition_id'])
+        worker_id = int(data['worker_id'])
+        station_start = str(data['station_start']) # station_id where task is started
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Invalid data types for start_module_task: {e}. Data: {data}")
+        return jsonify(error="Invalid data type for one or more fields."), 400
+
+    try:
+        result = production_flow.start_module_task(
+            plan_id, task_definition_id, worker_id, station_start
+        )
+        if result.get("error"):
+            status_code = 400
+            if "already In Progress" in result["error"] or "already Completed" in result["error"]:
+                status_code = 409 # Conflict
+            elif "not found" in result["error"].lower():
+                status_code = 404 # Not found
+            logger.warning(f"start_module_task failed: {result['error']} for data: {data}")
+            return jsonify(error=result["error"]), status_code
+        
+        logger.info(f"Module task started/resumed successfully: {result.get('task_log')}")
+        return jsonify(result), 200 # 200 if updated/created
+    except Exception as e:
+        logger.error(f"Exception in start_module_task_route: {e}", exc_info=True)
+        return jsonify(error="An unexpected error occurred while starting the module task."), 500

@@ -25,7 +25,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
     const [taskActionMessage, setTaskActionMessage] = useState({ type: '', content: '' }); // type: 'success' or 'error'
     
     // Module Task Specific State (for Assembly Stations)
-    const [selectedModuleIdentifier, setSelectedModuleIdentifier] = useState(null); // { plan_id, module_name, house_type_id, eligible_tasks }
+    const [selectedModuleIdentifier, setSelectedModuleIdentifier] = useState(null); // { plan_id, module_name, house_type_id, eligible_tasks, source (active_station or magazine) }
     const [moduleTasks, setModuleTasks] = useState([]); // Tasks for a selected module (if not directly in eligible_tasks)
     const [isLoadingModuleTasks, setIsLoadingModuleTasks] = useState(false);
     const [moduleTasksError, setModuleTasksError] = useState('');
@@ -80,19 +80,20 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             setPanelTasks([]);
             setSelectedModuleIdentifier(null);
             setModuleTasks([]);
+            // Do not clear taskActionMessage here, it might be set by an action before station change
             return;
         }
 
         const currentStation = allStations.find(s => s.station_id === resolvedSpecificStationId);
 
-        // Clear previous states
+        // Clear previous states relevant to data fetching for the new station
         setPanelProductionInfo(null);
         setPanelInfoError('');
-        setSelectedPanelIdentifier(null);
+        setSelectedPanelIdentifier(null); // Clear selected panel when station changes
         setPanelTasks([]);
-        setSelectedModuleIdentifier(null);
+        setSelectedModuleIdentifier(null); // Clear selected module when station changes
         setModuleTasks([]);
-        setTaskActionMessage({ type: '', content: '' });
+        // taskActionMessage is preserved across station changes unless explicitly cleared by an action
 
 
         if (currentStation && currentStation.line_type === 'W') { // Panel Production Stations (W1-W5)
@@ -271,7 +272,13 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             plan_id: moduleData.plan_id,
             module_name: `${moduleData.project_name} - ${moduleData.house_identifier} - Mod ${moduleData.module_number}`,
             house_type_id: moduleData.house_type_id,
-            eligible_tasks: moduleData.eligible_tasks || moduleData.active_module_tasks_at_station || [], // Use appropriate task list
+            // If moduleData.source is 'active_station', tasks are in 'active_module_tasks_at_station'
+            // If moduleData.source is 'magazine', tasks are in 'eligible_tasks'
+            eligible_tasks: moduleData.source === 'active_station' 
+                            ? (moduleData.active_module_tasks_at_station || []) 
+                            : (moduleData.eligible_tasks || []),
+            source: moduleData.source, // Keep track of where the module data came from
+            status: moduleData.status // Keep track of the module's current status
             // task_definition_id can be set when a specific task is clicked for materials
         });
         setSelectedPanelIdentifier(null); // Clear panel selection
@@ -704,14 +711,22 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                 <li key={task.task_definition_id} style={taskListItemStyle}>
                                                     <div style={taskInfoStyle}>
                                                         <strong>{task.name}</strong> (ID: {task.task_definition_id})<br />
-                                                        {/* Status for module tasks might come from TaskLogs, not directly on eligible_tasks yet */}
-                                                        {/* For now, we assume 'Not Started' if from magazine, or actual status if from active_module_tasks */}
-                                                        <small>Estado: {task.status || 'No Iniciada'}</small><br/>
+                                                        {/* If task comes from 'active_module_tasks_at_station' (source: 'active_station'), it has a status.
+                                                            If it comes from 'eligible_tasks' (source: 'magazine'), it's 'Not Started' by definition here. */}
+                                                        <small>Estado: {selectedModuleIdentifier.source === 'active_station' && task.status ? task.status : 'No Iniciada'}</small><br/>
                                                         {task.description && <small>Desc: {task.description}<br/></small>}
                                                     </div>
                                                     <div style={taskActionsStyle}>
-                                                        {(!task.status || task.status === 'Not Started' || task.status === 'Paused') && (
-                                                            <button style={buttonStyle} onClick={() => handleStartModuleTaskClick(selectedModuleIdentifier.plan_id, task)}>
+                                                        {/* Show Start/Resume button if:
+                                                            - Module is from 'magazine' (implies tasks are 'Not Started' conceptually for this station)
+                                                            - OR Module is 'active_station' AND task status is 'Not Started' or 'Paused'
+                                                        */}
+                                                        {(selectedModuleIdentifier.source === 'magazine' || (task.status === 'Not Started' || task.status === 'Paused')) && (
+                                                            <button 
+                                                                style={buttonStyle} 
+                                                                onClick={() => handleStartModuleTaskClick(selectedModuleIdentifier.plan_id, task)}
+                                                                disabled={task.status === 'In Progress' || task.status === 'Completed'} // Disable if already started/completed by another means
+                                                            >
                                                                 {task.status === 'Paused' ? 'Reanudar' : 'Iniciar'}
                                                             </button>
                                                         )}
@@ -728,7 +743,7 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                             ))}
                                         </ul>
                                     ) : (
-                                        <p>No hay tareas elegibles definidas para este módulo en esta estación.</p>
+                                        <p>No hay tareas elegibles definidas o disponibles para este módulo en esta estación.</p>
                                     )}
                                 </div>
                             )}
