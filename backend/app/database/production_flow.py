@@ -1030,12 +1030,13 @@ def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, sta
         # More complex scenarios (re-doing tasks) might need different handling.
         existing_log_cursor = db.execute(
             """SELECT task_log_id, status FROM TaskLogs
-               WHERE plan_id = ? AND task_definition_id = ? AND is_panel_task = 0""", # Ensure it's a module task log
+               WHERE plan_id = ? AND task_definition_id = ?""",
             (plan_id, task_definition_id)
         )
         existing_log_row = existing_log_cursor.fetchone()
 
         task_log_data = None
+        log_id = None # Initialize log_id
 
         if existing_log_row:
             log_id = existing_log_row['task_log_id']
@@ -1061,8 +1062,8 @@ def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, sta
         else:
             # Create new TaskLog entry
             cursor = db.execute(
-                """INSERT INTO TaskLogs (plan_id, task_definition_id, worker_id, status, started_at, station_start, is_panel_task)
-                   VALUES (?, ?, ?, 'In Progress', ?, ?, 0)""",
+                """INSERT INTO TaskLogs (plan_id, task_definition_id, worker_id, status, started_at, station_start)
+                   VALUES (?, ?, ?, 'In Progress', ?, ?)""",
                 (plan_id, task_definition_id, worker_id, now_utc_str, station_id)
             )
             log_id = cursor.lastrowid
@@ -1070,6 +1071,9 @@ def start_module_task(plan_id: int, task_definition_id: int, worker_id: int, sta
 
         db.commit()
         
+        if log_id is None: # Should not happen if logic above is correct
+            return {"error": "Failed to create or identify task log."}
+
         # Fetch the created/updated task log data to return
         final_log_cursor = db.execute("SELECT * FROM TaskLogs WHERE task_log_id = ?", (log_id,))
         task_log_data = dict(final_log_cursor.fetchone())
