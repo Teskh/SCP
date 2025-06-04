@@ -51,24 +51,55 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
             return;
         }
 
-        if (storedContext === PANEL_LINE_GENERAL_VALUE) {
-            // If the general panel line is selected, we need a specific station from the modal
-            const storedSpecificId = localStorage.getItem(SELECTED_SPECIFIC_STATION_ID_KEY);
-            // Check if the stored specific ID is actually a valid 'W' station
-            const isValidSpecificId = allStations.some(s => s.station_id === storedSpecificId && s.line_type === 'W');
+        const storedSpecificId = localStorage.getItem(SELECTED_SPECIFIC_STATION_ID_KEY);
+        let showModal = false;
+        let resolvedId = null;
 
-            if (storedSpecificId && isValidSpecificId) {
-                setResolvedSpecificStationId(storedSpecificId);
-                setShowSpecificStationModal(false);
+        if (storedContext === PANEL_LINE_GENERAL_VALUE) {
+            // General Panel Line: requires specific W station
+            const isValidWStation = allStations.some(s => s.station_id === storedSpecificId && s.line_type === 'W');
+            if (storedSpecificId && isValidWStation) {
+                resolvedId = storedSpecificId;
             } else {
-                setResolvedSpecificStationId(null); // Clear resolved ID until a specific one is chosen
-                setShowSpecificStationModal(true); // Show the modal to select a specific W station
+                showModal = true;
             }
         } else {
-            // If it's not the general panel line, it's assumed to be a specific station ID directly
-            setResolvedSpecificStationId(storedContext);
-            setShowSpecificStationModal(false);
+            const numericContext = parseInt(storedContext, 10);
+            // Check if storedContext is a numeric string representing an assembly sequence (e.g., 7-12)
+            // Assembly lines sequences are typically 7 through 12.
+            if (!isNaN(numericContext) && numericContext >= 7 && numericContext <= 12) {
+                // Assembly Line General Context: requires specific A, B, or C station for that sequence
+                const isValidAssemblyStationForSequence = allStations.some(s => 
+                    s.station_id === storedSpecificId && 
+                    s.sequence_order === numericContext &&
+                    ['A', 'B', 'C'].includes(s.line_type) // Ensure it's an assembly line type
+                );
+                if (storedSpecificId && isValidAssemblyStationForSequence) {
+                    resolvedId = storedSpecificId;
+                } else {
+                    showModal = true;
+                }
+            } else {
+                // Not a general panel line, not a general assembly sequence.
+                // Assume storedContext is a direct station_id (e.g., "M1", or a specific "W1", "A1" if chosen directly).
+                // Validate if storedContext itself is a valid station ID.
+                const isDirectlyValidStation = allStations.some(s => s.station_id === storedContext);
+                if (isDirectlyValidStation) {
+                    resolvedId = storedContext;
+                } else {
+                    // Invalid context that is not general and not a direct station ID.
+                    // This case implies an issue with how SELECTED_STATION_CONTEXT_KEY was set,
+                    // or the station list changed and the stored context is no longer valid.
+                    console.warn(`Stored context "${storedContext}" is not a recognized general context or a valid station ID.`);
+                    resolvedId = null; 
+                    showModal = false; 
+                }
+            }
         }
+
+        setResolvedSpecificStationId(resolvedId);
+        setShowSpecificStationModal(showModal);
+
     }, [user, allStations, isLoadingAllStations]);
 
     // Effect to fetch panel production information OR module information for assembly stations
