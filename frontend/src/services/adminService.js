@@ -711,12 +711,22 @@ export const completeTask = async (planId, taskDefinitionId, stationFinish, note
         notes: notes,
     };
 
-    const response = await fetch(`${API_BASE_URL}/tasks/complete`, {
+    const response = await fetch(`${API_BASE_URL}/tasks/complete`, { // This is a general endpoint, might need specific one for module tasks if logic differs
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+};
+
+export const finishModuleTask = async (taskLogId, taskData) => {
+    // taskData: { worker_id, station_id, notes }
+    const response = await fetch(`${API_BASE_URL}/module-tasks/${taskLogId}/finish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData),
     });
     return handleResponse(response);
 };

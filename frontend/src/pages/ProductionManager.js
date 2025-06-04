@@ -577,8 +577,56 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
 
     // Placeholder for Complete Module Task
     const handleCompleteModuleTaskClick = async (modulePlanId, task) => {
-        alert(`Funcionalidad de completar tarea de módulo (${task.name}) aún no implementada.`);
-        // TODO: Implement if backend supports completing generic module tasks
+        if (!user || typeof user.id !== 'number' || !resolvedSpecificStationId) {
+            setTaskActionMessage({ type: 'error', content: 'Usuario o estación no identificados.' });
+            clearTaskActionMessage();
+            return;
+        }
+        if (!task.task_log_id) {
+            setTaskActionMessage({ type: 'error', content: 'Error: Falta ID de registro de tarea para completar.' });
+            clearTaskActionMessage();
+            return;
+        }
+        // Ensure task is in a completable state (e.g., 'In Progress')
+        // The backend will also validate this, but a client-side check can be useful.
+        // For now, we rely on the button only being active for 'In Progress' tasks.
+
+        const notes = window.prompt("Notas para completar la tarea de módulo (opcional):");
+        if (notes === null) return; // User cancelled
+
+        setTaskActionMessage({ type: '', content: '' });
+        try {
+            const response = await adminService.finishModuleTask(task.task_log_id, {
+                worker_id: user.id,
+                station_id: resolvedSpecificStationId,
+                notes: notes || ''
+            });
+            setTaskActionMessage({ type: 'success', content: `Tarea de módulo "${task.name}" completada.` });
+            console.log("Finish module task response:", response);
+            refreshStationData(); // Refresh data to reflect changes
+
+            // If module or panels were updated, the refreshStationData should handle UI updates.
+            // For example, if the module moved, selectedModuleIdentifier might become null or update.
+            if (response && response.module_production_plan_update) {
+                // Check if the currently selected module is the one that got updated
+                if (selectedModuleIdentifier && selectedModuleIdentifier.plan_id === response.module_production_plan_update.plan_id) {
+                    if (response.module_production_plan_update.status === 'Completed' || 
+                        response.module_production_plan_update.current_station !== resolvedSpecificStationId) {
+                        // Module moved or completed, de-select it
+                        setSelectedModuleIdentifier(null);
+                    } else {
+                        // Module still at station, re-select to get fresh task list / status
+                        // This might be complex if its structure in panelProductionInfo changed.
+                        // refreshStationData() should ideally handle finding and re-selecting it if still valid.
+                    }
+                }
+            }
+
+        } catch (error) {
+            console.error("Error completing module task:", error);
+            setTaskActionMessage({ type: 'error', content: `Error completando tarea de módulo "${task.name}": ${error.message}` });
+        }
+        clearTaskActionMessage();
     };
 
 
@@ -752,11 +800,11 @@ const ProductionManager = ({ user, allStations, isLoadingAllStations, allStation
                                                             - Module is from 'magazine' (implies tasks are 'Not Started' conceptually for this station)
                                                             - OR Module is 'active_station' AND task status is 'Not Started' or 'Paused'
                                                         */}
-                                                        {(selectedModuleIdentifier.source === 'magazine' || (task.status === 'Not Started' || task.status === 'Paused')) && (
+                                                        {(selectedModuleIdentifier.source === 'magazine' || (task.status === 'Not Started' || task.status === 'Paused')) && 
+                                                            task.status !== 'In Progress' && task.status !== 'Completed' && (
                                                             <button 
                                                                 style={buttonStyle} 
                                                                 onClick={() => handleStartModuleTaskClick(selectedModuleIdentifier.plan_id, task)}
-                                                                disabled={task.status === 'In Progress' || task.status === 'Completed'} // Disable if already started/completed by another means
                                                             >
                                                                 {task.status === 'Paused' ? 'Reanudar' : 'Iniciar'}
                                                             </button>
