@@ -20,7 +20,7 @@ class Config:
     EXTERNAL_PROJECTS_DB_PATH = os.environ.get('EXTERNAL_EXTERNAL_PROJECTS_DB_PATH', DEFAULT_EXTERNAL_PROJECTS_DB_PATH)
 
     # Default path for the main database, relative to the 'backend' directory's parent
-    DEFAULT_MAIN_DB_PATH = os.path.join(project_root, '..', 'main.db')
+    DEFAULT_MAIN_DB_PATH = os.path.join(project_root, '..', '2025.03.04 SPGXI', 'main.db')
     MAIN_DB_PATH = os.environ.get('EXTERNAL_MAIN_DB_PATH', DEFAULT_MAIN_DB_PATH)
 
 
