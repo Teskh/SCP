@@ -69,6 +69,29 @@ function TaskDefinitionManager() {
         return map;
     }, [stations]);
 
+    const groupedTaskDefs = useMemo(() => {
+        if (!taskDefs || taskDefs.length === 0) {
+            return {};
+        }
+        const grouped = taskDefs.reduce((acc, task) => {
+            const key = task.station_sequence_order ?? 'general';
+            if (!acc[key]) {
+                acc[key] = [];
+            }
+            acc[key].push(task);
+            return acc;
+        }, {});
+        return grouped;
+    }, [taskDefs]);
+
+    const sortedGroupKeys = useMemo(() => {
+        return Object.keys(groupedTaskDefs).sort((a, b) => {
+            if (a === 'general') return -1;
+            if (b === 'general') return 1;
+            return parseInt(a, 10) - parseInt(b, 10);
+        });
+    }, [groupedTaskDefs]);
+
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         setError('');
@@ -301,27 +324,38 @@ function TaskDefinitionManager() {
                         </tr>
                     </thead>
                     <tbody>
-                        {taskDefs.map((td) => (
-                            <tr key={td.task_definition_id}>
-                                <td style={styles.td}>{td.name}</td>
-                                <td style={styles.td}>{td.description}</td>
-                                <td style={styles.td}>{td.is_panel_task ? 'Panel' : 'Módulo'}</td>
-                                <td style={styles.td}>{td.house_type_name || 'N/A'}</td>
-                                <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
-                                <td style={styles.td}>{(stageLabelMap.get(td.station_sequence_order) || td.station_sequence_order) ?? 'N/A'}</td>
-                                <td style={styles.td}>
-                                    {td.task_dependencies ? 
-                                        String(td.task_dependencies).split(',').map(depId => {
-                                            const depTask = taskDefs.find(t => t.task_definition_id === parseInt(depId));
-                                            return depTask ? depTask.name : `ID ${depId}`;
-                                        }).join(', ')
-                                        : 'Ninguna'}
-                                </td>
-                                <td style={styles.td}>
-                                    <button onClick={() => handleEdit(td)} style={{...styles.button, ...styles.buttonEdit}} disabled={isLoading}>Editar</button>
-                                    <button onClick={() => handleDelete(td.task_definition_id)} style={{...styles.button, ...styles.buttonDelete}} disabled={isLoading}>Eliminar</button>
-                                </td>
-                            </tr>
+                        {sortedGroupKeys.map(groupKey => (
+                            <React.Fragment key={groupKey}>
+                                <tr>
+                                    <th colSpan="8" style={{ ...styles.th, backgroundColor: '#e9ecef', textAlign: 'center', fontWeight: 'bold' }}>
+                                        {groupKey === 'general' 
+                                            ? 'Tareas Generales (Sin Estación Asignada)' 
+                                            : stageLabelMap.get(parseInt(groupKey, 10)) || `Etapa ${groupKey}`}
+                                    </th>
+                                </tr>
+                                {groupedTaskDefs[groupKey].map((td) => (
+                                    <tr key={td.task_definition_id}>
+                                        <td style={styles.td}>{td.name}</td>
+                                        <td style={styles.td}>{td.description}</td>
+                                        <td style={styles.td}>{td.is_panel_task ? 'Panel' : 'Módulo'}</td>
+                                        <td style={styles.td}>{td.house_type_name || 'N/A'}</td>
+                                        <td style={styles.td}>{td.specialty_name || 'N/A'}</td>
+                                        <td style={styles.td}>{(stageLabelMap.get(td.station_sequence_order) || td.station_sequence_order) ?? 'N/A'}</td>
+                                        <td style={styles.td}>
+                                            {td.task_dependencies ? 
+                                                String(td.task_dependencies).split(',').map(depId => {
+                                                    const depTask = taskDefs.find(t => t.task_definition_id === parseInt(depId, 10));
+                                                    return depTask ? depTask.name : `ID ${depId}`;
+                                                }).join(', ')
+                                                : 'Ninguna'}
+                                        </td>
+                                        <td style={styles.td}>
+                                            <button onClick={() => handleEdit(td)} style={{...styles.button, ...styles.buttonEdit}} disabled={isLoading}>Editar</button>
+                                            <button onClick={() => handleDelete(td.task_definition_id)} style={{...styles.button, ...styles.buttonDelete}} disabled={isLoading}>Eliminar</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
