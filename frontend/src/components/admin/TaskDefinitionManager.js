@@ -61,6 +61,7 @@ function TaskDefinitionManager() {
     const [editMode, setEditMode] = useState(null);
     const [formData, setFormData] = useState(initialFormState);
     const [isDependencyModalOpen, setIsDependencyModalOpen] = useState(false);
+    const [collapsedGroups, setCollapsedGroups] = useState({});
 
     const stageLabelMap = useMemo(() => {
         const options = generateStageOptions(stations);
@@ -227,6 +228,13 @@ function TaskDefinitionManager() {
         }
     };
 
+    const toggleGroupCollapse = (groupKey) => {
+        setCollapsedGroups(prev => ({
+            ...prev,
+            [groupKey]: !prev[groupKey]
+        }));
+    };
+
     return (
         <div style={styles.container}>
             <h2>Gestionar Definiciones de Tareas</h2>
@@ -326,14 +334,18 @@ function TaskDefinitionManager() {
                     <tbody>
                         {sortedGroupKeys.map(groupKey => (
                             <React.Fragment key={groupKey}>
-                                <tr>
-                                    <th colSpan="8" style={{ ...styles.th, backgroundColor: '#e9ecef', textAlign: 'center', fontWeight: 'bold' }}>
+                                <tr onClick={() => toggleGroupCollapse(groupKey)} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                    <th colSpan="8" style={{ ...styles.th, backgroundColor: '#e9ecef', textAlign: 'left', fontWeight: 'bold' }}>
+                                        <span style={{ marginRight: '10px', display: 'inline-block', width: '10px' }}>
+                                            {collapsedGroups[groupKey] ? '▶' : '▼'}
+                                        </span>
                                         {groupKey === 'general' 
                                             ? 'Tareas Generales (Sin Estación Asignada)' 
                                             : stageLabelMap.get(parseInt(groupKey, 10)) || `Etapa ${groupKey}`}
+                                        {` (${groupedTaskDefs[groupKey].length} tareas)`}
                                     </th>
                                 </tr>
-                                {groupedTaskDefs[groupKey].map((td) => (
+                                {!collapsedGroups[groupKey] && groupedTaskDefs[groupKey].map((td) => (
                                     <tr key={td.task_definition_id}>
                                         <td style={styles.td}>{td.name}</td>
                                         <td style={styles.td}>{td.description}</td>
